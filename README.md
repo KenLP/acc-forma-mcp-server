@@ -84,14 +84,72 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ## Available Tools — Phase 1 MVP
 
-| Tool | Description | Kind |
-|---|---|---|
-| `dm.list_hubs` | List all Forma hubs the service account has access to | read |
-| `issues.create` | Create an ACC issue (dry-run by default) | mutation |
-| `aecdm.get_element_properties` | Get all properties of a BIM element from AEC Data Model | read |
+## Tools (30)
+
+All tools are grouped by domain. Read tools take no approval; write/mutation tools (marked ✍️) follow the [two-call dry-run protocol](#safety).
+
+### Account Admin (4)
+
+| Tool | Purpose |
+|---|---|
+| `admin_list_projects` | List all projects under a hub (hub-wide visibility via 2LO). |
+| `admin_get_project` | Fetch a single project's metadata, scopes, and relationships. |
+| `admin_list_users` | List users in the account / project membership. |
+| `admin_list_companies` | List companies registered on the account. |
+
+### Data Management (6)
+
+| Tool | Purpose |
+|---|---|
+| `dm_list_hubs` | List ACC/BIM 360 hubs accessible to the app. |
+| `dm_list_projects` | List projects in a hub. |
+| `dm_list_top_folders` | List the top-level folders of a project (Plans, Project Files, etc.). |
+| `dm_list_folder_contents` | List items (files + subfolders) in a folder. |
+| `dm_get_item` | Get metadata for a single item (file or folder). |
+| `dm_list_versions` | List all versions of a file with version numbers and timestamps. |
+
+### Issues (6)
+
+| Tool | Purpose |
+|---|---|
+| `issues_list` | List issues in a project with filters (status, type, assignee). |
+| `issues_get` | Get a single issue including comments and attachments metadata. |
+| `issues_create` ✍️ | Create a new issue with subtype, location, due date, assignment. |
+| `issues_add_comment` ✍️ | Add a comment to an existing issue. |
+| `issues_list_types` | List valid issue types and subtypes (with `isActive` flag) for a project. |
+| `issues_list_root_causes` | List configured root cause categories for a project. |
+
+### Reviews (4)
+
+| Tool | Purpose |
+|---|---|
+| `reviews_list` | List reviews in a project's Reviews container. |
+| `reviews_get` | Get a single review including status and reviewers. |
+| `reviews_create` ✍️ | Create a new review with reviewers, due date, workflow, linked documents. |
+| `reviews_transition` ✍️ | Submit / approve / reject / void / reopen a review. |
+
+### AEC Data Model — BIM GraphQL (8)
+
+| Tool | Purpose |
+|---|---|
+| `aecdm_list_hubs` | List AECDM-native hubs (distinct from DM hubs). Start here for any AECDM workflow. |
+| `aecdm_list_projects` | List projects in an AECDM hub. |
+| `aecdm_list_element_groups` | List BIM model files (Revit/IFC) published to an AECDM project, including `fileVersionUrn`. |
+| `aecdm_list_categories` | List BIM categories present in an element group (Walls, Structural Columns, MEP equipment, etc.) by parallel-probing ~60 well-known Revit categories. |
+| `aecdm_query_elements` | Query BIM elements by category with full properties. Supports multi-word categories like `Structural Columns`, `Electrical Equipment`. |
+| `aecdm_get_element_properties` | Re-fetch full properties for a specific element by node ID (requires the originating category). |
+| `aecdm_aggregate_by_parameter` | Count elements grouped by a parameter value within a category (e.g. walls by type name) — fast take-off queries. |
+| `aecdm_query_element_bboxes` | Query elements with axis-aligned bounding boxes. Three spatial modes: `intersects` (clash detection), `inside` (containment), `contains` (envelope). Uses the AECDM `geometry` beta field. |
+
+### Meta / Observability (2)
+
+| Tool | Purpose |
+|---|---|
+| `meta_list_changelog` | Read the local audit log entries with filters by tool, time, or project. |
+| `meta_verify_audit_chain` | Verify the audit log hash chain has not been tampered with. |
+
 
 More tools in Phase 2 (RFIs, Submittals, Forms, Sheets, Files, Photos, Locations, Assets, Webhooks).
-See [docs/TOOLS.md](docs/TOOLS.md) for the full roadmap.
 
 ---
 
@@ -202,72 +260,6 @@ pnpm run test
 # Watch mode
 pnpm run test:watch
 ```
-
----
-
-## Tools (30)
-
-All tools are grouped by domain. Read tools take no approval; write/mutation tools (marked ✍️) follow the [two-call dry-run protocol](#safety).
-
-### Account Admin (4)
-
-| Tool | Purpose |
-|---|---|
-| `admin_list_projects` | List all projects under a hub (hub-wide visibility via 2LO). |
-| `admin_get_project` | Fetch a single project's metadata, scopes, and relationships. |
-| `admin_list_users` | List users in the account / project membership. |
-| `admin_list_companies` | List companies registered on the account. |
-
-### Data Management (6)
-
-| Tool | Purpose |
-|---|---|
-| `dm_list_hubs` | List ACC/BIM 360 hubs accessible to the app. |
-| `dm_list_projects` | List projects in a hub. |
-| `dm_list_top_folders` | List the top-level folders of a project (Plans, Project Files, etc.). |
-| `dm_list_folder_contents` | List items (files + subfolders) in a folder. |
-| `dm_get_item` | Get metadata for a single item (file or folder). |
-| `dm_list_versions` | List all versions of a file with version numbers and timestamps. |
-
-### Issues (6)
-
-| Tool | Purpose |
-|---|---|
-| `issues_list` | List issues in a project with filters (status, type, assignee). |
-| `issues_get` | Get a single issue including comments and attachments metadata. |
-| `issues_create` ✍️ | Create a new issue with subtype, location, due date, assignment. |
-| `issues_add_comment` ✍️ | Add a comment to an existing issue. |
-| `issues_list_types` | List valid issue types and subtypes (with `isActive` flag) for a project. |
-| `issues_list_root_causes` | List configured root cause categories for a project. |
-
-### Reviews (4)
-
-| Tool | Purpose |
-|---|---|
-| `reviews_list` | List reviews in a project's Reviews container. |
-| `reviews_get` | Get a single review including status and reviewers. |
-| `reviews_create` ✍️ | Create a new review with reviewers, due date, workflow, linked documents. |
-| `reviews_transition` ✍️ | Submit / approve / reject / void / reopen a review. |
-
-### AEC Data Model — BIM GraphQL (8)
-
-| Tool | Purpose |
-|---|---|
-| `aecdm_list_hubs` | List AECDM-native hubs (distinct from DM hubs). Start here for any AECDM workflow. |
-| `aecdm_list_projects` | List projects in an AECDM hub. |
-| `aecdm_list_element_groups` | List BIM model files (Revit/IFC) published to an AECDM project, including `fileVersionUrn`. |
-| `aecdm_list_categories` | List BIM categories present in an element group (Walls, Structural Columns, MEP equipment, etc.) by parallel-probing ~60 well-known Revit categories. |
-| `aecdm_query_elements` | Query BIM elements by category with full properties. Supports multi-word categories like `Structural Columns`, `Electrical Equipment`. |
-| `aecdm_get_element_properties` | Re-fetch full properties for a specific element by node ID (requires the originating category). |
-| `aecdm_aggregate_by_parameter` | Count elements grouped by a parameter value within a category (e.g. walls by type name) — fast take-off queries. |
-| `aecdm_query_element_bboxes` | Query elements with axis-aligned bounding boxes. Three spatial modes: `intersects` (clash detection), `inside` (containment), `contains` (envelope). Uses the AECDM `geometry` beta field. |
-
-### Meta / Observability (2)
-
-| Tool | Purpose |
-|---|---|
-| `meta_list_changelog` | Read the local audit log entries with filters by tool, time, or project. |
-| `meta_verify_audit_chain` | Verify the audit log hash chain has not been tampered with. |
 
 ---
 
