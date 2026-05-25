@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.env
+*.pem
+*.key
+coverage/
+.DS_Store
+*.log
+audit-*.jsonl
+*.db
+
+# Claude Code per-user permissions (do not commit)
+.claude/settings.local.json
+
+# Local audit data (default FORMA_AUDIT_DIR)
+.acc-forma-mcp/
+
+# Internal planning & changelog (kept local; not for public repo)
+CHANGELOG.md
+docs/PLANNING.md
+
+# Dockerfile scaffold (not used yet; revisit when adding container distribution)
+Dockerfile

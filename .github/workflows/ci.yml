@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-test:
+    name: Build & Test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm run typecheck
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Unit tests
+        run: pnpm run test
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    # Only runs on push to main with secrets configured
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: integration
+    env:
+      INTEGRATION: 'true'
+      APS_AUTH_MODE: ssa
+      APS_CLIENT_ID: ${{ secrets.APS_CLIENT_ID }}
+      APS_CLIENT_SECRET: ${{ secrets.APS_CLIENT_SECRET }}
+      SSA_ID: ${{ secrets.SSA_ID }}
+      SSA_KEY_ID: ${{ secrets.SSA_KEY_ID }}
+      SSA_KEY_PATH: /tmp/ssa-private.pem
+      FORMA_READONLY: 'true'
+      LOG_LEVEL: debug
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write SSA private key
+        run: echo "${{ secrets.SSA_PRIVATE_KEY }}" > /tmp/ssa-private.pem
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm run test -- tests/integration

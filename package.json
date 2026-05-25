@@ -1,0 +1,65 @@
+{
+  "name": "acc-forma-mcp-server",
+  "version": "0.1.0",
+  "description": "Production-ready, safety-first MCP server for Autodesk Forma (ACC). Every write is dry-runnable, audit-logged, and scope-guarded.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "acc-forma-mcp-server": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "autodesk",
+    "forma",
+    "acc",
+    "autodesk-construction-cloud",
+    "aps",
+    "bim",
+    "construction",
+    "ai",
+    "claude"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "node --watch dist/index.js",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "generate:tools-doc": "tsx scripts/generate-tools-doc.ts"
+  },
+  "dependencies": {
+    "@aps_sdk/data-management": "^1.1.2",
+    "@modelcontextprotocol/sdk": "^1.20.0",
+    "dotenv": "^16.5.0",
+    "jsonwebtoken": "^9.0.2",
+    "pino": "^9.6.0",
+    "ulid": "^2.3.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/jsonwebtoken": "^9.0.8",
+    "@types/node": "^20.17.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "globals": "^17.6.0",
+    "pino-pretty": "^13.0.0",
+    "prettier": "^3.5.0",
+    "tsup": "^8.4.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
+  }
+}
