@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { MutationToolDef } from '../_types.js';
-import { createIssue, listIssueTypes } from '../../apis/issues.js';
+import { createIssue, listIssueTypes, type LinkedDocument } from '../../apis/issues.js';
 import { stripBPrefix } from '../../utils/project-id.js';
 import { registerValidator } from '../../safety/business-rules.js';
 import { BusinessRuleError } from '../../safety/business-rules.js';
@@ -70,6 +70,68 @@ const inputSchema = z.object({
       'Whether the issue is visible to all project members. ' +
         'false (default) = draft/unpublished, visible only to creator. ' +
         'true = published, visible to all project members.',
+    ),
+  linked_documents: z
+    .array(
+      z
+        .object({
+          type: z
+            .enum(['TwoDVectorPushpin', 'ThreeDVectorPushpin'])
+            .describe(
+              'TwoDVectorPushpin for 2D sheets, ThreeDVectorPushpin for 3D model viewables. ' +
+                'Must match the viewable type referenced by details.viewable.guid.',
+            ),
+          urn: z
+            .string()
+            .min(1)
+            .describe('Document lineage (item) URN of the file the pin attaches to.'),
+          createdAtVersion: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe('Version number of the document the pin was created against.'),
+          details: z
+            .object({
+              viewable: z
+                .object({
+                  guid: z.string().min(1),
+                  name: z.string().optional(),
+                  is3D: z.boolean().optional(),
+                  viewableId: z.string().optional(),
+                })
+                .passthrough()
+                .optional()
+                .describe('Viewable (sheet/view) inside the document.'),
+              position: z
+                .object({ x: z.number(), y: z.number(), z: z.number() })
+                .optional()
+                .describe('Pin position in viewer coordinates.'),
+              objectId: z
+                .number()
+                .int()
+                .optional()
+                .describe(
+                  'Forma Viewer dbId of the element the pin is anchored to. ' +
+                    'This is what enables the "View in Model" deep link to isolate the element.',
+                ),
+              viewerState: z
+                .record(z.unknown())
+                .optional()
+                .describe('Opaque viewer camera/section state — forwarded verbatim.'),
+            })
+            .passthrough()
+            .optional(),
+        })
+        .passthrough(),
+    )
+    .max(50)
+    .optional()
+    .describe(
+      'Pushpin links from this issue to model document(s) / element(s). ' +
+        'When present, ACC renders a "View in Model" deep link and the Revit Issues add-in ' +
+        'will highlight the linked element. Inner field shape matches the APS linkedDocuments ' +
+        'contract verbatim — pass Forma Viewer state through as-is.',
     ),
 });
 
@@ -162,11 +224,15 @@ export const createIssueTool: MutationToolDef<typeof inputSchema> = {
       ...(input.due_date !== undefined ? { dueDate: input.due_date } : {}),
       ...(input.location_id !== undefined ? { locationId: input.location_id } : {}),
       ...(input.root_cause_id !== undefined ? { rootCauseId: input.root_cause_id } : {}),
+      ...(input.linked_documents !== undefined ? { linkedDocuments: input.linked_documents } : {}),
     };
 
     const sideEffects = [
       `Create 1 issue titled "${input.title}" (status: ${input.status}, published: ${String(input.published)}) in project ${input.project_id}`,
       ...(input.assigned_to ? [`Assign to ${input.assigned_to_type ?? 'user'} ${input.assigned_to}`] : []),
+      ...(input.linked_documents && input.linked_documents.length > 0
+        ? [`Link ${input.linked_documents.length} pushpin(s) to model element(s)`]
+        : []),
     ];
 
     return {
@@ -196,6 +262,12 @@ export const createIssueTool: MutationToolDef<typeof inputSchema> = {
       ...(input.due_date !== undefined ? { dueDate: input.due_date } : {}),
       ...(input.location_id !== undefined ? { locationId: input.location_id } : {}),
       ...(input.root_cause_id !== undefined ? { rootCauseId: input.root_cause_id } : {}),
+      // Zod's passthrough-inferred shape widens optionals to `T | undefined`; the LinkedDocument
+      // contract treats them as either-present-or-absent. JSON.stringify drops `undefined` keys,
+      // so the wire payload is identical — cast to align types without changing runtime behavior.
+      ...(input.linked_documents !== undefined
+        ? { linkedDocuments: input.linked_documents as LinkedDocument[] }
+        : {}),
     });
 
     return {
