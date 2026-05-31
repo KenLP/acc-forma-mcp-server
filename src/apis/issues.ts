@@ -40,6 +40,35 @@ export interface RootCause {
   rootCauses: Array<{ id: string; title: string }>;
 }
 
+/**
+ * Pushpin / model element link on an issue. Field shape matches APS POST
+ * /construction/issues/v1/.../issues `linkedDocuments[]`. Inner field names
+ * are camelCase to match the API contract 1:1 (so callers can forward
+ * Forma Viewer state verbatim without renaming keys).
+ */
+export interface LinkedDocument {
+  /** 'TwoDVectorPushpin' for sheets/2D, 'ThreeDVectorPushpin' for 3D models. */
+  type: 'TwoDVectorPushpin' | 'ThreeDVectorPushpin';
+  /** Document lineage URN (item URN) of the file the pin attaches to. */
+  urn: string;
+  /** Version of the document the pin was created against. */
+  createdAtVersion?: number;
+  details?: {
+    viewable?: {
+      guid: string;
+      name?: string;
+      is3D?: boolean;
+      viewableId?: string;
+    };
+    /** 3D point in viewer coordinates. */
+    position?: { x: number; y: number; z: number };
+    /** Forma Viewer dbId of the element the pin is anchored to. */
+    objectId?: number;
+    /** Opaque viewer camera/section state passthrough. */
+    viewerState?: Record<string, unknown>;
+  };
+}
+
 export interface CreateIssuePayload {
   title: string;
   issueSubtypeId: string;
@@ -53,6 +82,8 @@ export interface CreateIssuePayload {
   rootCauseId?: string;
   /** Whether the issue is visible to all project members (false = draft). */
   published?: boolean;
+  /** Pushpin links to model documents/elements. Enables the "View in Model" deep link. */
+  linkedDocuments?: LinkedDocument[];
   customAttributes?: Array<{ attributeDefinitionId: string; value: unknown }>;
 }
 
