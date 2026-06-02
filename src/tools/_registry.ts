@@ -36,7 +36,7 @@ import { aecdmQueryElementsTool } from './aecdm/query-elements.js';
 import { aecdmListCategoriesTool } from './aecdm/list-categories.js';
 import { aecdmAggregateByParameterTool } from './aecdm/aggregate-by-parameter.js';
 import { getElementPropertiesTool } from './aecdm/get-element-properties.js';
-import { aecdmQueryElementBBoxesTool } from './aecdm/query-element-bboxes.js';
+import { aecdmQueryElementPositionsTool } from './aecdm/query-element-positions.js';
 
 // ---- Meta / Observability ---------------------------------------------------
 import { metaListChangelogTool } from './meta/list-changelog.js';
@@ -83,7 +83,7 @@ export const toolRegistry: AnyToolDef[] = [
   aecdmListCategoriesTool,
   aecdmAggregateByParameterTool,
   getElementPropertiesTool,
-  aecdmQueryElementBBoxesTool,
+  aecdmQueryElementPositionsTool,
 
   // Meta / Observability (2)
   metaListChangelogTool,

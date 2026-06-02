@@ -46,15 +46,19 @@ export interface BoundingBox {
   max: Vec3;
 }
 
-export interface AecElementWithBBox {
+export interface AecElementPosition {
   id: string;
   name: string;
-  bbox: BoundingBox | null;
+  /** Element origin (world-space) decoded from `pieces[0].transform`. Null if no geometry data or unknown matrix layout. */
+  position: Vec3 | null;
   properties: ElementProperty[];
 }
 
-/** How to compare a candidate element's bbox against a reference bbox. */
-export type SpatialMode = 'intersects' | 'inside' | 'contains';
+/** Raw `Transform` object from `geometryDataByElements`. */
+interface TransformDto {
+  type: string;
+  value: number[];
+}
 
 // ---- GraphQL queries -------------------------------------------------------
 
@@ -113,30 +117,20 @@ const LIST_ELEMENTS_FILTERED_QUERY = /* GraphQL */ `
   }
 `;
 
-// Query with geometry/boundingBox (AECDM beta field).
-// Used for spatial queries — clash detection, inclusion checks, bbox listing.
-const LIST_ELEMENTS_WITH_BBOX_QUERY = /* GraphQL */ `
-  query ListElementsWithBBox(
-    $elementGroupId: ID!
-    $filter: String!
-    $limit: Int
-    $cursor: String
-  ) {
-    elementsByElementGroup(
-      elementGroupId: $elementGroupId
-      filter: { query: $filter }
-      pagination: { limit: $limit, cursor: $cursor }
-    ) {
-      pagination { cursor }
-      results {
-        id
-        name
-        properties { results { name value } }
-        geometry {
-          boundingBox {
-            min { x y z }
-            max { x y z }
-          }
+// AECDM geometry data (Public Beta).
+// Returns per-element geometry pieces with transforms. We decode the translation
+// from `pieces[0].transform.value` to derive each element's origin (position).
+// The mesh data itself (`GeometryPieceData` union: GeometryPrimitive | GeometryInstance
+// | BinaryData) is intentionally NOT queried — it would require inline fragments
+// and binary download/parse to compute an AABB.
+// Schema ref: https://aps.autodesk.com/en/docs/aecdatamodel/v1/reference/queries/geometryDataByElements/
+const LIST_GEOMETRY_DATA_QUERY = /* GraphQL */ `
+  query GetGeometryDataByElements($elementIds: [ID!]) {
+    geometryDataByElements(elementIds: $elementIds) {
+      geometryData {
+        elementID
+        pieces {
+          transform { type value }
         }
       }
     }
@@ -253,111 +247,113 @@ export async function queryElementsByCategory(
   return fetchWithFilter(auth, elementGroupId, filter, maxElements);
 }
 
-// ---- Spatial / bounding-box helpers ----------------------------------------
+// ---- Spatial helpers -------------------------------------------------------
 
-/** True if `a` and `b` overlap (touching counts as intersecting). */
-export function bboxIntersects(a: BoundingBox, b: BoundingBox): boolean {
+/** True if point `p` lies inside (or on the boundary of) `box`. */
+export function pointInBox(p: Vec3, box: BoundingBox): boolean {
   return (
-    a.min.x <= b.max.x && a.max.x >= b.min.x &&
-    a.min.y <= b.max.y && a.max.y >= b.min.y &&
-    a.min.z <= b.max.z && a.max.z >= b.min.z
-  );
-}
-
-/** True if `inner` is fully inside `outer`. */
-export function bboxInside(inner: BoundingBox, outer: BoundingBox): boolean {
-  return (
-    inner.min.x >= outer.min.x && inner.max.x <= outer.max.x &&
-    inner.min.y >= outer.min.y && inner.max.y <= outer.max.y &&
-    inner.min.z >= outer.min.z && inner.max.z <= outer.max.z
+    p.x >= box.min.x && p.x <= box.max.x &&
+    p.y >= box.min.y && p.y <= box.max.y &&
+    p.z >= box.min.z && p.z <= box.max.z
   );
 }
 
 /**
- * Query elements with their bounding boxes (uses the AECDM beta `geometry` field).
+ * Decode the translation (world-space origin) from a `Transform` returned by
+ * `geometryDataByElements`.
  *
- * Optionally filter results by spatial relationship to a reference bbox:
- *  - 'intersects' — element bbox overlaps reference (clash detection)
- *  - 'inside'     — element bbox fully inside reference (containment query)
- *  - 'contains'   — element bbox fully contains reference
+ * `Transform.value` is a flat float array — length 16 for a 4×4 homogeneous
+ * matrix, length 12 for a 4×3 affine matrix. `Transform.type` indicates the
+ * layout; we treat strings containing "row" (case-insensitive) as row-major
+ * and default everything else to column-major (OpenGL/three.js convention).
  *
- * Elements without geometry data are excluded when a spatial filter is set,
- * and returned with bbox=null when no filter is set.
+ * Returns null when the value array has an unsupported length.
  */
-export async function queryElementBoundingBoxes(
+export function decodeTransformTranslation(t: TransformDto | null | undefined): Vec3 | null {
+  if (!t || !Array.isArray(t.value)) return null;
+  const v = t.value;
+  const isRowMajor = /row/i.test(t.type ?? '');
+  // Length is checked before indexing, so the !-asserted accesses are safe.
+  if (v.length === 16) {
+    return isRowMajor
+      ? { x: v[3]!, y: v[7]!, z: v[11]! }
+      : { x: v[12]!, y: v[13]!, z: v[14]! };
+  }
+  if (v.length === 12) {
+    return isRowMajor
+      ? { x: v[3]!, y: v[7]!, z: v[11]! }
+      : { x: v[9]!, y: v[10]!, z: v[11]! };
+  }
+  return null;
+}
+
+/**
+ * Query elements by category and resolve each element's origin (position) via
+ * AECDM `geometryDataByElements` (Public Beta).
+ *
+ * Workflow:
+ *  1. Resolve elements in the category via `queryElementsByCategory`.
+ *  2. Batch element IDs into chunks of `batchSize` (default 50) and call
+ *     `geometryDataByElements` per batch.
+ *  3. For each element, decode the translation from `pieces[0].transform.value`.
+ *
+ * If `referenceBox` is supplied, only elements whose position lies inside the
+ * box are returned (point-in-box test). Elements without a decodable transform
+ * are excluded when `referenceBox` is set, and returned with `position=null`
+ * when it is not.
+ *
+ * NOTE: AECDM does not expose axis-aligned bounding boxes; only mesh data +
+ * transforms. For a true AABB use Model Derivative API. This function is
+ * sufficient for ACC Issue pushpins (`linked_documents[].details.position`).
+ */
+export async function queryElementPositions(
   auth: AuthProvider,
   elementGroupId: string,
   category: string,
   options: {
     maxElements?: number;
     referenceBox?: BoundingBox;
-    mode?: SpatialMode;
+    batchSize?: number;
   } = {},
-): Promise<AecElementWithBBox[]> {
-  const { maxElements = 500, referenceBox, mode = 'intersects' } = options;
-  const filter = `property.name.category=='${category}'`;
-  const pageLimit = Math.min(maxElements, 100);
+): Promise<AecElementPosition[]> {
+  const { maxElements = 500, referenceBox, batchSize = 50 } = options;
 
-  const all: AecElementWithBBox[] = [];
-  let cursor: string | undefined;
+  const elements = await queryElementsByCategory(auth, elementGroupId, category, maxElements);
+  if (elements.length === 0) return [];
 
-  do {
+  // Batch element IDs into geometryDataByElements calls
+  const transformByElementId = new Map<string, TransformDto | null>();
+  for (let i = 0; i < elements.length; i += batchSize) {
+    const chunk = elements.slice(i, i + batchSize);
+    const ids = chunk.map((el) => el.id);
     const data = await apsGraphQL<{
-      elementsByElementGroup: {
-        pagination: { cursor?: string | null };
-        results: Array<{
-          id: string;
-          name: string;
-          properties: { results: Array<{ name: string; value: unknown }> };
-          geometry: {
-            boundingBox: {
-              min: { x: number; y: number; z: number };
-              max: { x: number; y: number; z: number };
-            } | null;
-          } | null;
-        }>;
-      };
-    }>(auth, LIST_ELEMENTS_WITH_BBOX_QUERY, {
-      elementGroupId,
-      filter,
-      limit: pageLimit,
-      cursor: cursor ?? null,
-    });
+      geometryDataByElements: {
+        geometryData: Array<{
+          elementID: string;
+          pieces: Array<{ transform: TransformDto | null }> | null;
+        }> | null;
+      } | null;
+    }>(auth, LIST_GEOMETRY_DATA_QUERY, { elementIds: ids });
 
-    const page = data.elementsByElementGroup;
-    for (const el of page.results ?? []) {
-      const bb = el.geometry?.boundingBox ?? null;
-      const bbox: BoundingBox | null = bb
-        ? { min: { ...bb.min }, max: { ...bb.max } }
-        : null;
-      all.push({
-        id: el.id,
-        name: el.name,
-        bbox,
-        properties: (el.properties.results ?? []).map((p) => ({
-          name: p.name,
-          value: p.value as string | number | boolean | null,
-        })),
-      });
+    const rows = data.geometryDataByElements?.geometryData ?? [];
+    for (const row of rows) {
+      const firstPiece = row.pieces?.[0];
+      transformByElementId.set(row.elementID, firstPiece?.transform ?? null);
     }
-    cursor = page.pagination.cursor ?? undefined;
-  } while (cursor && all.length < maxElements);
+  }
 
-  if (!referenceBox) return all;
+  const positions: AecElementPosition[] = elements.map((el) => ({
+    id: el.id,
+    name: el.name,
+    position: decodeTransformTranslation(transformByElementId.get(el.id)),
+    properties: el.properties,
+  }));
 
-  // Apply spatial filter
-  return all.filter((el) => {
-    if (!el.bbox) return false;
-    switch (mode) {
-      case 'inside':
-        return bboxInside(el.bbox, referenceBox);
-      case 'contains':
-        return bboxInside(referenceBox, el.bbox);
-      case 'intersects':
-      default:
-        return bboxIntersects(el.bbox, referenceBox);
-    }
-  });
+  if (!referenceBox) return positions;
+
+  return positions.filter(
+    (el): boolean => el.position !== null && pointInBox(el.position, referenceBox),
+  );
 }
 
 /**
