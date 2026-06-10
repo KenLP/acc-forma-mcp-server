@@ -24,7 +24,10 @@ function loadConfig(): RateConfig {
 
 const rateConfig = loadConfig();
 
-// Sliding-window counters keyed by "toolName::projectId::hourBucket"
+// Sliding-window counters keyed by "toolName::projectId::hourBucket".
+// LIMITATION: counters reset on process restart and are not shared across
+// multiple server processes. Single-process deployment only.
+// See docs/REMEDIATION-PLAN.md Fix 6 for the durable-store migration path.
 const counters = new Map<string, number>();
 
 export class RateGovernanceError extends Error {

@@ -55,6 +55,12 @@ async function main(): Promise<void> {
   await server.connect(transport);
 
   logger.info('MCP server connected via stdio — ready to accept tool calls');
+  logger.warn(
+    'Approval tokens and rate counters are stored in-memory only. ' +
+      'They will be lost on restart and are not shared across processes. ' +
+      'Single-process deployment required until Fix 6 (durable store) is implemented. ' +
+      'See docs/REMEDIATION-PLAN.md for details.',
+  );
 }
 
 main().catch((err: unknown) => {

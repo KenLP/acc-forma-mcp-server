@@ -9,7 +9,10 @@ interface PendingApproval {
   expiresAt: number; // unix ms
 }
 
-// In-memory store — single-use, TTL-bound
+// In-memory store — single-use, TTL-bound.
+// LIMITATION: tokens are lost on process restart and cannot be shared across
+// multiple server processes. Single-process deployment only.
+// See docs/REMEDIATION-PLAN.md Fix 6 for the durable-store migration path.
 const pending = new Map<string, PendingApproval>();
 
 export class ApprovalError extends Error {
