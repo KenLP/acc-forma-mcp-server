@@ -124,19 +124,20 @@ If a future API version stabilises this query, switch `aecdm_list_categories` to
 
 `elementsByElementGroup` supports cursor-based pagination via `pagination: { limit, cursor }`. The server auto-paginates up to 500 elements by default for `query_elements` and 1000 for `get_element_properties`. If a category has more than 500 elements, increase `maxElements` or query a more specific filter.
 
-## Geometry / bounding boxes (beta field)
+## Geometry / element positions (beta field)
 
-The AECDM schema exposes a `geometry { boundingBox { min { x y z } max { x y z } } }` selection on each element node. This is currently a **beta** feature — it works on most hubs but may return null or fail on some.
+The AECDM schema exposes a `geometry { pieces { transform } }` selection on each element node via `geometryDataByElements`. This is currently a **Public Beta** feature — it works on most hubs but may return null or fail on some.
 
-The server uses this field in `aecdm_query_element_bboxes`, which supports three spatial modes:
+The server uses this field in `aecdm_query_element_positions`, which returns the **origin point** (x, y, z) decoded from each element's first geometry piece transform. This is the primary use case for populating ACC Issue pushpins (`linked_documents[].details.position`).
 
-- `intersects` (default) — element bbox overlaps a reference bbox → **clash detection**.
-- `inside` — element bbox fully inside reference → "what's in this room/region".
-- `contains` — element bbox fully envelops the reference → "what large element wraps this point".
+An optional `reference_bbox` parameter filters results to elements whose origin point lies inside the box (point-in-box test), useful for room-occupancy or zone queries.
 
-Coordinates are in the source model's units (typically millimetres for metric Revit, feet for imperial). All filtering is axis-aligned bbox math, done client-side after fetching — there is currently no server-side spatial filter operator in AECDM.
+**Important limitations:**
+- Returns an origin *point*, not a full axis-aligned bounding box (AABB). For true bbox/clash detection, use the Model Derivative API instead.
+- Elements without geometry data return `position: null`.
+- Coordinates are in the source model's units (typically millimetres for metric Revit, feet for imperial).
 
-If the `geometry` field returns null on a hub, fall back to property-based queries; do not silently report "no clashes" when the underlying data is just unavailable.
+If the `geometry` field returns null on a hub, fall back to property-based queries.
 
 ## Region
 

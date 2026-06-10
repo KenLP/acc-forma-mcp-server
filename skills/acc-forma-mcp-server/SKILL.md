@@ -29,7 +29,7 @@ This server exposes 30 tools across six domains of Autodesk Construction Cloud (
 | "Create an issue" | Issues (mutation) | `issues_list_types` → `issues_create` (2-call pattern, see Step 4) |
 | "Review submittals / approvals" | Reviews | `reviews_list`, `reviews_get`, `reviews_create`, `reviews_transition` |
 | "Query BIM elements / categories" | AEC Data Model | `aecdm_list_hubs` → … → `aecdm_query_elements` (see `references/workflow-aecdm.md`) |
-| "Clash / containment / spatial query" | AEC Data Model | `aecdm_query_element_bboxes` (returns bounding boxes; supports clash and inside-region modes) |
+| "Element positions / Issue pushpins" | AEC Data Model | `aecdm_query_element_positions` (returns origin point per element; filter by reference bbox) |
 | "Audit changelog / verify chain" | Meta | `meta_list_changelog`, `meta_verify_audit_chain` |
 
 Always begin with the entry tool — never invent IDs. If the user already gave a hub_id, project_id, or element_group_id, validate it by calling the matching list tool first when the result looks suspicious.
@@ -81,7 +81,7 @@ Before answering, double-check `references/gotchas.md` if any of these apply:
 | Account Admin (4) | `admin_list_projects`, `admin_get_project`, `admin_list_users`, `admin_list_companies` |
 | Issues (6) | `issues_list`, `issues_get`, `issues_create`, `issues_add_comment`, `issues_list_types`, `issues_list_root_causes` |
 | Reviews (4) | `reviews_list`, `reviews_get`, `reviews_create`, `reviews_transition` |
-| AEC Data Model (8) | `aecdm_list_hubs`, `aecdm_list_projects`, `aecdm_list_element_groups`, `aecdm_list_categories`, `aecdm_query_elements`, `aecdm_get_element_properties`, `aecdm_aggregate_by_parameter`, `aecdm_query_element_bboxes` |
+| AEC Data Model (8) | `aecdm_list_hubs`, `aecdm_list_projects`, `aecdm_list_element_groups`, `aecdm_list_categories`, `aecdm_query_elements`, `aecdm_get_element_properties`, `aecdm_aggregate_by_parameter`, `aecdm_query_element_positions` |
 | Meta (2) | `meta_list_changelog`, `meta_verify_audit_chain` |
 
 ## References
