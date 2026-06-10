@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { verifyChain } from '../../../src/safety/hash-chain.js';
+import type { ChainEntry } from '../../../src/safety/hash-chain.js';
 
 vi.mock('../../../src/config/env.js', () => ({
   env: {
@@ -20,7 +22,8 @@ vi.mock('../../../src/config/env.js', () => ({
 vi.mock('node:fs', () => ({
   appendFileSync: vi.fn(),
   mkdirSync: vi.fn(),
-  existsSync: vi.fn(() => true),
+  existsSync: vi.fn(() => false), // no existing log — loadLastHashFromFile returns genesis
+  readFileSync: vi.fn(() => ''),
 }));
 
 describe('audit-log', () => {
@@ -68,6 +71,32 @@ describe('audit-log', () => {
     const entry2 = JSON.parse(String(mockAppendFileSync.mock.calls[1]![1]).trim()) as Record<string, unknown>;
 
     expect(entry2['prev_hash']).toBe(entry1['this_hash']);
+  });
+
+  it('written entries pass verifyChain end-to-end', () => {
+    appendAuditEntry({ tool: 'a', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} });
+    appendAuditEntry({ tool: 'b', kind: 'mutation', stage: 'preview', inputRedacted: {}, outputSummary: {} });
+    appendAuditEntry({ tool: 'c', kind: 'mutation', stage: 'executed', inputRedacted: {}, outputSummary: {} });
+
+    const entries = mockAppendFileSync.mock.calls.map((call) =>
+      JSON.parse(String(call[1]).trim()) as ChainEntry,
+    );
+
+    expect(verifyChain(entries)).toEqual({ valid: true });
+  });
+
+  it('verifyChain detects a tampered entry', () => {
+    appendAuditEntry({ tool: 'a', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} });
+    appendAuditEntry({ tool: 'b', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} });
+
+    const entries = mockAppendFileSync.mock.calls.map((call) =>
+      JSON.parse(String(call[1]).trim()) as ChainEntry,
+    );
+
+    // Tamper entry[0] after writing
+    entries[0] = { ...entries[0]!, tool: 'TAMPERED' };
+
+    expect(verifyChain(entries)).toMatchObject({ valid: false, first_invalid_index: 0 });
   });
 
   it('redacts secrets from input', () => {

@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, existsSync } from 'node:fs';
+import { appendFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
@@ -30,8 +30,24 @@ export interface AuditEntry {
   this_hash: string;
 }
 
+// Restore chain state from the last line of today's audit file so a restart
+// doesn't silently break the chain by resetting to 'sha256:genesis'.
+function loadLastHashFromFile(): string {
+  try {
+    const filePath = todayLogFile();
+    if (!existsSync(filePath)) return 'sha256:genesis';
+    const content = readFileSync(filePath, 'utf-8');
+    const lines = content.trimEnd().split('\n').filter(Boolean);
+    if (lines.length === 0) return 'sha256:genesis';
+    const last = JSON.parse(lines[lines.length - 1]!) as { this_hash?: string };
+    return typeof last.this_hash === 'string' ? last.this_hash : 'sha256:genesis';
+  } catch {
+    return 'sha256:genesis';
+  }
+}
+
 // Module-level chain state (persists across calls for the process lifetime)
-let lastHash = 'sha256:genesis';
+let lastHash = loadLastHashFromFile();
 
 function todayLogFile(): string {
   const d = new Date();
@@ -79,7 +95,10 @@ export function appendAuditEntry(params: {
       prev_hash: lastHash,
     };
 
-    const thisHash = computeHash(lastHash, partial as Record<string, unknown>);
+    // Strip prev_hash before hashing so the canonical form matches what
+    // verifyChain reconstructs (it also strips prev_hash via destructuring).
+    const { prev_hash: _ph, ...restForHash } = partial; void _ph;
+    const thisHash = computeHash(lastHash, restForHash);
     const entry: AuditEntry = { ...partial, this_hash: thisHash };
     lastHash = thisHash;
 

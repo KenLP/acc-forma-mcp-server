@@ -25,6 +25,14 @@ export function verifyChain(entries: ChainEntry[]): {
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i]!;
     const { prev_hash, this_hash, ...rest } = entry;
+
+    // Adjacency: prev_hash must point to the previous entry's this_hash
+    // (or the genesis sentinel for the first entry). Catches deleted lines.
+    const expectedPrevHash = i === 0 ? 'sha256:genesis' : entries[i - 1]!.this_hash;
+    if (prev_hash !== expectedPrevHash) {
+      return { valid: false, first_invalid_index: i };
+    }
+
     const expected = computeHash(prev_hash, rest);
     if (expected !== this_hash) {
       return { valid: false, first_invalid_index: i };

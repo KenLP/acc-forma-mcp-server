@@ -70,5 +70,32 @@ describe('hash-chain', () => {
     it('validates an empty chain', () => {
       expect(verifyChain([])).toEqual({ valid: true });
     });
+
+    it('detects a deleted entry (gap in prev_hash chain)', () => {
+      const h1 = computeHash('sha256:genesis', { tool: 'a' });
+      const h2 = computeHash(h1, { tool: 'b' });
+      const h3 = computeHash(h2, { tool: 'c' });
+
+      // entry b removed — entry c now has a prev_hash that skips it
+      const result = verifyChain([
+        { prev_hash: 'sha256:genesis', this_hash: h1, tool: 'a' },
+        { prev_hash: h2, this_hash: h3, tool: 'c' },
+      ]);
+
+      expect(result.valid).toBe(false);
+      expect(result.first_invalid_index).toBe(1);
+    });
+
+    it('detects wrong genesis (first entry prev_hash is not genesis sentinel)', () => {
+      const fakeGenesis = 'sha256:fake';
+      const h1 = computeHash(fakeGenesis, { tool: 'a' });
+
+      const result = verifyChain([
+        { prev_hash: fakeGenesis, this_hash: h1, tool: 'a' },
+      ]);
+
+      expect(result.valid).toBe(false);
+      expect(result.first_invalid_index).toBe(0);
+    });
   });
 });
