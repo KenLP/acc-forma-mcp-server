@@ -13,7 +13,7 @@ const inputSchema = z.object({
   issue_id: z
     .string()
     .min(1)
-    .describe('Issue ID from issues.list.'),
+    .describe('Issue ID from issues_list.'),
   body: z
     .string()
     .min(1)

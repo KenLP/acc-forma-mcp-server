@@ -12,7 +12,7 @@ interface PendingApproval {
 // In-memory store — single-use, TTL-bound.
 // LIMITATION: tokens are lost on process restart and cannot be shared across
 // multiple server processes. Single-process deployment only.
-// See docs/REMEDIATION-PLAN.md Fix 6 for the durable-store migration path.
+// Durable store (SQLite) is a planned enhancement; see docs/SAFETY.md Known Limitations.
 const pending = new Map<string, PendingApproval>();
 
 export class ApprovalError extends Error {

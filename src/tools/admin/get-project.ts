@@ -6,11 +6,11 @@ const inputSchema = z.object({
   hub_id: z
     .string()
     .min(1)
-    .describe('Hub (Account) ID. Get from dm.list_hubs.'),
+    .describe('Hub (Account) ID. Get from dm_list_hubs.'),
   project_id: z
     .string()
     .min(1)
-    .describe('Project ID. Get from admin.list_projects or dm.list_projects.'),
+    .describe('Project ID. Get from admin_list_projects or dm_list_projects.'),
 });
 
 export const adminGetProjectTool: ReadToolDef<typeof inputSchema> = {

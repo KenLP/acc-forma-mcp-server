@@ -10,7 +10,7 @@ const inputSchema = z.object({
   issue_id: z
     .string()
     .min(1)
-    .describe('Issue ID from issues.list.'),
+    .describe('Issue ID from issues_list.'),
 });
 
 export const getIssueTool: ReadToolDef<typeof inputSchema> = {
@@ -18,7 +18,7 @@ export const getIssueTool: ReadToolDef<typeof inputSchema> = {
   title: 'Get Issue Details',
   description:
     'Gets full details of a single issue, including description, location, root cause, ' +
-    'due date, and timestamps. Use issues.list first to find issue IDs.',
+    'due date, and timestamps. Use issues_list first to find issue IDs.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],

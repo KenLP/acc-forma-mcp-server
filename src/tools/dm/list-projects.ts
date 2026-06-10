@@ -6,7 +6,7 @@ const inputSchema = z.object({
   hub_id: z
     .string()
     .min(1)
-    .describe('Hub ID from dm.list_hubs. Accepts with or without b. prefix.'),
+    .describe('Hub ID from dm_list_hubs. Accepts with or without b. prefix.'),
 });
 
 export const listProjectsTool: ReadToolDef<typeof inputSchema> = {
@@ -14,8 +14,8 @@ export const listProjectsTool: ReadToolDef<typeof inputSchema> = {
   title: 'List Projects in Hub',
   description:
     'Lists all projects in a Forma hub via the Data Management API. ' +
-    'Returns project IDs and names. For richer metadata (status, type, address) use admin.list_projects instead. ' +
-    'Project IDs from this tool can be used with dm.list_top_folders, issues.*, reviews.*, and aecdm.* tools.',
+    'Returns project IDs and names. For richer metadata (status, type, address) use admin_list_projects instead. ' +
+    'Project IDs from this tool can be used with dm_list_top_folders, issues_*, reviews_*, and aecdm_* tools.',
   kind: 'read',
   preferredAuth: '2lo',
   scopes: ['data:read'],

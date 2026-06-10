@@ -31,7 +31,7 @@ Daily JSONL files at `FORMA_AUDIT_DIR/audit-YYYY-MM-DD.jsonl`. One JSON object p
 {
   "ts": "2026-04-16T10:23:45.123Z",
   "id": "evt_01JXWABCDE...",
-  "tool": "issues.create",
+  "tool": "issues_create",
   "kind": "mutation",
   "stage": "executed",
   "actor": { "auth_mode": "ssa", "ssa_id": "...", "user_email": null },
@@ -75,13 +75,11 @@ Override default limits by setting `FORMA_RATE_CONFIG_PATH` to a JSON file:
 ```json
 {
   "issues_create":    { "per_project_per_hour": 20 },
-  "reviews_create":   { "per_project_per_hour": 10 },
-  "issues.update":    { "per_project_per_hour": 50 }
+  "reviews_create":   { "per_project_per_hour": 10 }
 }
 ```
 
 Default limits (built-in):
 - `issues_create`: 50/project/hour
-- `issues.update`: 100/project/hour
 - `reviews_create`: 20/project/hour
 - `reviews_transition`: 50/project/hour

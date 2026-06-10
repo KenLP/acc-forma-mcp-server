@@ -6,11 +6,11 @@ const inputSchema = z.object({
   project_id: z
     .string()
     .min(1)
-    .describe('Project ID from dm.list_projects. Accepts with or without b. prefix.'),
+    .describe('Project ID from dm_list_projects. Accepts with or without b. prefix.'),
   item_id: z
     .string()
     .min(1)
-    .describe('Item ID from dm.list_folder_contents or dm.get_item.'),
+    .describe('Item ID from dm_list_folder_contents or dm_get_item.'),
 });
 
 export const listVersionsTool: ReadToolDef<typeof inputSchema> = {

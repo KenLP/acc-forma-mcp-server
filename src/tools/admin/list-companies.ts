@@ -6,7 +6,7 @@ const inputSchema = z.object({
   hub_id: z
     .string()
     .min(1)
-    .describe('Hub (Account) ID. Get from dm.list_hubs.'),
+    .describe('Hub (Account) ID. Get from dm_list_hubs.'),
   limit: z.number().int().min(1).max(200).default(50).describe('Max results per page.'),
   offset: z.number().int().min(0).default(0).describe('Pagination offset.'),
 });

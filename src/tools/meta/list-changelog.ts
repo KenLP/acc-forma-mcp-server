@@ -16,7 +16,7 @@ const inputSchema = z.object({
   tool_filter: z
     .string()
     .optional()
-    .describe('Optional tool name prefix filter (e.g., "issues", "reviews.create").'),
+    .describe('Optional tool name prefix filter (e.g., "issues", "reviews_create").'),
   stage_filter: z
     .enum(['preview', 'executed', 'denied_readonly', 'denied_allowlist', 'denied_rate_limit', 'denied_business_rule', 'failed_api'])
     .optional()
@@ -53,7 +53,7 @@ export const metaListChangelogTool: ReadToolDef<typeof inputSchema> = {
     'Lists recent audit log entries from the MCP server changelog. ' +
     'Each entry records a tool call: its inputs, outputs, stage (preview/executed/denied), ' +
     'and hash-chain position for tamper detection. ' +
-    'Use meta.verify_audit_chain to check integrity.',
+    'Use meta_verify_audit_chain to check integrity.',
   kind: 'read',
   scopes: [],
   inputSchema,

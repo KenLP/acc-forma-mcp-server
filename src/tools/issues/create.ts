@@ -15,7 +15,7 @@ const inputSchema = z.object({
     .min(1)
     .describe(
       'ACC project ID (with or without b. prefix). ' +
-        'Get from dm.list_projects or admin.list_projects.',
+        'Get from dm_list_projects or admin_list_projects.',
     ),
   title: z
     .string()
@@ -27,7 +27,7 @@ const inputSchema = z.object({
     .min(1)
     .describe(
       'Issue subtype ID (required). ' +
-        'Use issues.list_types to get valid subtype IDs for this project. ' +
+        'Use issues_list_types to get valid subtype IDs for this project. ' +
         'Note: the API requires issueSubtypeId (not issueTypeId).',
     ),
   description: z
@@ -177,7 +177,7 @@ export const createIssueTool: MutationToolDef<typeof inputSchema> = {
     'WORKFLOW (FORMA_MUTATION_MODE=preview_required, the default):\n' +
     '  1. Call with dry_run=true (default) — returns a preview + approval_token.\n' +
     '  2. Call again with dry_run=false and approval_token=<token> to execute.\n\n' +
-    'Requires issue_subtype_id — call issues.list_types first to get valid IDs.\n' +
+    'Requires issue_subtype_id — call issues_list_types first to get valid IDs.\n' +
     'The server validates that the subtype exists before issuing the approval_token.',
   kind: 'mutation',
   scopes: ['data:read', 'data:write'],
@@ -201,7 +201,7 @@ export const createIssueTool: MutationToolDef<typeof inputSchema> = {
       throw new BusinessRuleError(
         'issue_subtype_id_must_exist',
         `issue_subtype_id "${input.issue_subtype_id}" not found in project ${input.project_id}. ` +
-          `Call issues.list_types to get valid subtype IDs.`,
+          `Call issues_list_types to get valid subtype IDs.`,
       );
     }
     if (!subtype.isActive) {
@@ -209,7 +209,7 @@ export const createIssueTool: MutationToolDef<typeof inputSchema> = {
         'issue_subtype_must_be_active',
         `issue_subtype_id "${input.issue_subtype_id}" ("${subtype.title}") is inactive in project ${input.project_id}. ` +
           `APS rejects POST /issues with an inactive subtype. ` +
-          `Call issues.list_types and pick a subtype without the [INACTIVE] tag.`,
+          `Call issues_list_types and pick a subtype without the [INACTIVE] tag.`,
       );
     }
 

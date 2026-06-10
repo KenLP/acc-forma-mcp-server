@@ -6,7 +6,7 @@ const inputSchema = z.object({
   hub_id: z
     .string()
     .min(1)
-    .describe('Hub (Account) ID. Get from dm.list_hubs. Accepts with or without b. prefix.'),
+    .describe('Hub (Account) ID. Get from dm_list_hubs. Accepts with or without b. prefix.'),
   status: z
     .enum(['active', 'inactive', 'archived'])
     .optional()
@@ -20,9 +20,9 @@ export const adminListProjectsTool: ReadToolDef<typeof inputSchema> = {
   title: 'List Forma Projects (Admin)',
   description:
     'Lists all projects in a Forma hub using the Account Admin API. ' +
-    'Returns richer metadata than dm.list_projects (status, type, dates, address). ' +
+    'Returns richer metadata than dm_list_projects (status, type, dates, address). ' +
     'Requires the service account to have Account Admin role.\n\n' +
-    'Use dm.list_hubs first to obtain hub_id.',
+    'Use dm_list_hubs first to obtain hub_id.',
   kind: 'read',
   preferredAuth: '2lo',
   scopes: ['account:read'],

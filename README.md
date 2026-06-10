@@ -211,14 +211,14 @@ To execute, re-call the same tool with `dry_run=false, approval_token=<token>`.
 ```
 Claude: "Create an issue titled 'Leak at Level 3' in project xyz"
 
-Tool: issues.create(dry_run=true)
+Tool: issues_create(dry_run=true)
 → {
     preview: { method: "POST", url: "...issues", body: {...} },
     approval_token: "appr_01JXW...",
     next_step: "Re-call with dry_run=false and approval_token to execute"
   }
 
-Tool: issues.create(dry_run=false, approval_token="appr_01JXW...")
+Tool: issues_create(dry_run=false, approval_token="appr_01JXW...")
 → Issue created: ID abc-456
 ```
 
@@ -228,7 +228,7 @@ All tool calls are appended to `~/.acc-forma-mcp/audit/audit-YYYY-MM-DD.jsonl` w
 
 ```bash
 # Using the MCP tool
-meta.verify_audit_chain()
+meta_verify_audit_chain()
 
 # Or read the JSONL directly — one JSON object per line
 cat ~/.acc-forma-mcp/audit/audit-$(date +%F).jsonl | jq .
@@ -303,12 +303,6 @@ pnpm run test
 # Watch mode
 pnpm run test:watch
 ```
-
----
-
-## Skill (for Claude Desktop / Claude Code)
-
-A companion Anthropic-format skill is provided at `./skills/acc-forma-mcp-server/SKILL.md` documenting workflows, the dual-auth matrix, AECDM filter syntax, and debugged gotchas. Load it alongside the MCP server for better tool selection and fewer dead-end paths.
 
 ---
 

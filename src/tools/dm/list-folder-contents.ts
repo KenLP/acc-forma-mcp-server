@@ -6,12 +6,12 @@ const inputSchema = z.object({
   project_id: z
     .string()
     .min(1)
-    .describe('Project ID from dm.list_projects. Accepts with or without b. prefix.'),
+    .describe('Project ID from dm_list_projects. Accepts with or without b. prefix.'),
   folder_id: z
     .string()
     .min(1)
     .describe(
-      'Folder ID from dm.list_top_folders or a previous dm.list_folder_contents call.',
+      'Folder ID from dm_list_top_folders or a previous dm_list_folder_contents call.',
     ),
 });
 
@@ -21,7 +21,7 @@ export const listFolderContentsTool: ReadToolDef<typeof inputSchema> = {
   description:
     'Lists the contents of a folder in Forma Data Management. ' +
     'Returns sub-folders and items (files/documents). ' +
-    'For items, use dm.get_item to fetch full metadata and dm.list_versions for version history.',
+    'For items, use dm_get_item to fetch full metadata and dm_list_versions for version history.',
   kind: 'read',
   preferredAuth: '2lo',
   scopes: ['data:read'],

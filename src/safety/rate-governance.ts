@@ -10,7 +10,6 @@ interface RateConfig {
 
 const DEFAULT_RATE_CONFIG: RateConfig = {
   'issues_create': { per_project_per_hour: 50 },
-  'issues.update': { per_project_per_hour: 100 },
   'reviews_create': { per_project_per_hour: 20 },
   'reviews_transition': { per_project_per_hour: 50 },
 };
@@ -27,7 +26,6 @@ const rateConfig = loadConfig();
 // Sliding-window counters keyed by "toolName::projectId::hourBucket".
 // LIMITATION: counters reset on process restart and are not shared across
 // multiple server processes. Single-process deployment only.
-// See docs/REMEDIATION-PLAN.md Fix 6 for the durable-store migration path.
 const counters = new Map<string, number>();
 
 export class RateGovernanceError extends Error {

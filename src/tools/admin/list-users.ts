@@ -6,7 +6,7 @@ const inputSchema = z.object({
   hub_id: z
     .string()
     .min(1)
-    .describe('Hub (Account) ID. Get from dm.list_hubs.'),
+    .describe('Hub (Account) ID. Get from dm_list_hubs.'),
   limit: z.number().int().min(1).max(200).default(50).describe('Max results per page.'),
   offset: z.number().int().min(0).default(0).describe('Pagination offset.'),
 });
@@ -17,7 +17,7 @@ export const adminListUsersTool: ReadToolDef<typeof inputSchema> = {
   description:
     'Lists all users in a Forma hub (Account). ' +
     'Returns Autodesk user IDs, emails, names, and roles. ' +
-    'User IDs returned here can be used with issues.create (assigned_to) and reviews.create (reviewerIds). ' +
+    'User IDs returned here can be used with issues_create (assigned_to) and reviews_create (reviewerIds). ' +
     'Requires Account Admin role.',
   kind: 'read',
   preferredAuth: '2lo',

@@ -11,7 +11,7 @@ export const listHubsTool: ReadToolDef<typeof inputSchema> = {
     'Lists all Autodesk Forma (ACC) hubs the service account has access to. ' +
     '"Hub" is the new name for "Account" (renamed 24 March 2026). ' +
     'Returns hub IDs, names, and regions. ' +
-    'Use hub IDs with dm.list_projects, admin.list_projects, and other tools.',
+    'Use hub IDs with dm_list_projects, admin_list_projects, and other tools.',
   kind: 'read',
   preferredAuth: '2lo',
   scopes: ['data:read'],

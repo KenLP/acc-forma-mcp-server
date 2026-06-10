@@ -6,11 +6,11 @@ const inputSchema = z.object({
   project_id: z
     .string()
     .min(1)
-    .describe('Project ID from dm.list_projects. Accepts with or without b. prefix.'),
+    .describe('Project ID from dm_list_projects. Accepts with or without b. prefix.'),
   item_id: z
     .string()
     .min(1)
-    .describe('Item ID from dm.list_folder_contents.'),
+    .describe('Item ID from dm_list_folder_contents.'),
 });
 
 export const getItemTool: ReadToolDef<typeof inputSchema> = {
@@ -19,7 +19,7 @@ export const getItemTool: ReadToolDef<typeof inputSchema> = {
   description:
     'Gets full metadata for a single item (file/document) in Forma Data Management. ' +
     'Returns the item name, type, and tip (latest) version ID. ' +
-    'Use dm.list_versions to see all historical versions.',
+    'Use dm_list_versions to see all historical versions.',
   kind: 'read',
   preferredAuth: '2lo',
   scopes: ['data:read'],

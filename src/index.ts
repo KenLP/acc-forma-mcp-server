@@ -58,8 +58,7 @@ async function main(): Promise<void> {
   logger.warn(
     'Approval tokens and rate counters are stored in-memory only. ' +
       'They will be lost on restart and are not shared across processes. ' +
-      'Single-process deployment required until Fix 6 (durable store) is implemented. ' +
-      'See docs/REMEDIATION-PLAN.md for details.',
+      'Single-process deployment required until a durable store is implemented.',
   );
 }
 

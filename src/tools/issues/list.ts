@@ -6,7 +6,7 @@ const inputSchema = z.object({
   project_id: z
     .string()
     .min(1)
-    .describe('ACC project ID. Get from dm.list_projects or admin.list_projects.'),
+    .describe('ACC project ID. Get from dm_list_projects or admin_list_projects.'),
   status: z
     .enum(['open', 'pending', 'in_review', 'closed', 'void'])
     .optional()
@@ -25,7 +25,7 @@ export const listIssuesTool: ReadToolDef<typeof inputSchema> = {
   description:
     'Lists issues in an ACC project. Supports filtering by status and assignee. ' +
     'Returns issue IDs, titles, statuses, and assignments. ' +
-    'Use issues.get for full details on a specific issue.',
+    'Use issues_get for full details on a specific issue.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],
