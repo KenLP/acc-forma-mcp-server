@@ -48,7 +48,11 @@ Daily JSONL files at `FORMA_AUDIT_DIR/audit-YYYY-MM-DD.jsonl`. One JSON object p
 `this_hash = sha256(prev_hash + canonical_json(all_other_fields))`. Modifying any entry invalidates all subsequent hashes. Verify with:
 
 ```bash
-node dist/scripts/verify-audit.js ~/.acc-forma-mcp/audit/audit-2026-04-16.jsonl
+# Via MCP tool (recommended)
+meta_verify_audit_chain()
+
+# Or inspect the JSONL directly
+cat ~/.acc-forma-mcp/audit/audit-$(date +%F).jsonl | jq .
 ```
 
 ### Stage values

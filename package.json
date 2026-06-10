@@ -34,9 +34,7 @@
     "lint": "eslint src tests",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "generate:tools-doc": "tsx scripts/generate-tools-doc.ts"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@aps_sdk/data-management": "^1.1.2",

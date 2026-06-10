@@ -18,7 +18,7 @@
 | Issues read + write | Partial | ✅ |
 | Reviews read + write | Partial | ✅ |
 | AEC Data Model (BIM element queries) | Separate .NET server only | ✅ |
-| **AECDM clash detection via bounding boxes** | ❌ | ✅ |
+| **AECDM element position queries (Issue pushpin support)** | ❌ | ✅ |
 | **Dry-run preview before any write** | ❌ | ✅ |
 | **Tamper-evident audit log (JSONL + hash chain)** | ❌ | ✅ |
 | **Project/hub allow-list enforcement** | ❌ | ✅ |
@@ -139,7 +139,7 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 | `aecdm_query_elements` | Query BIM elements by category with full properties. Supports multi-word categories like `Structural Columns`, `Electrical Equipment`. |
 | `aecdm_get_element_properties` | Re-fetch full properties for a specific element by node ID (requires the originating category). |
 | `aecdm_aggregate_by_parameter` | Count elements grouped by a parameter value within a category (e.g. walls by type name) — fast take-off queries. |
-| `aecdm_query_element_bboxes` | Query elements with axis-aligned bounding boxes. Three spatial modes: `intersects` (clash detection), `inside` (containment), `contains` (envelope). Uses the AECDM `geometry` beta field. |
+| `aecdm_query_element_positions` | Query elements with origin position (x, y, z) decoded from geometry transform. Primary use: populate ACC Issue pushpins (`linked_documents[].details.position`). Optionally filter by a reference bounding box. NOTE: returns an origin *point*, not an AABB — use Model Derivative API for true bounding boxes. Uses the AECDM `geometryDataByElements` Public Beta field. |
 
 ### Meta / Observability (2)
 
@@ -187,8 +187,8 @@ All tool calls are appended to `~/.acc-forma-mcp/audit/audit-YYYY-MM-DD.jsonl` w
 # Using the MCP tool
 meta.verify_audit_chain()
 
-# Or manually
-node dist/scripts/verify-audit.js ~/.acc-forma-mcp/audit/audit-2026-04-16.jsonl
+# Or read the JSONL directly — one JSON object per line
+cat ~/.acc-forma-mcp/audit/audit-$(date +%F).jsonl | jq .
 ```
 
 ### 3. Project allow-list
