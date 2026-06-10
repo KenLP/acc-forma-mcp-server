@@ -31,25 +31,68 @@
 
 ## Quickstart
 
-### Option 1 — npx (zero install, after publish)
+### Step 1 — APS credentials (one-time)
 
-```bash
-npx acc-forma-mcp-server
+You need an **Autodesk Platform Services (APS)** application with an **SSA (Secure Service Account)**. SSA is a bot identity that can be scoped to specific projects without a human login.
+
+See [docs/AUTH.md](docs/AUTH.md) for the full walkthrough. Quick summary:
+
+1. Create an app at [aps.autodesk.com](https://aps.autodesk.com) → enable **Autodesk Construction Cloud** APIs
+2. App → **Security → Service Accounts** → generate key pair → download the PEM private key (never commit it)
+3. Note your `APS_CLIENT_ID`, `APS_CLIENT_SECRET`, `SSA_ID`, `SSA_KEY_ID`, and the path to the PEM file
+4. **Hub Admin → Members** → invite the SSA email → assign Project Admin role
+5. **Hub Admin → Custom Integrations** → add your app by Client ID (required — without this, all project calls return 403)
+
+### Step 2 — Configure env
+
+Create a `.env` file in the project root (or pass these as env vars in your MCP client config — see Step 3):
+
+```env
+APS_AUTH_MODE=ssa
+APS_CLIENT_ID=your_client_id
+APS_CLIENT_SECRET=your_client_secret
+SSA_ID=your_ssa_id
+SSA_KEY_ID=your_key_id
+SSA_KEY_PATH=/absolute/path/to/private-key.pem
 ```
 
-### Option 2 — Clone & run locally
+Full variable reference: [Configuration](#configuration)
+
+### Step 3 — Add to your MCP client
+
+This server communicates over **stdio** (JSON-RPC). It is spawned by your MCP client — not run standalone in a terminal.
+
+**Option A — npx** *(no clone needed; requires the package to be published on npm)*
+
+```json
+{
+  "mcpServers": {
+    "forma": {
+      "command": "npx",
+      "args": ["-y", "acc-forma-mcp-server"],
+      "env": {
+        "APS_CLIENT_ID": "your_client_id",
+        "APS_CLIENT_SECRET": "your_client_secret",
+        "APS_AUTH_MODE": "ssa",
+        "SSA_ID": "your_ssa_id",
+        "SSA_KEY_ID": "your_key_id",
+        "SSA_KEY_PATH": "/absolute/path/to/private-key.pem"
+      }
+    }
+  }
+}
+```
+
+**Option B — Clone and build locally**
 
 ```bash
 git clone https://github.com/KenLP/acc-forma-mcp-server.git
 cd acc-forma-mcp-server
 pnpm install
 pnpm build
-node dist/index.js
 ```
 
-### Option 3 — Claude Desktop
-
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Then point your MCP client at the built file:
 
 ```json
 {
@@ -70,15 +113,15 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
----
+> **Tip:** Pass credentials via `env` in the MCP client config (as shown above) rather than relying on a `.env` file. The working directory when your client spawns the process may not be the repo root.
 
-## Prerequisites
+**MCP client config file locations**
 
-1. **Autodesk Platform Services account** — [aps.autodesk.com](https://aps.autodesk.com)
-2. **APS Application** with "Autodesk Construction Cloud" product APIs enabled
-3. **Secure Service Account (SSA)** — see [docs/AUTH.md](docs/AUTH.md) for setup
-4. SSA email invited to the target Forma hub(s) with appropriate role
-5. APS app provisioned on the hub via **Hub Admin → Custom Integrations**
+| Client | Config path |
+|---|---|
+| Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Claude Desktop (Windows) | `%APPDATA%\Claude\claude_desktop_config.json` |
+| VS Code (MCP extension) | `.vscode/mcp.json` in your workspace |
 
 ---
 
