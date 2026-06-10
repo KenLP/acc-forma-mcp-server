@@ -19,6 +19,11 @@ audit-*.jsonl
 # Internal planning & changelog (kept local; not for public repo)
 CHANGELOG.md
 docs/PLANNING.md
+docs/REMEDIATION-PLAN.md
+
+# Personal Claude Code skill configs and local session notes (not for public)
+skills/
+.claude/LOCAL.md
 
 # Dockerfile scaffold (not used yet; revisit when adding container distribution)
 Dockerfile

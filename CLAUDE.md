@@ -75,22 +75,19 @@ Never bypass `wrapMutationTool` — adding a mutation tool that calls APS direct
 - **`dry_run` defaults to `true`** — no mutation executes without explicit `dry_run=false` + valid token
 - **Approval tokens are payload-bound** — the token hash includes the exact execute payload; changing any input field after `dry_run=true` invalidates the token
 - **Audit entries are hash-chained** — `this_hash = sha256(prevHash + canonical_json_of_entry_without_this_hash)`. `verifyChain` checks both hash validity and `prev_hash` adjacency
-- **`lastHash` is in-memory** — restart resets it to `'sha256:genesis'`, breaking the chain. `loadLastHashFromFile()` at startup mitigates this (see `docs/REMEDIATION-PLAN.md` Fix 1)
-- **Approval tokens and rate counters are in-memory** — single-process deployment only until Fix 6 is done
+- **`lastHash` is in-memory** — restart resets it to `'sha256:genesis'`, breaking the chain. `loadLastHashFromFile()` at startup mitigates this by restoring the last known hash from the audit file
+- **Approval tokens and rate counters are in-memory** — single-process deployment only (durable store not yet implemented)
 
 ---
 
-## Known issues
+## Known limitations
 
-All P0–P2 issues from the original code review have been resolved (Sprint 1–3, 2026-06-10).
-See `docs/REMEDIATION-PLAN.md` for root causes and changes made.
-
-### Deferred (post-production)
-
-| ID | Summary |
-|----|---------|
-| Fix 6 (partial) | Approval tokens + rate counters remain in-memory — single-process deployment only. Durable SQLite store is designed but not yet implemented. Startup WARN is logged as mitigation. |
-| Future | `FORMA_AUDIT_FAIL_CLOSED` env flag; circuit breaker for APS endpoints; 3LO auth mode |
+| Area | Status |
+|------|--------|
+| Approval tokens + rate counters | In-memory only — lost on restart, not shared across processes. Single-process deployment required. Startup logs a WARN. |
+| `FORMA_AUDIT_FAIL_CLOSED` | Not yet implemented — audit write failure is logged but does not block the mutation. |
+| Circuit breaker | No open/half-open circuit for APS endpoints — consecutive 5xx will keep retrying with backoff. |
+| 3LO auth | Not implemented (Phase 3). |
 
 ---
 
@@ -132,4 +129,4 @@ Integration tests (in `tests/integration/`, skipped locally) require real APS cr
 - Filter DSL requires single quotes: `property.name.category=='Walls'`
 - `aecdm_query_element_positions` returns an *origin point* (first geometry piece transform), **not** an AABB — AECDM does not expose AABBs directly
 - `geometryDataByElements` is Public Beta — may change; elements without geometry return `position: null`
-- `listAecdmCategories` fires ~60 probes with concurrency capped at 8 to prevent 429 storms (was fixed in Fix 7c)
+- `listAecdmCategories` fires ~60 probes with concurrency capped at 8 to prevent 429 storms
