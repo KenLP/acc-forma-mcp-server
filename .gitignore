@@ -23,6 +23,7 @@ docs/REMEDIATION-PLAN.md
 
 # Personal Claude Code skill configs and local session notes (not for public)
 skills/
+CLAUDE.md
 .claude/LOCAL.md
 
 # Dockerfile scaffold (not used yet; revisit when adding container distribution)
