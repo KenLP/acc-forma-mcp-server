@@ -136,6 +136,8 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
       if (authCheck) return authCheck;
 
       // 1. Allow-list
+      const hubId = tool.getHubId?.(input);
+      if (hubId) checkHubAllowed(hubId);
       if (projectId) checkProjectAllowed(projectId);
 
       // 2. Readonly mode

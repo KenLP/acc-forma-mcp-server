@@ -67,6 +67,8 @@ export interface MutationToolDef<TSchema extends z.ZodTypeAny> {
    */
   preferredAuth?: '2lo';
   inputSchema: TSchema;
+  /** Extract hub ID for hub allow-list check */
+  getHubId?: (input: z.infer<TSchema>) => string | undefined;
   /** Extract project ID for allow-list + rate-governance checks */
   getProjectId?: (input: z.infer<TSchema>) => string | undefined;
   /** Build preview (validates business rules, resolves IDs, no APS write) */

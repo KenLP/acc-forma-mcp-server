@@ -68,6 +68,7 @@ export const createReviewTool: MutationToolDef<typeof inputSchema> = {
   requiredAuthModes: ['ssa', '3lo'],
   inputSchema,
 
+  getHubId: (input) => input.hub_id,
   getProjectId: (input) => input.project_id,
 
   buildPreview: async (input, ctx) => {
