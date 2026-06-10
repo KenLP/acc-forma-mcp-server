@@ -165,6 +165,40 @@ function mapElements(
 
 // ---- Internal helpers ------------------------------------------------------
 
+/**
+ * Validate that a category name is safe to interpolate into the filter DSL.
+ * Rejects strings containing single-quotes or other filter-breaking characters
+ * to prevent filter injection via user-supplied category names.
+ */
+export function validateCategoryName(category: string): void {
+  if (!/^[\w\s\-/().]+$/.test(category)) {
+    throw new Error(
+      `Invalid category name "${category}". ` +
+        `Only letters, digits, spaces, hyphens, slashes, parentheses, and periods are allowed.`,
+    );
+  }
+}
+
+/**
+ * Run async tasks with at most `limit` concurrent executions.
+ * Order of results matches order of input tasks.
+ */
+async function withConcurrencyLimit<T>(
+  tasks: Array<() => Promise<T>>,
+  limit: number,
+): Promise<T[]> {
+  const results = Array.from<T | undefined>({ length: tasks.length });
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < tasks.length) {
+      const i = next++;
+      results[i] = await tasks[i]!();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+  return results as T[];
+}
+
 async function fetchWithFilter(
   auth: AuthProvider,
   elementGroupId: string,
@@ -182,9 +216,10 @@ async function fetchWithFilter(
       cursor: cursor ?? null,
     });
     const page = data.elementsByElementGroup;
-    all.push(...mapElements(page.results ?? []));
-    cursor = page.pagination.cursor ?? undefined;
-  } while (cursor && all.length < maxElements);
+    const mapped = mapElements(page.results ?? []);
+    all.push(...mapped.slice(0, maxElements - all.length));
+    cursor = all.length < maxElements ? (page.pagination.cursor ?? undefined) : undefined;
+  } while (cursor);
   return all;
 }
 
@@ -242,8 +277,8 @@ export async function queryElementsByCategory(
   category: string,
   maxElements = 500,
 ): Promise<AecElement[]> {
+  validateCategoryName(category);
   const filter = `property.name.category=='${category}'`;
-
   return fetchWithFilter(auth, elementGroupId, filter, maxElements);
 }
 
@@ -450,19 +485,22 @@ async function probeCategoryCount(
  * (whose schema doesn't match Autodesk's docs) and the no-filter
  * `elementsByElementGroup` query (which AECDM doesn't allow without a filter).
  *
- * Probes run in parallel, so the total time is bounded by the slowest single probe.
+ * Probes run with bounded concurrency (8 at a time) to avoid hitting APS
+ * rate limits when the category list is large (~60 probes).
  * Categories with zero elements are excluded from the result.
  */
 export async function listAecdmCategories(
   auth: AuthProvider,
   elementGroupId: string,
 ): Promise<AecCategory[]> {
-  const probes = COMMON_REVIT_CATEGORIES.map(async (cat) => ({
-    name: cat,
-    count: await probeCategoryCount(auth, elementGroupId, cat),
-  }));
+  const tasks = COMMON_REVIT_CATEGORIES.map(
+    (cat) => async () => ({
+      name: cat,
+      count: await probeCategoryCount(auth, elementGroupId, cat),
+    }),
+  );
 
-  const results = await Promise.all(probes);
+  const results = await withConcurrencyLimit(tasks, 8);
 
   return results
     .filter((r) => r.count > 0)
