@@ -80,18 +80,17 @@ Never bypass `wrapMutationTool` — adding a mutation tool that calls APS direct
 
 ---
 
-## Known issues (open, see docs/REMEDIATION-PLAN.md)
+## Known issues
 
-| ID | Priority | Summary |
-|----|----------|---------|
-| Fix 1 | P0 | Audit hash chain broken — append and verify use different canonical JSON |
-| Fix 2 | P0 | Hub allow-list not enforced for mutation tools (`reviews_create` etc.) |
-| Fix 3 | P1 | CI red — 5 `no-unnecessary-type-assertion` lint errors |
-| Fix 4 | P1 | `generate:tools-doc` script missing; `test:coverage` dep missing; `dist/scripts/verify-audit.js` missing |
-| Fix 5 | P1 | README / SKILL.md still reference `aecdm_query_element_bboxes` (tool renamed to `aecdm_query_element_positions` in PR #2) |
-| Fix 6 | P1 | Approval tokens + rate counters in-memory only — lost on restart |
-| Fix 7 | P2 | AECDM: category injection risk, pagination overshoot, `listAecdmCategories` parallel probe storm |
-| Fix 8 | P2 | HTTP: no jitter, no 401 token invalidation, GraphQL errors not `ApsApiError`, DM SDK bypasses retry layer |
+All P0–P2 issues from the original code review have been resolved (Sprint 1–3, 2026-06-10).
+See `docs/REMEDIATION-PLAN.md` for root causes and changes made.
+
+### Deferred (post-production)
+
+| ID | Summary |
+|----|---------|
+| Fix 6 (partial) | Approval tokens + rate counters remain in-memory — single-process deployment only. Durable SQLite store is designed but not yet implemented. Startup WARN is logged as mitigation. |
+| Future | `FORMA_AUDIT_FAIL_CLOSED` env flag; circuit breaker for APS endpoints; 3LO auth mode |
 
 ---
 
@@ -133,4 +132,4 @@ Integration tests (in `tests/integration/`, skipped locally) require real APS cr
 - Filter DSL requires single quotes: `property.name.category=='Walls'`
 - `aecdm_query_element_positions` returns an *origin point* (first geometry piece transform), **not** an AABB — AECDM does not expose AABBs directly
 - `geometryDataByElements` is Public Beta — may change; elements without geometry return `position: null`
-- `listAecdmCategories` fires ~60 parallel probes — can hit 429 in production (see Fix 7c)
+- `listAecdmCategories` fires ~60 probes with concurrency capped at 8 to prevent 429 storms (was fixed in Fix 7c)

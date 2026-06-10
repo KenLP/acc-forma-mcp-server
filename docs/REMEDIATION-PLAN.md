@@ -2,7 +2,7 @@
 
 **Reviewed:** 2026-06-10  
 **Reviewer:** Code review (Claude Opus 4.7) + manual source verification  
-**Status:** Sprint 1 in progress
+**Status:** All sprints complete — Fix 1–8 resolved as of 2026-06-10
 
 ---
 

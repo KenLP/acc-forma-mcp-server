@@ -73,7 +73,7 @@ Before answering, double-check `references/gotchas.md` if any of these apply:
 - User passes a DM hub ID to an `aecdm_*` tool → call `aecdm_list_hubs` first.
 - User asks for "all elements in the model" → AECDM requires a filter argument; query per category instead.
 
-## Tool catalog (29)
+## Tool catalog (30)
 
 | Domain | Tools |
 |---|---|

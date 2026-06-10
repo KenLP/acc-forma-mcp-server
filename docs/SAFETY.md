@@ -7,15 +7,16 @@
 Every mutation tool call passes through this pipeline in order:
 
 ```
+0. Auth mode check       (APS_AUTH_MODE must match tool's requiredAuthModes)
 1. Allow-list check      (FORMA_ALLOWED_HUBS / FORMA_ALLOWED_PROJECTS)
 2. Readonly mode check   (FORMA_READONLY / FORMA_MUTATION_MODE=readonly)
 3. Rate governance       (per-tool per-project hourly limits)
 4. Business rules        (local validators — no APS call)
 5. Build preview         (resolve full APS request — may call APS for validation)
-   └─ If dry_run=true → return DryRunPreview + approval_token (stop here)
+   └─ If dry_run=true → audit "preview" + return DryRunPreview + approval_token (stop here)
 6. Approval token check  (only in preview_required mode)
 7. Execute APS call
-8. Audit log entry
+8. Audit log entry       (stage: "executed" on success, "denied_*" / "failed_api" on error)
 ```
 
 Each step that fails records a `stage` = `denied_*` or `failed_api` in the audit log.
@@ -73,14 +74,14 @@ Override default limits by setting `FORMA_RATE_CONFIG_PATH` to a JSON file:
 
 ```json
 {
-  "issues.create": { "per_project_per_hour": 20 },
-  "reviews.create": { "per_project_per_hour": 10 },
-  "issues.update":  { "per_project_per_hour": 50 }
+  "issues_create":    { "per_project_per_hour": 20 },
+  "reviews_create":   { "per_project_per_hour": 10 },
+  "issues.update":    { "per_project_per_hour": 50 }
 }
 ```
 
 Default limits (built-in):
-- `issues.create`: 50/project/hour
+- `issues_create`: 50/project/hour
 - `issues.update`: 100/project/hour
-- `reviews.create`: 20/project/hour
-- `reviews.transition`: 50/project/hour
+- `reviews_create`: 20/project/hour
+- `reviews_transition`: 50/project/hour
