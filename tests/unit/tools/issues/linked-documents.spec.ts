@@ -108,7 +108,7 @@ describe('issues_create buildPreview — linked_documents pushpin plumbing', () 
 
   it('records a side effect mentioning pushpin link count', async () => {
     const preview = await createIssueTool.buildPreview(
-      { ...baseInput, linked_documents: [samplePin, { ...samplePin, objectId: 4712 } as never] },
+      { ...baseInput, linked_documents: [samplePin, { ...samplePin, objectId: 4712 }] },
       makeCtx(),
     );
     expect(preview.sideEffects.some((s) => s.includes('2 pushpin'))).toBe(true);

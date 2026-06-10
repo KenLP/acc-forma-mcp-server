@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import type { ReadToolDef } from '../_types.js';
 import { listReviews } from '../../apis/reviews.js';
-import type { ReviewStatus } from '../../apis/reviews.js';
 
 const inputSchema = z.object({
   hub_id: z.string().min(1).describe('Hub ID from dm_list_hubs.'),
@@ -31,7 +30,7 @@ export const listReviewsTool: ReadToolDef<typeof inputSchema> = {
     const { results, pagination } = await listReviews(ctx.auth, input.hub_id, input.project_id, {
       limit: input.limit,
       offset: input.offset,
-      ...(input.status ? { status: input.status as ReviewStatus } : {}),
+      ...(input.status ? { status: input.status } : {}),
     });
 
     if (results.length === 0) {

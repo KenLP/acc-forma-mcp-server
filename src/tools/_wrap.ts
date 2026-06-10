@@ -149,7 +149,7 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
       // 4. Local business rule validators (no APS call, fast)
       const rulesPassed = await runBusinessRules(
         tool.name,
-        input as Record<string, unknown>,
+        input,
         { ...(projectId !== undefined ? { projectId } : {}) },
       );
 

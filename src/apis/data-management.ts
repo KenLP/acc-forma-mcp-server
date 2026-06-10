@@ -83,7 +83,7 @@ export async function listTopFolders(
   return (resp.data ?? []).map((f) => ({
     id: f.id ?? '',
     name: f.attributes?.displayName ?? f.attributes?.name ?? '',
-    type: f.type as 'folders' | 'items',
+    type: f.type,
     objectCount: f.attributes?.objectCount,
   }));
 }
