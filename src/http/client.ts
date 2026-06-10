@@ -1,7 +1,7 @@
 import { logger } from '../logger.js';
 import { env } from '../config/env.js';
 import type { AuthProvider } from '../auth/index.js';
-import { ApsApiError } from './errors.js';
+import { ApsApiError, ApsGraphQLError } from './errors.js';
 
 const APS_BASE_URL = 'https://developer.api.autodesk.com';
 const GRAPHQL_URL = `${APS_BASE_URL}/aec/graphql`;
@@ -41,10 +41,17 @@ export async function apsRequest<T>(
       signal: AbortSignal.timeout(30_000),
     });
 
-    // Rate limit — respect Retry-After
+    // Expired/invalid token — invalidate cache and retry once with a fresh token
+    if (resp.status === 401 && attempt < MAX_RETRIES) {
+      logger.warn({ path, attempt }, 'APS 401; invalidating token and retrying');
+      auth.invalidateToken?.();
+      continue;
+    }
+
+    // Rate limit — respect Retry-After header; add jitter to avoid thundering herd
     if (resp.status === 429) {
       const retryAfter = Number(resp.headers.get('Retry-After') ?? backoffMs / 1000);
-      const waitMs = retryAfter * 1000;
+      const waitMs = retryAfter * 1000 * (0.5 + Math.random() * 0.5);
       logger.warn({ path, attempt, waitMs }, 'Rate limited by APS; backing off');
       if (attempt < MAX_RETRIES) {
         await sleep(waitMs);
@@ -53,10 +60,10 @@ export async function apsRequest<T>(
       }
     }
 
-    // Transient server errors
+    // Transient server errors — jitter prevents synchronized retry storms
     if (resp.status >= 500 && attempt < MAX_RETRIES) {
       logger.warn({ path, status: resp.status, attempt }, 'APS 5xx; retrying');
-      await sleep(backoffMs);
+      await sleep(backoffMs * (0.5 + Math.random() * 0.5));
       backoffMs = Math.min(backoffMs * 2, 30_000);
       continue;
     }
@@ -88,9 +95,7 @@ export async function apsGraphQL<T>(
   });
 
   if (result.errors && result.errors.length > 0) {
-    throw new Error(
-      `GraphQL error: ${result.errors.map((e) => e.message).join('; ')}`,
-    );
+    throw new ApsGraphQLError(GRAPHQL_URL, result.errors);
   }
 
   return result.data as T;

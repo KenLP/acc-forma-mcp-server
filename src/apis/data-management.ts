@@ -1,9 +1,27 @@
 import { DataManagementClient } from '@aps_sdk/data-management';
 import type { AuthProvider } from '../auth/index.js';
+import { ApsApiError } from '../http/errors.js';
 
 /** Minimal adapter to make our AuthProvider compatible with APS SDK */
 function toSdkAuth(auth: AuthProvider): { getAccessToken(): Promise<string> } {
   return { getAccessToken: (): Promise<string> => auth.getAccessToken() };
+}
+
+/**
+ * Wrap APS SDK calls so their errors are normalized to ApsApiError.
+ * The SDK throws its own error types that would otherwise be classified as
+ * unexpected errors in _wrap.ts instead of the correct 'failed_api' stage.
+ */
+async function callSdk<T>(fn: () => Promise<T>, method: string, path: string): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof ApsApiError) throw err;
+    const e = err as Record<string, unknown>;
+    const status = (e['status'] ?? e['statusCode'] ?? 500) as number;
+    const message = err instanceof Error ? err.message : String(err);
+    throw new ApsApiError(status, method, path, message);
+  }
 }
 
 export interface ApsHub {
@@ -47,7 +65,7 @@ export interface ApsVersion {
 
 export async function listHubs(auth: AuthProvider): Promise<ApsHub[]> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await client.getHubs();
+  const resp = await callSdk(() => client.getHubs(), 'GET', '/project/v1/hubs');
   return (resp.data ?? []).map((h) => ({
     id: h.id ?? '',
     name: h.attributes?.name ?? '',
@@ -61,7 +79,7 @@ export async function listProjects(
   hubId: string,
 ): Promise<ApsProject[]> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await client.getHubProjects(hubId);
+  const resp = await callSdk(() => client.getHubProjects(hubId), 'GET', `/project/v1/hubs/${hubId}/projects`);
   return (resp.data ?? []).map((p) => {
     const status = p.attributes?.extension?.data?.projectType as string | undefined;
     return {
@@ -79,7 +97,7 @@ export async function listTopFolders(
   projectId: string,
 ): Promise<ApsFolder[]> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await client.getProjectTopFolders(hubId, projectId);
+  const resp = await callSdk(() => client.getProjectTopFolders(hubId, projectId), 'GET', `/project/v1/hubs/${hubId}/projects/${projectId}/topFolders`);
   return (resp.data ?? []).map((f) => ({
     id: f.id ?? '',
     name: f.attributes?.displayName ?? f.attributes?.name ?? '',
@@ -94,7 +112,7 @@ export async function getItem(
   itemId: string,
 ): Promise<ApsItem> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await client.getItem(projectId, itemId);
+  const resp = await callSdk(() => client.getItem(projectId, itemId), 'GET', `/data/v1/projects/${projectId}/items/${itemId}`);
   const item = resp.data;
   return {
     id: item?.id ?? '',
@@ -113,7 +131,7 @@ export async function listItemVersions(
   itemId: string,
 ): Promise<ApsVersion[]> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await client.getItemVersions(projectId, itemId);
+  const resp = await callSdk(() => client.getItemVersions(projectId, itemId), 'GET', `/data/v1/projects/${projectId}/items/${itemId}/versions`);
   return (resp.data ?? []).map((v) => ({
     id: v.id ?? '',
     name: v.attributes?.name ?? '',
@@ -139,7 +157,7 @@ export async function getProjectContainerIds(
   projectId: string,
 ): Promise<Record<string, string>> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await client.getProject(hubId, projectId);
+  const resp = await callSdk(() => client.getProject(hubId, projectId), 'GET', `/project/v1/hubs/${hubId}/projects/${projectId}`);
   const relationships = (resp.data?.relationships ?? {}) as Record<
     string,
     { data?: { id?: string } }
@@ -157,7 +175,7 @@ export async function listFolderContents(
   folderId: string,
 ): Promise<ApsFolder[]> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await client.getFolderContents(projectId, folderId);
+  const resp = await callSdk(() => client.getFolderContents(projectId, folderId), 'GET', `/data/v1/projects/${projectId}/folders/${folderId}/contents`);
   return (resp.data ?? []).map((item) => ({
     id: item.id ?? '',
     name: item.attributes?.displayName ?? '',

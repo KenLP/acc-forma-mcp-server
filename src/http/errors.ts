@@ -26,6 +26,11 @@ export class ApsApiError extends Error {
   }
 
   toMcpText(): string {
+    if (this.status === 200 && this.name === 'ApsGraphQLError') {
+      const body = this.body as { graphqlErrors?: Array<{ message: string }> };
+      const msgs = body.graphqlErrors?.map((e) => e.message).join('; ') ?? this.message;
+      return `AEC Data Model GraphQL error: ${msgs}`;
+    }
     if (this.isForbidden()) {
       return (
         `Access denied (403) calling ${this.method} ${this.url}.\n` +
@@ -43,5 +48,14 @@ export class ApsApiError extends Error {
       return `Resource not found (404): ${this.method} ${this.url}. Check that the IDs are correct and the resource exists.`;
     }
     return `APS API error ${this.status} for ${this.method} ${this.url}: ${JSON.stringify(this.body)}`;
+  }
+}
+
+/** Thrown when an APS GraphQL response returns HTTP 200 but includes errors[]. */
+export class ApsGraphQLError extends ApsApiError {
+  constructor(url: string, errors: Array<{ message: string }>) {
+    super(200, 'POST', url, { graphqlErrors: errors });
+    this.name = 'ApsGraphQLError';
+    this.message = `GraphQL error: ${errors.map((e) => e.message).join('; ')}`;
   }
 }

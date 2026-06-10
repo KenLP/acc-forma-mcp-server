@@ -29,6 +29,10 @@ export class SsaAuthProvider implements AuthProvider {
     return this.scopes;
   }
 
+  invalidateToken(): void {
+    this.cache.invalidate();
+  }
+
   async getAccessToken(): Promise<string> {
     const cached = this.cache.get();
     if (cached) return cached;
