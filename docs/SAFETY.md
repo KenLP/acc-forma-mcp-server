@@ -88,13 +88,11 @@ Default limits (built-in):
 
 These are current constraints to understand before deploying in a production environment.
 
-### In-memory approval tokens
+### Approval tokens, rate counters, and idempotency keys
 
-Approval tokens (`appr_01…`) are stored in process memory only. On server restart, all pending tokens are lost — callers whose dry-run completed but whose execute call arrives after a restart must repeat the dry-run. Multi-process or multi-host deployments are **not** supported; each process has an independent token store. A durable token store (Redis, database) is planned for a future release.
+By default (`FORMA_PERSISTENCE_MODE=memory`) these are stored in process memory only. On server restart, all pending tokens are lost — callers whose dry-run completed but whose execute call arrives after a restart must repeat the dry-run. Rate counters reset, and deduplicated idempotency keys are forgotten.
 
-### In-memory rate counters
-
-Per-tool per-project hourly rate counters are also in-memory only. Restart resets all counters. Multi-process deployments will not share rate state, allowing total request volume up to `N × limit` across N processes.
+Set `FORMA_PERSISTENCE_MODE=sqlite` to use a local SQLite database (path configured via `FORMA_DB_PATH`, default `~/.acc-forma-mcp/state.db`). This makes tokens, counters, and idempotency records durable across restarts. Note: SQLite is still single-process only — horizontal scaling requires externalizing those stores to a shared backend (Redis, PostgreSQL, etc.).
 
 ### Audit log: fail-open default
 
@@ -118,4 +116,4 @@ There is no circuit breaker for APS endpoints. Consecutive 5xx responses will co
 
 ### Single-process deployment only
 
-Due to the in-memory constraints above (tokens, rate counters), this server must run as a single process. Horizontal scaling requires externalizing those stores first.
+Even with `FORMA_PERSISTENCE_MODE=sqlite`, this server must run as a single process — SQLite does not support concurrent writers from multiple processes. Horizontal scaling requires externalizing approval tokens, rate counters, and idempotency records to a shared backend (Redis, PostgreSQL, etc.).

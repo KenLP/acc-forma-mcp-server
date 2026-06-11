@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { AuthProvider } from '../../../src/auth/index.js';
 
 // Module-level spies — one per SDK method
 const mockGetHubProjects = vi.fn().mockResolvedValue({ data: [] });
@@ -9,18 +10,23 @@ const mockGetProject = vi.fn().mockResolvedValue({ data: { relationships: {} } }
 const mockGetFolderContents = vi.fn().mockResolvedValue({ data: [] });
 
 vi.mock('@aps_sdk/data-management', () => ({
-  DataManagementClient: vi.fn().mockImplementation(() => ({
-    getHubProjects: mockGetHubProjects,
-    getProjectTopFolders: mockGetProjectTopFolders,
-    getItem: mockGetItem,
-    getItemVersions: mockGetItemVersions,
-    getProject: mockGetProject,
-    getFolderContents: mockGetFolderContents,
-  })),
+  DataManagementClient: vi.fn().mockImplementation(function () {
+    return {
+      getHubProjects: mockGetHubProjects,
+      getProjectTopFolders: mockGetProjectTopFolders,
+      getItem: mockGetItem,
+      getItemVersions: mockGetItemVersions,
+      getProject: mockGetProject,
+      getFolderContents: mockGetFolderContents,
+    };
+  }),
 }));
 
-function makeAuth(): { getAccessToken: ReturnType<typeof vi.fn>; getScopes: ReturnType<typeof vi.fn> } {
-  return { getAccessToken: vi.fn().mockResolvedValue('tok'), getScopes: vi.fn().mockReturnValue([]) };
+function makeAuth(): AuthProvider {
+  return {
+    getAccessToken: (): Promise<string> => Promise.resolve('tok'),
+    getScopes: (): string[] => [],
+  };
 }
 
 describe('data-management adapter — addBPrefix normalization', () => {

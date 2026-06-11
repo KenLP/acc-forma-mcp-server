@@ -1,19 +1,7 @@
 import { createHash } from 'node:crypto';
 import { env } from '../config/env.js';
 import { generateApprovalToken } from '../utils/id-generator.js';
-
-interface PendingApproval {
-  token: string;
-  toolName: string;
-  payloadHash: string;
-  expiresAt: number; // unix ms
-}
-
-// In-memory store — single-use, TTL-bound.
-// LIMITATION: tokens are lost on process restart and cannot be shared across
-// multiple server processes. Single-process deployment only.
-// Durable store (SQLite) is a planned enhancement; see docs/SAFETY.md Known Limitations.
-const pending = new Map<string, PendingApproval>();
+import { getTokenStore } from '../persistence/token-store.js';
 
 export class ApprovalError extends Error {
   constructor(reason: string) {
@@ -25,8 +13,8 @@ export class ApprovalError extends Error {
 /** Issue a single-use approval token bound to the tool name and payload hash */
 export function createApprovalToken(toolName: string, executePayload: unknown): string {
   const token = generateApprovalToken();
-  pending.set(token, {
-    token,
+  getTokenStore().set({
+    id: token,
     toolName,
     payloadHash: hashPayload(executePayload),
     expiresAt: Date.now() + env.FORMA_APPROVAL_TOKEN_TTL * 1000,
@@ -43,7 +31,8 @@ export function verifyAndConsumeToken(
   toolName: string,
   executePayload: unknown,
 ): void {
-  const entry = pending.get(token);
+  const store = getTokenStore();
+  const entry = store.get(token);
 
   if (!entry) {
     throw new ApprovalError(
@@ -53,7 +42,7 @@ export function verifyAndConsumeToken(
   }
 
   if (Date.now() > entry.expiresAt) {
-    pending.delete(token);
+    store.delete(token);
     throw new ApprovalError(
       `Token "${token}" expired (TTL: ${env.FORMA_APPROVAL_TOKEN_TTL}s). ` +
         `Call with dry_run=true again to get a new token.`,
@@ -75,17 +64,12 @@ export function verifyAndConsumeToken(
     );
   }
 
-  pending.delete(token); // single-use: consume immediately
+  store.delete(token); // single-use: consume immediately
 }
 
 function hashPayload(payload: unknown): string {
   return createHash('sha256').update(JSON.stringify(payload), 'utf-8').digest('hex');
 }
 
-// GC expired tokens every minute
-setInterval(() => {
-  const now = Date.now();
-  for (const [token, entry] of pending.entries()) {
-    if (now > entry.expiresAt) pending.delete(token);
-  }
-}, 60_000).unref();
+// GC is handled inside getTokenStore() — memory backend runs a per-minute interval,
+// SQLite backend is cleaned up by cleanupExpiredRows() at startup.

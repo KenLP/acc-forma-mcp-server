@@ -57,6 +57,15 @@ const envSchema = z.object({
     .transform(Number)
     .default('90'),
 
+  // Persistence backend for approval tokens, rate counters, and idempotency records
+  FORMA_PERSISTENCE_MODE: z.enum(['memory', 'sqlite']).default('memory'),
+  FORMA_DB_PATH: z
+    .string()
+    .default(`${homedir()}/.acc-forma-mcp/state.db`)
+    .transform((p) =>
+      p.startsWith('~/') || p === '~' ? p.replace(/^~/, homedir()) : p,
+    ),
+
   // Rate governance
   FORMA_RATE_CONFIG_PATH: z.string().optional(),
 

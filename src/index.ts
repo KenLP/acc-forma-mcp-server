@@ -6,6 +6,7 @@ import type { AuthProvider } from './auth/index.js';
 import { buildServer } from './server.js';
 import { logger } from './logger.js';
 import { pruneOldAuditFiles } from './safety/audit-log.js';
+import { cleanupExpiredRows } from './persistence/db.js';
 
 async function main(): Promise<void> {
   logger.info(
@@ -47,6 +48,20 @@ async function main(): Promise<void> {
 
   pruneOldAuditFiles();
 
+  if (env.FORMA_PERSISTENCE_MODE === 'sqlite') {
+    cleanupExpiredRows();
+    logger.info(
+      { db_path: env.FORMA_DB_PATH },
+      'SQLite persistence enabled — approval tokens, rate counters, and idempotency records are durable across restarts',
+    );
+  } else {
+    logger.warn(
+      'Approval tokens, rate counters, and idempotency records are stored in-memory only. ' +
+        'They will be lost on restart and are not shared across processes. ' +
+        'Set FORMA_PERSISTENCE_MODE=sqlite for durable storage.',
+    );
+  }
+
   const ctx: import('./tools/_types.js').ToolContext = {
     auth,
     ...(auth2lo !== undefined ? { auth2lo } : {}),
@@ -58,11 +73,6 @@ async function main(): Promise<void> {
   await server.connect(transport);
 
   logger.info('MCP server connected via stdio — ready to accept tool calls');
-  logger.warn(
-    'Approval tokens and rate counters are stored in-memory only. ' +
-      'They will be lost on restart and are not shared across processes. ' +
-      'Single-process deployment required until a durable store is implemented.',
-  );
 }
 
 main().catch((err: unknown) => {

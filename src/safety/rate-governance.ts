@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
+import { getRateStore } from '../persistence/rate-store.js';
 
 interface RateConfig {
   [toolName: string]: {
@@ -23,11 +24,6 @@ function loadConfig(): RateConfig {
 
 const rateConfig = loadConfig();
 
-// Sliding-window counters keyed by "toolName::projectId::hourBucket".
-// LIMITATION: counters reset on process restart and are not shared across
-// multiple server processes. Single-process deployment only.
-const counters = new Map<string, number>();
-
 export class RateGovernanceError extends Error {
   constructor(toolName: string, projectId: string, limit: number) {
     super(
@@ -49,9 +45,9 @@ export function checkRateLimit(toolName: string, projectId: string): void {
   const limit = config?.per_project_per_hour;
   if (limit === undefined) return;
 
-  const key = `${toolName}::${projectId}::${hourBucket()}`;
-  const count = (counters.get(key) ?? 0) + 1;
-  counters.set(key, count);
+  const bucket = hourBucket();
+  const key = `${toolName}::${projectId}::${bucket}`;
+  const count = getRateStore().increment(key, bucket);
 
   if (count > limit) {
     logger.warn({ toolName, projectId, count, limit }, 'Local rate limit exceeded');
@@ -59,13 +55,8 @@ export function checkRateLimit(toolName: string, projectId: string): void {
   }
 }
 
-// GC: clear stale hour buckets every hour
+// GC stale hour buckets every hour (memory backend)
 setInterval(
-  () => {
-    const current = hourBucket();
-    for (const key of counters.keys()) {
-      if (!key.endsWith(current)) counters.delete(key);
-    }
-  },
+  () => getRateStore().pruneStale(hourBucket()),
   60 * 60 * 1000,
 ).unref();
