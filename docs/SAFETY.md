@@ -98,7 +98,11 @@ Per-tool per-project hourly rate counters are also in-memory only. Restart reset
 
 ### Audit log: fail-open default
 
-By default (`FORMA_AUDIT_FAIL_CLOSED=false`), if the audit JSONL file cannot be written (disk full, permission denied, etc.), the server **logs the error but continues** — the mutation is NOT aborted. This preserves availability at the cost of audit completeness. Set `FORMA_AUDIT_FAIL_CLOSED=true` to abort mutations when the audit write fails.
+By default (`FORMA_AUDIT_FAIL_CLOSED=false`), if the audit JSONL file cannot be written (disk full, permission denied, etc.), the server **logs the error but continues** — the mutation result is returned normally without an audit record.
+
+Set `FORMA_AUDIT_FAIL_CLOSED=true` to surface audit write failures as errors. **Important caveat:** the audit write happens *after* the APS call, so if the write fails post-execution the APS change has already been applied. The error response distinguishes the two cases:
+- Audit failed *before* execution → "NOT executed — safe to retry"
+- Audit failed *after* execution → "HAS been applied — do NOT retry"
 
 ### Audit hash chain: restart breaks the chain
 

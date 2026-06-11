@@ -282,6 +282,7 @@ Key variables:
 | `FORMA_ALLOWED_HUBS` | `*` | Comma-separated hub IDs |
 | `FORMA_ALLOWED_PROJECTS` | `*` | Comma-separated project UUIDs |
 | `FORMA_AUDIT_DIR` | `~/.acc-forma-mcp/audit` | JSONL audit log directory |
+| `FORMA_AUDIT_FAIL_CLOSED` | `false` | Surface audit write failures as errors. When `true` and the write fails after an APS mutation, the response indicates whether the change was applied. |
 
 ---
 

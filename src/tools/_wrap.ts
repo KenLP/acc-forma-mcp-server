@@ -130,6 +130,9 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
     const requirePreview = env.FORMA_MUTATION_MODE === 'preview_required';
     const effectiveDryRun = requirePreview ? dry_run : false;
 
+    // Track whether tool.execute() completed so AuditPersistenceError can report accurately
+    let apsExecutionCompleted = false;
+
     try {
       // 0. Auth mode gate
       const authCheck = checkAuthMode(tool.name, tool.requiredAuthModes, ctx.env.APS_AUTH_MODE);
@@ -206,6 +209,7 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
 
       // 8. Execute
       const result = await tool.execute(input, effectiveCtx(tool, ctx));
+      apsExecutionCompleted = true; // set BEFORE audit so error reporting is accurate
 
       appendAuditEntry({
         tool: tool.name,
@@ -219,7 +223,7 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
 
       return result;
     } catch (err) {
-      return handleError(err, tool.name, 'mutation', projectId, input);
+      return handleError(err, tool.name, 'mutation', projectId, input, apsExecutionCompleted);
     }
   };
 }
@@ -232,6 +236,7 @@ function handleError(
   kind: 'read' | 'mutation',
   projectId: string | undefined,
   input: unknown,
+  apsExecutionCompleted = false,
 ): McpToolResult {
   type Stage =
     | 'denied_readonly'
@@ -245,10 +250,13 @@ function handleError(
 
   // Audit failure already logged inside appendAuditEntry — skip re-audit to avoid looping
   if (err instanceof AuditPersistenceError) {
-    return {
-      isError: true,
-      content: [{ type: 'text', text: 'Audit log write failed and FORMA_AUDIT_FAIL_CLOSED=true. Mutation aborted.' }],
-    };
+    const text = apsExecutionCompleted
+      ? 'The APS mutation was executed successfully but the audit log write failed ' +
+        '(FORMA_AUDIT_FAIL_CLOSED=true). The change HAS been applied in APS — do NOT retry to avoid ' +
+        'duplicates. Investigate FORMA_AUDIT_DIR for disk/permission issues.'
+      : 'Audit log write failed before the APS call was made ' +
+        '(FORMA_AUDIT_FAIL_CLOSED=true). The mutation was NOT executed — it is safe to retry.';
+    return { isError: true, content: [{ type: 'text', text }] };
   }
 
   if (err instanceof AllowlistError) {
