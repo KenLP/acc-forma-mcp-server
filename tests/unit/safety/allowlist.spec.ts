@@ -25,6 +25,26 @@ describe('allowlist', () => {
     expect(() => checkHubAllowed('hub-allowed')).not.toThrow();
   });
 
+  it('matches hub with or without b. prefix', async () => {
+    vi.resetModules();
+    vi.doMock('../../../src/config/env.js', () => ({
+      env: { FORMA_ALLOWED_HUBS: 'abc-hub', FORMA_ALLOWED_PROJECTS: '*' },
+    }));
+    const { checkHubAllowed } = await import('../../../src/safety/allowlist.js');
+    expect(() => checkHubAllowed('abc-hub')).not.toThrow();
+    expect(() => checkHubAllowed('b.abc-hub')).not.toThrow(); // b. form also accepted
+  });
+
+  it('matches hub configured with b. prefix when caller passes bare', async () => {
+    vi.resetModules();
+    vi.doMock('../../../src/config/env.js', () => ({
+      env: { FORMA_ALLOWED_HUBS: 'b.abc-hub', FORMA_ALLOWED_PROJECTS: '*' },
+    }));
+    const { checkHubAllowed } = await import('../../../src/safety/allowlist.js');
+    expect(() => checkHubAllowed('abc-hub')).not.toThrow(); // bare form also accepted
+    expect(() => checkHubAllowed('b.abc-hub')).not.toThrow();
+  });
+
   it('matches project with or without b. prefix', async () => {
     vi.resetModules();
     vi.doMock('../../../src/config/env.js', () => ({

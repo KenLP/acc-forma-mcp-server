@@ -27,7 +27,10 @@ const allowedProjects = parseList(env.FORMA_ALLOWED_PROJECTS);
 
 export function checkHubAllowed(hubId: string): void {
   if (allowedHubs.has('*')) return;
-  if (!allowedHubs.has(hubId)) throw new AllowlistError('hub', hubId);
+  const { withPrefix, bare } = normalizeProjectId(hubId);
+  if (!allowedHubs.has(withPrefix) && !allowedHubs.has(bare)) {
+    throw new AllowlistError('hub', hubId);
+  }
 }
 
 export function checkProjectAllowed(projectId: string): void {

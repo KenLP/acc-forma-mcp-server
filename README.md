@@ -1,6 +1,6 @@
 # acc-forma-mcp-server
 
-> Production-ready, safety-first MCP server for **Autodesk Forma** (formerly Autodesk Construction Cloud).
+> Safety-first MCP server for **Autodesk Forma** (formerly Autodesk Construction Cloud).
 > Every write is dry-runnable, audit-logged, and scope-guarded.
 
 **Read everything · Preview every write · Audit every action.**

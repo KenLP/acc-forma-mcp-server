@@ -1,6 +1,7 @@
 import { DataManagementClient } from '@aps_sdk/data-management';
 import type { AuthProvider } from '../auth/index.js';
 import { ApsApiError } from '../http/errors.js';
+import { addBPrefix } from '../utils/project-id.js';
 
 /** Minimal adapter to make our AuthProvider compatible with APS SDK */
 function toSdkAuth(auth: AuthProvider): { getAccessToken(): Promise<string> } {
@@ -83,7 +84,7 @@ export async function listProjects(
   hubId: string,
 ): Promise<ApsProject[]> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await callSdk(() => client.getHubProjects(hubId), 'GET', `/project/v1/hubs/${hubId}/projects`);
+  const resp = await callSdk(() => client.getHubProjects(addBPrefix(hubId)), 'GET', `/project/v1/hubs/${hubId}/projects`);
   return (resp.data ?? []).map((p) => {
     const status = p.attributes?.extension?.data?.projectType as string | undefined;
     return {
@@ -101,7 +102,7 @@ export async function listTopFolders(
   projectId: string,
 ): Promise<ApsFolder[]> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await callSdk(() => client.getProjectTopFolders(hubId, projectId), 'GET', `/project/v1/hubs/${hubId}/projects/${projectId}/topFolders`);
+  const resp = await callSdk(() => client.getProjectTopFolders(addBPrefix(hubId), addBPrefix(projectId)), 'GET', `/project/v1/hubs/${hubId}/projects/${projectId}/topFolders`);
   return (resp.data ?? []).map((f) => ({
     id: f.id ?? '',
     name: f.attributes?.displayName ?? f.attributes?.name ?? '',
@@ -116,7 +117,7 @@ export async function getItem(
   itemId: string,
 ): Promise<ApsItem> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await callSdk(() => client.getItem(projectId, itemId), 'GET', `/data/v1/projects/${projectId}/items/${itemId}`);
+  const resp = await callSdk(() => client.getItem(addBPrefix(projectId), itemId), 'GET', `/data/v1/projects/${projectId}/items/${itemId}`);
   const item = resp.data;
   return {
     id: item?.id ?? '',
@@ -135,7 +136,7 @@ export async function listItemVersions(
   itemId: string,
 ): Promise<ApsVersion[]> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await callSdk(() => client.getItemVersions(projectId, itemId), 'GET', `/data/v1/projects/${projectId}/items/${itemId}/versions`);
+  const resp = await callSdk(() => client.getItemVersions(addBPrefix(projectId), itemId), 'GET', `/data/v1/projects/${projectId}/items/${itemId}/versions`);
   return (resp.data ?? []).map((v) => ({
     id: v.id ?? '',
     name: v.attributes?.name ?? '',
@@ -161,7 +162,7 @@ export async function getProjectContainerIds(
   projectId: string,
 ): Promise<Record<string, string>> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await callSdk(() => client.getProject(hubId, projectId), 'GET', `/project/v1/hubs/${hubId}/projects/${projectId}`);
+  const resp = await callSdk(() => client.getProject(addBPrefix(hubId), addBPrefix(projectId)), 'GET', `/project/v1/hubs/${hubId}/projects/${projectId}`);
   const relationships = (resp.data?.relationships ?? {}) as Record<
     string,
     { data?: { id?: string } }
@@ -179,7 +180,7 @@ export async function listFolderContents(
   folderId: string,
 ): Promise<ApsFolder[]> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await callSdk(() => client.getFolderContents(projectId, folderId), 'GET', `/data/v1/projects/${projectId}/folders/${folderId}/contents`);
+  const resp = await callSdk(() => client.getFolderContents(addBPrefix(projectId), folderId), 'GET', `/data/v1/projects/${projectId}/folders/${folderId}/contents`);
   return (resp.data ?? []).map((item) => ({
     id: item.id ?? '',
     name: item.attributes?.displayName ?? '',
