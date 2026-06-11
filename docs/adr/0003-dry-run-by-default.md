@@ -13,7 +13,7 @@ Mutation tools default to `dry_run=true`. The server:
 1. Call 1 (`dry_run=true`): validates allow-list, readonly mode, rate limit, business rules, builds the full APS request payload — but does NOT call APS. Returns a human-readable preview + `approval_token` (ULID, TTL 300s, single-use, cryptographically bound to the payload hash via SHA-256).
 2. Call 2 (`dry_run=false, approval_token=<token>`): verifies the token, checks the payload hash matches, then calls APS and audits the result.
 
-**No separate `meta.confirm_action` tool** — confirmation is embedded in the second tool call itself. The MCP client's built-in approval UI gates each call, so the user always sees the full payload before approving.
+**No separate `meta_confirm_action` tool** — confirmation is embedded in the second tool call itself. The MCP client's built-in approval UI gates each call, so the user always sees the full payload before approving.
 
 Power users can set `FORMA_MUTATION_MODE=client_approval_only` to collapse to a single call and trust the client UI.
 
