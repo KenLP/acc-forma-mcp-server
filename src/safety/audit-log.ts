@@ -100,9 +100,8 @@ export function appendAuditEntry(params: {
     const { prev_hash: _ph, ...restForHash } = partial; void _ph;
     const thisHash = computeHash(lastHash, restForHash);
     const entry: AuditEntry = { ...partial, this_hash: thisHash };
-    lastHash = thisHash;
-
     appendFileSync(todayLogFile(), JSON.stringify(entry) + '\n', 'utf-8');
+    lastHash = thisHash;
   } catch (err) {
     // Audit failure MUST NOT crash the server
     logger.error({ err }, 'Failed to write audit log entry');

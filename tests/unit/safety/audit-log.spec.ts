@@ -99,6 +99,22 @@ describe('audit-log', () => {
     expect(verifyChain(entries)).toMatchObject({ valid: false, first_invalid_index: 0 });
   });
 
+  it('does not advance lastHash when appendFileSync throws (R2-3)', () => {
+    // entry1 succeeds
+    appendAuditEntry({ tool: 'a', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} });
+    const entry1 = JSON.parse(String(mockAppendFileSync.mock.calls[0]![1]).trim()) as Record<string, unknown>;
+
+    // entry2 fails to write — lastHash must NOT advance
+    mockAppendFileSync.mockImplementationOnce(() => { throw new Error('disk full'); });
+    appendAuditEntry({ tool: 'b', kind: 'mutation', stage: 'preview', inputRedacted: {}, outputSummary: {} });
+
+    // entry3 must chain from entry1 (prev_hash === entry1.this_hash), not from the failed entry2
+    appendAuditEntry({ tool: 'c', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} });
+    const entry3 = JSON.parse(String(mockAppendFileSync.mock.calls[2]![1]).trim()) as Record<string, unknown>;
+
+    expect(entry3['prev_hash']).toBe(entry1['this_hash']);
+  });
+
   it('redacts secrets from input', () => {
     appendAuditEntry({
       tool: 'test',

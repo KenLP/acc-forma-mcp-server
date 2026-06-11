@@ -14,22 +14,29 @@ const inputSchema = z.object({
     .describe('Date of the audit file to verify (YYYY-MM-DD). Defaults to today.'),
 });
 
-async function readAuditEntries(filePath: string): Promise<AuditEntry[]> {
-  if (!existsSync(filePath)) return [];
+type ReadAuditResult =
+  | { ok: true; entries: AuditEntry[] }
+  | { ok: false; firstMalformedLineIndex: number };
+
+async function readAuditEntries(filePath: string): Promise<ReadAuditResult> {
+  if (!existsSync(filePath)) return { ok: true, entries: [] };
 
   const entries: AuditEntry[] = [];
   const rl = createInterface({ input: createReadStream(filePath, 'utf-8') });
+  let lineIndex = 0;
 
   for await (const line of rl) {
-    if (!line.trim()) continue;
+    if (!line.trim()) { lineIndex++; continue; }
     try {
       entries.push(JSON.parse(line) as AuditEntry);
     } catch {
-      // skip malformed lines
+      rl.close();
+      return { ok: false, firstMalformedLineIndex: lineIndex };
     }
+    lineIndex++;
   }
 
-  return entries;
+  return { ok: true, entries };
 }
 
 export const metaVerifyAuditChainTool: ReadToolDef<typeof inputSchema> = {
@@ -61,7 +68,29 @@ export const metaVerifyAuditChainTool: ReadToolDef<typeof inputSchema> = {
       };
     }
 
-    const entries = await readAuditEntries(filePath);
+    const readResult = await readAuditEntries(filePath);
+
+    if (!readResult.ok) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text:
+              `⚠ Audit chain INVALID for ${targetDate}!\n` +
+              `  Line ${readResult.firstMalformedLineIndex} contains malformed JSON — ` +
+              `possible file corruption or tampering.`,
+          },
+        ],
+        structuredContent: {
+          valid: false,
+          date: targetDate,
+          reason: 'malformed_json',
+          firstInvalidIndex: readResult.firstMalformedLineIndex,
+        },
+      };
+    }
+
+    const { entries } = readResult;
 
     if (entries.length === 0) {
       return {
