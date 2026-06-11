@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
@@ -116,5 +116,43 @@ export function appendAuditEntry(params: {
     if (env.FORMA_AUDIT_FAIL_CLOSED) {
       throw new AuditPersistenceError(err);
     }
+  }
+}
+
+/**
+ * Delete audit JSONL files older than FORMA_AUDIT_RETENTION_DAYS days.
+ * Called once at startup; non-fatal on any error.
+ */
+export function pruneOldAuditFiles(): void {
+  if (!existsSync(env.FORMA_AUDIT_DIR)) return;
+
+  const cutoff = new Date();
+  cutoff.setUTCDate(cutoff.getUTCDate() - env.FORMA_AUDIT_RETENTION_DAYS);
+  const cutoffMs = cutoff.getTime();
+
+  let pruned = 0;
+  try {
+    const files = readdirSync(env.FORMA_AUDIT_DIR).filter((f) =>
+      /^audit-\d{4}-\d{2}-\d{2}\.jsonl$/.test(f),
+    );
+
+    for (const file of files) {
+      const dateStr = file.slice('audit-'.length, -'.jsonl'.length);
+      const fileMs = new Date(`${dateStr}T00:00:00Z`).getTime();
+      if (isNaN(fileMs) || fileMs >= cutoffMs) continue;
+      try {
+        unlinkSync(join(env.FORMA_AUDIT_DIR, file));
+        pruned++;
+        logger.info({ file }, 'audit-log: pruned expired audit file');
+      } catch (err) {
+        logger.warn({ err, file }, 'audit-log: failed to delete expired audit file');
+      }
+    }
+  } catch (err) {
+    logger.warn({ err, auditDir: env.FORMA_AUDIT_DIR }, 'audit-log: failed to read audit dir for pruning');
+  }
+
+  if (pruned > 0) {
+    logger.info({ pruned, retentionDays: env.FORMA_AUDIT_RETENTION_DAYS }, 'audit-log: retention prune complete');
   }
 }

@@ -5,6 +5,7 @@ import { TwoLeggedAuthProvider } from './auth/two-legged.js';
 import type { AuthProvider } from './auth/index.js';
 import { buildServer } from './server.js';
 import { logger } from './logger.js';
+import { pruneOldAuditFiles } from './safety/audit-log.js';
 
 async function main(): Promise<void> {
   logger.info(
@@ -43,6 +44,8 @@ async function main(): Promise<void> {
     default:
       throw new Error(`Unsupported APS_AUTH_MODE: ${String(env.APS_AUTH_MODE)}`);
   }
+
+  pruneOldAuditFiles();
 
   const ctx: import('./tools/_types.js').ToolContext = {
     auth,
