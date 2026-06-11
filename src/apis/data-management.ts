@@ -11,6 +11,10 @@ function toSdkAuth(auth: AuthProvider): { getAccessToken(): Promise<string> } {
  * Wrap APS SDK calls so their errors are normalized to ApsApiError.
  * The SDK throws its own error types that would otherwise be classified as
  * unexpected errors in _wrap.ts instead of the correct 'failed_api' stage.
+ *
+ * Known limitation: unlike apsRequest() in http/client.ts, these SDK calls
+ * do not get automatic retry/backoff for 429 or 5xx responses. Transient
+ * failures will surface immediately as ApsApiError to the caller.
  */
 async function callSdk<T>(fn: () => Promise<T>, method: string, path: string): Promise<T> {
   try {

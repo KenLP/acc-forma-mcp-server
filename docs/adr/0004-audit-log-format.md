@@ -23,5 +23,5 @@ Audit logs for construction data access must be:
 
 - No database required in default mode
 - JSONL is `grep`-able, `jq`-able, compatible with Filebeat/Fluentd/Loki
-- Hash chain can be verified offline by an auditor with a simple script (`scripts/verify-audit.ts`)
-- SQLite adds one dep (`better-sqlite3`) only if the user opts in
+- Hash chain can be verified via the `meta_verify_audit_chain` MCP tool or offline with standard tools (`jq`, `sha256sum`)
+- SQLite index is defined in the env schema but **not yet implemented** — setting `FORMA_AUDIT_INDEX=sqlite` causes a startup error with a clear message

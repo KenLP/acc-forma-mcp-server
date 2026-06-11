@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { homedir } from 'node:os';
 import { config as dotenvConfig } from 'dotenv';
 
 dotenvConfig();
@@ -35,11 +36,11 @@ const envSchema = z.object({
   // Audit log
   FORMA_AUDIT_DIR: z
     .string()
-    .default(`${process.env['HOME'] ?? '/tmp'}/.acc-forma-mcp/audit`)
-    // Expand leading `~` to $HOME — Node.js does not do this automatically
+    .default(`${homedir()}/.acc-forma-mcp/audit`)
+    // Expand leading `~` to homedir() — Node.js does not do this automatically
     .transform((p) =>
       p.startsWith('~/') || p === '~'
-        ? p.replace(/^~/, process.env['HOME'] ?? '/tmp')
+        ? p.replace(/^~/, homedir())
         : p,
     ),
   FORMA_AUDIT_INDEX: z.enum(['none', 'sqlite']).default('none'),
@@ -96,6 +97,13 @@ function loadEnv(): Env {
   if (env.APS_AUTH_MODE === '3lo') {
     throw new Error(
       '3-legged OAuth (APS_AUTH_MODE=3lo) is planned for Phase 3 and not yet implemented. Use APS_AUTH_MODE=ssa.',
+    );
+  }
+
+  if (env.FORMA_AUDIT_INDEX === 'sqlite') {
+    throw new Error(
+      'FORMA_AUDIT_INDEX=sqlite is not yet implemented. Set FORMA_AUDIT_INDEX=none (the default). ' +
+        'See docs/adr/0004-audit-log-format.md.',
     );
   }
 

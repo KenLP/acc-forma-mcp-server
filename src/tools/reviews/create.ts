@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { MutationToolDef } from '../_types.js';
 import { createReview, resolveReviewsContainerId } from '../../apis/reviews.js';
+import { registerValidator, BusinessRuleError } from '../../safety/business-rules.js';
 
 const inputSchema = z.object({
   hub_id: z.string().min(1).describe('Hub ID from dm_list_hubs.'),
@@ -54,6 +55,22 @@ const inputSchema = z.object({
     ),
 });
 
+// eslint-disable-next-line @typescript-eslint/require-await
+registerValidator<z.infer<typeof inputSchema>>('reviews_create', async (input) => {
+  const passed: string[] = [];
+  if (input.due_date) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (input.due_date < today) {
+      throw new BusinessRuleError(
+        'due_date_must_be_future',
+        `due_date "${input.due_date}" is in the past (today is ${today}). Provide a current or future date.`,
+      );
+    }
+    passed.push('due_date_is_current_or_future');
+  }
+  return { passed };
+});
+
 export const createReviewTool: MutationToolDef<typeof inputSchema> = {
   name: 'reviews_create',
   title: 'Create Review',
@@ -99,7 +116,9 @@ export const createReviewTool: MutationToolDef<typeof inputSchema> = {
       url,
       body,
       sideEffects,
-      businessRulesPassed: [],
+      businessRulesPassed: [
+        ...(input.due_date ? ['due_date_is_current_or_future'] : []),
+      ],
       executePayload: { toolName: 'reviews_create', containerId, body },
     };
   },
