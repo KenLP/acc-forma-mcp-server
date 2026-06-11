@@ -1,4 +1,4 @@
-# ADR 0004: Audit Log Format — JSONL Primary, SQLite Optional Index
+# ADR 0004: Audit Log Format — JSONL Primary, SQLite Optional Index (not implemented)
 
 **Status:** Accepted  
 **Date:** 2026-04-16
@@ -17,7 +17,7 @@ Audit logs for construction data access must be:
 
 **Tamper-evidence: SHA-256 hash chain** — each entry contains `prev_hash` (hash of the previous entry) and `this_hash = sha256(prev_hash + canonical_json(entry_fields))`. Modifying any prior entry invalidates all subsequent hashes.
 
-**Secondary (opt-in): SQLite** — when `FORMA_AUDIT_INDEX=sqlite`, a SQLite DB is built from the JSONL files. Used for fast filter/aggregate queries. If the `.db` is corrupt or deleted, it is rebuilt from JSONL. Source of truth is always JSONL.
+**Future: SQLite secondary index (not implemented)** — when `FORMA_AUDIT_INDEX=sqlite` (not yet implemented; causes a startup error if set), a SQLite DB would be built from the JSONL files for fast filter/aggregate queries. If the `.db` is corrupt or deleted, it can be rebuilt from JSONL. Source of truth is always JSONL.
 
 ## Consequences
 

@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { verifyChain } from '../../../src/safety/hash-chain.js';
 import type { ChainEntry } from '../../../src/safety/hash-chain.js';
 
+// Silence pino output so test runs don't emit scary JSON error lines to stderr
+vi.mock('../../../src/logger.js', () => ({
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trace: vi.fn() },
+}));
+
 const BASE_ENV = {
   APS_AUTH_MODE: 'ssa',
   SSA_ID: 'test-ssa',
@@ -29,6 +34,7 @@ vi.mock('node:fs', () => ({
 
 describe('audit-log', () => {
   let appendAuditEntry: typeof import('../../../src/safety/audit-log.js').appendAuditEntry;
+  let mockLoggerError: ReturnType<typeof vi.fn>;
   const mockAppendFileSync = vi.fn();
 
   beforeEach(async () => {
@@ -36,9 +42,12 @@ describe('audit-log', () => {
     const fs = await import('node:fs');
     vi.mocked(fs.appendFileSync).mockImplementation(mockAppendFileSync);
     vi.mocked(fs.existsSync).mockReturnValue(true);
+    const logMod = await import('../../../src/logger.js');
+    mockLoggerError = vi.mocked(logMod.logger.error);
     const mod = await import('../../../src/safety/audit-log.js');
     appendAuditEntry = mod.appendAuditEntry;
     mockAppendFileSync.mockClear();
+    mockLoggerError.mockClear();
   });
 
   it('writes a JSONL entry with required fields', () => {
@@ -114,6 +123,7 @@ describe('audit-log', () => {
     const entry3 = JSON.parse(String(mockAppendFileSync.mock.calls[2]![1]).trim()) as Record<string, unknown>;
 
     expect(entry3['prev_hash']).toBe(entry1['this_hash']);
+    expect(mockLoggerError).toHaveBeenCalledOnce();
   });
 
   it('throws AuditPersistenceError when FORMA_AUDIT_FAIL_CLOSED=true and write fails (E2)', async () => {
