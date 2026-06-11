@@ -7,6 +7,7 @@ import { runBusinessRules, BusinessRuleError } from '../safety/business-rules.js
 import { buildDryRunPreview } from '../safety/dry-run.js';
 import { verifyAndConsumeToken, ApprovalError } from '../safety/approval.js';
 import { appendAuditEntry, AuditPersistenceError } from '../safety/audit-log.js';
+import { checkIdempotency, storeIdempotencyResult } from '../safety/idempotency.js';
 import { ApsApiError } from '../http/errors.js';
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
@@ -27,6 +28,15 @@ export const MutationBaseFields = {
     .describe(
       'Approval token from a prior dry_run=true call. Required when dry_run=false and ' +
         'FORMA_MUTATION_MODE=preview_required (the default). Expires after FORMA_APPROVAL_TOKEN_TTL seconds.',
+    ),
+  idempotency_key: z
+    .string()
+    .optional()
+    .describe(
+      'Optional client-supplied key for idempotent execution. If a prior dry_run=false call with this ' +
+        'key succeeded, the cached result is returned without re-executing. ' +
+        'Use a unique value per intended operation (e.g. a UUID). ' +
+        'Records expire after FORMA_APPROVAL_TOKEN_TTL seconds.',
     ),
 };
 
@@ -110,6 +120,7 @@ export function wrapReadTool<T extends z.ZodTypeAny>(
 type MutationInput<T extends z.ZodTypeAny> = z.infer<T> & {
   dry_run: boolean;
   approval_token?: string;
+  idempotency_key?: string;
 };
 
 export function wrapMutationTool<T extends z.ZodTypeAny>(
@@ -121,8 +132,12 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const approval_token: string | undefined =
       typeof rawInput.approval_token === 'string' ? rawInput.approval_token : undefined;
-    const { dry_run: _d, approval_token: _a, ...rest } = rawInput as Record<string, unknown>;
-    void _d; void _a;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const idempotency_key: string | undefined =
+      typeof rawInput.idempotency_key === 'string' ? rawInput.idempotency_key : undefined;
+    const { dry_run: _d, approval_token: _a, idempotency_key: _ik, ...rest } =
+      rawInput as Record<string, unknown>;
+    void _d; void _a; void _ik;
     const input = rest as z.infer<T>;
     const projectId = tool.getProjectId?.(input);
 
@@ -188,6 +203,15 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
         };
       }
 
+      // 6b. Idempotency check (only on execute path — dry-run is never cached)
+      if (idempotency_key) {
+        const cached = checkIdempotency(idempotency_key);
+        if (cached) {
+          logger.info({ toolName: tool.name, idempotency_key }, 'idempotency: returning cached result');
+          return cached;
+        }
+      }
+
       // 7. Approval token check (only in preview_required mode)
       if (requirePreview) {
         if (!approval_token) {
@@ -220,6 +244,8 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
         outputSummary: result.structuredContent ?? { success: true },
         ...(approval_token !== undefined ? { approvalToken: approval_token } : {}),
       });
+
+      if (idempotency_key) storeIdempotencyResult(idempotency_key, result);
 
       return result;
     } catch (err) {
