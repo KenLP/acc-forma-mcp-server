@@ -83,3 +83,35 @@ Default limits (built-in):
 - `issues_create`: 50/project/hour
 - `reviews_create`: 20/project/hour
 - `reviews_transition`: 50/project/hour
+
+## Known Limitations / Production Notes
+
+These are current constraints to understand before deploying in a production environment.
+
+### In-memory approval tokens
+
+Approval tokens (`appr_01…`) are stored in process memory only. On server restart, all pending tokens are lost — callers whose dry-run completed but whose execute call arrives after a restart must repeat the dry-run. Multi-process or multi-host deployments are **not** supported; each process has an independent token store. A durable token store (Redis, database) is planned for a future release.
+
+### In-memory rate counters
+
+Per-tool per-project hourly rate counters are also in-memory only. Restart resets all counters. Multi-process deployments will not share rate state, allowing total request volume up to `N × limit` across N processes.
+
+### Audit log: fail-open default
+
+By default (`FORMA_AUDIT_FAIL_CLOSED=false`), if the audit JSONL file cannot be written (disk full, permission denied, etc.), the server **logs the error but continues** — the mutation is NOT aborted. This preserves availability at the cost of audit completeness. Set `FORMA_AUDIT_FAIL_CLOSED=true` to abort mutations when the audit write fails.
+
+### Audit hash chain: restart breaks the chain
+
+The `lastHash` pointer used for SHA-256 chain continuity is in-memory. On restart, `loadLastHashFromFile()` reads the last entry from today's audit file to restore the hash, but any failure in that read (missing file, malformed JSON, permission error) resets the chain to `sha256:genesis` and logs a WARN. A chain verification that spans a restart may show a break at that point.
+
+### DM SDK: no automatic retry
+
+The Data Management adapter (`src/apis/data-management.ts`) uses the APS SDK directly, which does not retry on 429 or 5xx responses. Transient errors surface immediately as `ApsApiError`. Other APIs that use `apsRequest()` from `src/http/client.ts` get automatic exponential-backoff retry.
+
+### No circuit breaker
+
+There is no circuit breaker for APS endpoints. Consecutive 5xx responses will continue to be retried with backoff (for endpoints using `apsRequest`) or surfaced immediately (DM SDK). A circuit breaker is not yet implemented.
+
+### Single-process deployment only
+
+Due to the in-memory constraints above (tokens, rate counters), this server must run as a single process. Horizontal scaling requires externalizing those stores first.

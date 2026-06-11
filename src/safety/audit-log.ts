@@ -6,6 +6,14 @@ import { redact } from '../utils/redact.js';
 import { generateEventId } from '../utils/id-generator.js';
 import { computeHash } from './hash-chain.js';
 
+export class AuditPersistenceError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = 'AuditPersistenceError';
+    if (cause instanceof Error) this.cause = cause;
+  }
+}
+
 export type AuditStage =
   | 'preview'
   | 'executed'
@@ -41,7 +49,8 @@ function loadLastHashFromFile(): string {
     if (lines.length === 0) return 'sha256:genesis';
     const last = JSON.parse(lines[lines.length - 1]!) as { this_hash?: string };
     return typeof last.this_hash === 'string' ? last.this_hash : 'sha256:genesis';
-  } catch {
+  } catch (err) {
+    logger.warn({ err, auditDir: env.FORMA_AUDIT_DIR }, 'audit-log: failed to restore lastHash from file — chain will restart from genesis');
     return 'sha256:genesis';
   }
 }
@@ -103,7 +112,9 @@ export function appendAuditEntry(params: {
     appendFileSync(todayLogFile(), JSON.stringify(entry) + '\n', 'utf-8');
     lastHash = thisHash;
   } catch (err) {
-    // Audit failure MUST NOT crash the server
     logger.error({ err }, 'Failed to write audit log entry');
+    if (env.FORMA_AUDIT_FAIL_CLOSED) {
+      throw new AuditPersistenceError(err);
+    }
   }
 }

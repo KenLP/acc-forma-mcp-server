@@ -34,6 +34,10 @@ const envSchema = z.object({
     .default('false'),
 
   // Audit log
+  FORMA_AUDIT_FAIL_CLOSED: z
+    .string()
+    .transform((v) => v === 'true')
+    .default('false'),
   FORMA_AUDIT_DIR: z
     .string()
     .default(`${homedir()}/.acc-forma-mcp/audit`)

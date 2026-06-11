@@ -2,22 +2,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { verifyChain } from '../../../src/safety/hash-chain.js';
 import type { ChainEntry } from '../../../src/safety/hash-chain.js';
 
-vi.mock('../../../src/config/env.js', () => ({
-  env: {
-    APS_AUTH_MODE: 'ssa',
-    SSA_ID: 'test-ssa',
-    APS_REGION: 'US',
-    FORMA_AUDIT_DIR: '/tmp/test-audit',
-    FORMA_AUDIT_INCLUDE_READS: true,
-    FORMA_AUDIT_INDEX: 'none',
-    FORMA_AUDIT_RETENTION_DAYS: 90,
-    FORMA_ALLOWED_HUBS: '*',
-    FORMA_ALLOWED_PROJECTS: '*',
-    FORMA_MUTATION_MODE: 'preview_required',
-    FORMA_READONLY: false,
-    FORMA_APPROVAL_TOKEN_TTL: 300,
-  },
-}));
+const BASE_ENV = {
+  APS_AUTH_MODE: 'ssa',
+  SSA_ID: 'test-ssa',
+  APS_REGION: 'US',
+  FORMA_AUDIT_DIR: '/tmp/test-audit',
+  FORMA_AUDIT_INCLUDE_READS: true,
+  FORMA_AUDIT_FAIL_CLOSED: false,
+  FORMA_AUDIT_INDEX: 'none',
+  FORMA_AUDIT_RETENTION_DAYS: 90,
+  FORMA_ALLOWED_HUBS: '*',
+  FORMA_ALLOWED_PROJECTS: '*',
+  FORMA_MUTATION_MODE: 'preview_required',
+  FORMA_READONLY: false,
+  FORMA_APPROVAL_TOKEN_TTL: 300,
+};
+
+vi.mock('../../../src/config/env.js', () => ({ env: BASE_ENV }));
 
 vi.mock('node:fs', () => ({
   appendFileSync: vi.fn(),
@@ -113,6 +114,24 @@ describe('audit-log', () => {
     const entry3 = JSON.parse(String(mockAppendFileSync.mock.calls[2]![1]).trim()) as Record<string, unknown>;
 
     expect(entry3['prev_hash']).toBe(entry1['this_hash']);
+  });
+
+  it('throws AuditPersistenceError when FORMA_AUDIT_FAIL_CLOSED=true and write fails (E2)', async () => {
+    vi.resetModules();
+    vi.doMock('../../../src/config/env.js', () => ({
+      env: { ...BASE_ENV, FORMA_AUDIT_FAIL_CLOSED: true },
+    }));
+    const fs = await import('node:fs');
+    vi.mocked(fs.appendFileSync).mockImplementation(() => { throw new Error('disk full'); });
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+
+    const { appendAuditEntry: failClosedAppend, AuditPersistenceError: APE } = await import(
+      '../../../src/safety/audit-log.js'
+    );
+
+    expect(() =>
+      failClosedAppend({ tool: 'test', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} }),
+    ).toThrow(APE);
   });
 
   it('redacts secrets from input', () => {

@@ -6,7 +6,7 @@ import { checkRateLimit, RateGovernanceError } from '../safety/rate-governance.j
 import { runBusinessRules, BusinessRuleError } from '../safety/business-rules.js';
 import { buildDryRunPreview } from '../safety/dry-run.js';
 import { verifyAndConsumeToken, ApprovalError } from '../safety/approval.js';
-import { appendAuditEntry } from '../safety/audit-log.js';
+import { appendAuditEntry, AuditPersistenceError } from '../safety/audit-log.js';
 import { ApsApiError } from '../http/errors.js';
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
@@ -242,6 +242,14 @@ function handleError(
 
   let stage: Stage = 'failed_api';
   let message: string;
+
+  // Audit failure already logged inside appendAuditEntry — skip re-audit to avoid looping
+  if (err instanceof AuditPersistenceError) {
+    return {
+      isError: true,
+      content: [{ type: 'text', text: 'Audit log write failed and FORMA_AUDIT_FAIL_CLOSED=true. Mutation aborted.' }],
+    };
+  }
 
   if (err instanceof AllowlistError) {
     stage = 'denied_allowlist';
