@@ -34,23 +34,35 @@
     "lint": "eslint src tests",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "sea:build": "tsup --config tsup.sea.config.ts && pkg dist-cjs/index.cjs --targets node20-win-x64 --output forma-mcp.exe",
+    "sea:build:linux": "tsup --config tsup.sea.config.ts && pkg dist-cjs/index.cjs --targets node20-linux-x64 --output forma-mcp-linux",
+    "sea:copy": "npm run sea:build && node scripts/sea-copy.mjs",
+    "sea:publish": "node scripts/sea-publish.mjs"
   },
   "dependencies": {
     "@aps_sdk/data-management": "^1.1.2",
     "@modelcontextprotocol/sdk": "^1.20.0",
+    "better-sqlite3": "^12.10.0",
     "dotenv": "^16.5.0",
     "jsonwebtoken": "^9.0.2",
     "pino": "^9.6.0",
     "ulid": "^2.3.0",
     "zod": "^3.24.2"
   },
+  "pkg": {
+    "assets": [
+      "node_modules/better-sqlite3/build/Release/*.node"
+    ]
+  },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/jsonwebtoken": "^9.0.8",
     "@types/node": "^20.17.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
+    "@yao-pkg/pkg": "^5.16.1",
     "eslint": "^9.0.0",
     "globals": "^17.6.0",
     "pino-pretty": "^13.0.0",
@@ -58,6 +70,6 @@
     "tsup": "^8.4.0",
     "tsx": "^4.0.0",
     "typescript": "^5.8.0",
-    "vitest": "^3.0.0"
+    "vitest": "^4.1.8"
   }
 }

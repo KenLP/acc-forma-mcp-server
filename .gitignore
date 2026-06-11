@@ -10,6 +10,12 @@ coverage/
 audit-*.jsonl
 *.db
 
+# SEA (standalone executable) build outputs — distributed via GitHub Release,
+# never committed (see scripts/sea-publish.mjs + npm run sea:publish)
+dist-cjs/
+forma-mcp.exe
+forma-mcp-linux
+
 # Claude Code per-user permissions (do not commit)
 .claude/settings.local.json
 
