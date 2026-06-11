@@ -2,6 +2,12 @@ import { DataManagementClient } from '@aps_sdk/data-management';
 import type { AuthProvider } from '../auth/index.js';
 import { ApsApiError } from '../http/errors.js';
 import { addBPrefix } from '../utils/project-id.js';
+import { logger } from '../logger.js';
+
+const MAX_SDK_RETRIES = 3;
+const INITIAL_BACKOFF_MS = 1_000;
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** Minimal adapter to make our AuthProvider compatible with APS SDK */
 function toSdkAuth(auth: AuthProvider): { getAccessToken(): Promise<string> } {
@@ -9,24 +15,55 @@ function toSdkAuth(auth: AuthProvider): { getAccessToken(): Promise<string> } {
 }
 
 /**
- * Wrap APS SDK calls so their errors are normalized to ApsApiError.
- * The SDK throws its own error types that would otherwise be classified as
- * unexpected errors in _wrap.ts instead of the correct 'failed_api' stage.
- *
- * Known limitation: unlike apsRequest() in http/client.ts, these SDK calls
- * do not get automatic retry/backoff for 429 or 5xx responses. Transient
- * failures will surface immediately as ApsApiError to the caller.
+ * Wrap APS SDK calls with error normalization and exponential-backoff retry.
+ * Retries on 401 (token refresh), 429 (rate limit), and 5xx (transient server error).
+ * Matches the behaviour of apsRequest() in http/client.ts.
  */
-async function callSdk<T>(fn: () => Promise<T>, method: string, path: string): Promise<T> {
-  try {
-    return await fn();
-  } catch (err) {
-    if (err instanceof ApsApiError) throw err;
-    const e = err as Record<string, unknown>;
-    const status = (e['status'] ?? e['statusCode'] ?? 500) as number;
-    const message = err instanceof Error ? err.message : String(err);
-    throw new ApsApiError(status, method, path, message);
+async function callSdk<T>(
+  fn: () => Promise<T>,
+  method: string,
+  path: string,
+  auth?: AuthProvider,
+): Promise<T> {
+  let backoffMs = INITIAL_BACKOFF_MS;
+
+  for (let attempt = 0; attempt <= MAX_SDK_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (err instanceof ApsApiError) throw err; // already wrapped — propagate immediately
+
+      const e = err as Record<string, unknown>;
+      const status = (e['status'] ?? e['statusCode'] ?? 500) as number;
+      const message = err instanceof Error ? err.message : String(err);
+
+      if (status === 401 && attempt < MAX_SDK_RETRIES) {
+        logger.warn({ path, attempt }, 'DM SDK 401; invalidating token and retrying');
+        auth?.invalidateToken?.();
+        continue;
+      }
+
+      if (status === 429 && attempt < MAX_SDK_RETRIES) {
+        const waitMs = backoffMs * (0.5 + Math.random() * 0.5);
+        logger.warn({ path, attempt, waitMs }, 'DM SDK rate limited; backing off');
+        await sleep(waitMs);
+        backoffMs = Math.min(backoffMs * 2, 60_000);
+        continue;
+      }
+
+      if (status >= 500 && attempt < MAX_SDK_RETRIES) {
+        const waitMs = backoffMs * (0.5 + Math.random() * 0.5);
+        logger.warn({ path, status, attempt, waitMs }, 'DM SDK 5xx; retrying');
+        await sleep(waitMs);
+        backoffMs = Math.min(backoffMs * 2, 30_000);
+        continue;
+      }
+
+      throw new ApsApiError(status, method, path, message);
+    }
   }
+
+  throw new Error(`DM SDK call to ${path} failed after ${MAX_SDK_RETRIES} retries`);
 }
 
 export interface ApsHub {
@@ -70,7 +107,7 @@ export interface ApsVersion {
 
 export async function listHubs(auth: AuthProvider): Promise<ApsHub[]> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await callSdk(() => client.getHubs(), 'GET', '/project/v1/hubs');
+  const resp = await callSdk(() => client.getHubs(), 'GET', '/project/v1/hubs', auth);
   return (resp.data ?? []).map((h) => ({
     id: h.id ?? '',
     name: h.attributes?.name ?? '',
@@ -84,7 +121,12 @@ export async function listProjects(
   hubId: string,
 ): Promise<ApsProject[]> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await callSdk(() => client.getHubProjects(addBPrefix(hubId)), 'GET', `/project/v1/hubs/${addBPrefix(hubId)}/projects`);
+  const resp = await callSdk(
+    () => client.getHubProjects(addBPrefix(hubId)),
+    'GET',
+    `/project/v1/hubs/${addBPrefix(hubId)}/projects`,
+    auth,
+  );
   return (resp.data ?? []).map((p) => {
     const status = p.attributes?.extension?.data?.projectType as string | undefined;
     return {
@@ -102,7 +144,12 @@ export async function listTopFolders(
   projectId: string,
 ): Promise<ApsFolder[]> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await callSdk(() => client.getProjectTopFolders(addBPrefix(hubId), addBPrefix(projectId)), 'GET', `/project/v1/hubs/${addBPrefix(hubId)}/projects/${addBPrefix(projectId)}/topFolders`);
+  const resp = await callSdk(
+    () => client.getProjectTopFolders(addBPrefix(hubId), addBPrefix(projectId)),
+    'GET',
+    `/project/v1/hubs/${addBPrefix(hubId)}/projects/${addBPrefix(projectId)}/topFolders`,
+    auth,
+  );
   return (resp.data ?? []).map((f) => ({
     id: f.id ?? '',
     name: f.attributes?.displayName ?? f.attributes?.name ?? '',
@@ -117,7 +164,12 @@ export async function getItem(
   itemId: string,
 ): Promise<ApsItem> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await callSdk(() => client.getItem(addBPrefix(projectId), itemId), 'GET', `/data/v1/projects/${addBPrefix(projectId)}/items/${itemId}`);
+  const resp = await callSdk(
+    () => client.getItem(addBPrefix(projectId), itemId),
+    'GET',
+    `/data/v1/projects/${addBPrefix(projectId)}/items/${itemId}`,
+    auth,
+  );
   const item = resp.data;
   return {
     id: item?.id ?? '',
@@ -136,7 +188,12 @@ export async function listItemVersions(
   itemId: string,
 ): Promise<ApsVersion[]> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await callSdk(() => client.getItemVersions(addBPrefix(projectId), itemId), 'GET', `/data/v1/projects/${addBPrefix(projectId)}/items/${itemId}/versions`);
+  const resp = await callSdk(
+    () => client.getItemVersions(addBPrefix(projectId), itemId),
+    'GET',
+    `/data/v1/projects/${addBPrefix(projectId)}/items/${itemId}/versions`,
+    auth,
+  );
   return (resp.data ?? []).map((v) => ({
     id: v.id ?? '',
     name: v.attributes?.name ?? '',
@@ -162,7 +219,12 @@ export async function getProjectContainerIds(
   projectId: string,
 ): Promise<Record<string, string>> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await callSdk(() => client.getProject(addBPrefix(hubId), addBPrefix(projectId)), 'GET', `/project/v1/hubs/${addBPrefix(hubId)}/projects/${addBPrefix(projectId)}`);
+  const resp = await callSdk(
+    () => client.getProject(addBPrefix(hubId), addBPrefix(projectId)),
+    'GET',
+    `/project/v1/hubs/${addBPrefix(hubId)}/projects/${addBPrefix(projectId)}`,
+    auth,
+  );
   const relationships = (resp.data?.relationships ?? {}) as Record<
     string,
     { data?: { id?: string } }
@@ -180,7 +242,12 @@ export async function listFolderContents(
   folderId: string,
 ): Promise<ApsFolder[]> {
   const client = new DataManagementClient({ authenticationProvider: toSdkAuth(auth) });
-  const resp = await callSdk(() => client.getFolderContents(addBPrefix(projectId), folderId), 'GET', `/data/v1/projects/${addBPrefix(projectId)}/folders/${folderId}/contents`);
+  const resp = await callSdk(
+    () => client.getFolderContents(addBPrefix(projectId), folderId),
+    'GET',
+    `/data/v1/projects/${addBPrefix(projectId)}/folders/${folderId}/contents`,
+    auth,
+  );
   return (resp.data ?? []).map((item) => ({
     id: item.id ?? '',
     name: item.attributes?.displayName ?? '',
