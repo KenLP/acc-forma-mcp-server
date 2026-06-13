@@ -27,6 +27,11 @@ CHANGELOG.md
 docs/PLANNING.md
 docs/REMEDIATION-PLAN.md
 
+# Local review/analysis artifacts and live-test diagnostic scripts
+REVIEW_FINDINGS*.md
+scripts/diag-*.ts
+scripts/test-*.ts
+
 # Personal Claude Code skill configs and local session notes (not for public)
 skills/
 CLAUDE.md

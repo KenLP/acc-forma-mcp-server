@@ -41,7 +41,6 @@ import { aecdmQueryElementPositionsTool } from './aecdm/query-element-positions.
 // ---- Model Derivative (geometry + translation) ------------------------------
 import { mdGetManifestTool } from './md/get-manifest.js';
 import { mdGetPropertiesTool } from './md/get-properties.js';
-import { mdCheckClearanceTool } from './md/check-clearance.js';
 import { mdTriggerTranslationTool } from './md/trigger-translation.js';
 
 // ---- Meta / Observability ---------------------------------------------------
@@ -91,10 +90,9 @@ export const toolRegistry: AnyToolDef[] = [
   getElementPropertiesTool,
   aecdmQueryElementPositionsTool,
 
-  // Model Derivative — geometry extraction + translation (4)
+  // Model Derivative — geometry extraction + translation (3)
   mdGetManifestTool,
   mdGetPropertiesTool,
-  mdCheckClearanceTool,
   mdTriggerTranslationTool,
 
   // Meta / Observability (2)

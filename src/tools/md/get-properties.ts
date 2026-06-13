@@ -50,7 +50,7 @@ const inputSchema = z.object({
     .describe(
       'Include element bounding box (axis-aligned, in model internal units — ' +
         'decimal feet for US-imperial Revit, metres for metric). ' +
-        'Required for md_check_clearance. Setting false speeds up retrieval.',
+        'Setting false speeds up retrieval when only element names/parameters are needed.',
     ),
 });
 
@@ -59,19 +59,27 @@ export const mdGetPropertiesTool: ReadToolDef<typeof inputSchema> = {
   title: 'Get Model Derivative Element Properties',
   description:
     '**Model Derivative API** — fetches element properties for a translated model, ' +
-    'including axis-aligned bounding boxes (AABBs) from the SVF2 derivative.\n\n' +
+    'optionally including axis-aligned bounding boxes (AABBs) from the SVF2 derivative.\n\n' +
     'Primary use cases:\n' +
-    '  • Get bounding boxes for `md_check_clearance` (soft clash / clearance check)\n' +
     '  • Inspect Revit element properties (dimensions, materials, IFC data)\n' +
-    '  • Map Revit objectIds to names and categories\n\n' +
+    '  • Map Revit objectIds to names and categories\n' +
+    '  • Get bounding boxes for spatial analysis (see ⚠️ below for SVF2 availability)\n\n' +
     'The model must have a successful SVF2 translation — check with `md_get_manifest` first.\n\n' +
     '**API boundary — do NOT confuse with AECDM:**\n' +
     '  • This tool uses **Model Derivative API** (file-based, URN input, geometry data).\n' +
     '  • For BIM parameter queries, category enumeration, or element counts by parameter, ' +
     'use `aecdm_*` tools (they take `element_group_id`, not URN).\n' +
-    '  • AECDM returns element *origin points*; this tool returns full AABBs.\n\n' +
-    '⚠️ Bounding boxes are in the model\'s own coordinate system. When comparing host vs ' +
-    'linked file elements, both models must use Revit Shared Coordinates for distances to be meaningful.',
+    '  • AECDM returns element *origin points*; this tool returns full AABBs when available.\n\n' +
+    '⚠️ **Bbox availability:** bounding boxes are read from `__internal__.__boundingBox__` in SVF2. ' +
+    'This field was available in the legacy SVF1 (Forge) format but is **not populated** in any ' +
+    'current SVF2 translation, regardless of model type (MEP, Architecture, or Structural). ' +
+    '`structuredContent.withBbox` will be 0 for all real ACC/Forma models. ' +
+    'For element bounding boxes, use the **Model Properties API** (requires 3LO auth — Phase 3).\n\n' +
+    '⚠️ **Category filter:** when the Revit SVF2 export omits category fields (common for MEP), ' +
+    'filtering falls back to substring-matching the element *name* ' +
+    '(e.g. "Pipe" matches "Pipe: 3/4 in [12345]"). ' +
+    'Bounding boxes are in the model\'s own coordinate system — Revit Shared Coordinates ' +
+    'required for meaningful cross-file comparison.',
   kind: 'read',
   scopes: ['data:read'],
   preferredAuth: '2lo',

@@ -298,16 +298,22 @@ export function pointInBox(p: Vec3, box: BoundingBox): boolean {
  * `geometryDataByElements`.
  *
  * `Transform.value` is a flat float array — length 16 for a 4×4 homogeneous
- * matrix, length 12 for a 4×3 affine matrix. `Transform.type` indicates the
- * layout; we treat strings containing "row" (case-insensitive) as row-major
- * and default everything else to column-major (OpenGL/three.js convention).
+ * matrix, length 12 for a 4×3 affine matrix.
  *
- * Returns null when the value array has an unsupported length.
+ * `Transform.type` determines the layout:
+ *  - `"autodesk.geometry:transform.affine-*"` (AECDM standard) — row-major
+ *    4×4, translation at v[3], v[7], v[11].
+ *  - Strings containing "row" (case-insensitive) — row-major, same indices.
+ *  - Anything else — column-major (OpenGL convention), translation at
+ *    v[12], v[13], v[14] for 4×4.
+ *
+ * Returns null when the value array has an unsupported length or is absent.
  */
 export function decodeTransformTranslation(t: TransformDto | null | undefined): Vec3 | null {
   if (!t || !Array.isArray(t.value)) return null;
   const v = t.value;
-  const isRowMajor = /row/i.test(t.type ?? '');
+  // autodesk.geometry:transform.affine-* uses row-major layout; "row" is legacy
+  const isRowMajor = /row|affine/i.test(t.type ?? '');
   // Length is checked before indexing, so the !-asserted accesses are safe.
   if (v.length === 16) {
     return isRowMajor

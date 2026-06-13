@@ -28,7 +28,7 @@ export const mdGetManifestTool: ReadToolDef<typeof inputSchema> = {
     '  • This tool uses **Model Derivative API** (file-based, URN input).\n' +
     '  • For BIM semantic queries — elements by category, parameter values, element counts — ' +
     'use `aecdm_*` tools instead.\n' +
-    '  • For element bounding boxes (geometry extents), use `md_get_properties`.',
+    '  • For element properties and Revit parameters, use `md_get_properties`.',
   kind: 'read',
   scopes: ['data:read'],
   preferredAuth: '2lo',

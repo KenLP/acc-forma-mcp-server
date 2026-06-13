@@ -175,6 +175,21 @@ describe('decodeTransformTranslation — unit tests', () => {
     });
   });
 
+  it('decodes autodesk.geometry:transform.affine-* (AECDM real format) as row-major', () => {
+    // Real value observed from AECDM geometryDataByElements for a pipe fitting.
+    // Type "autodesk.geometry:transform.affine-1.0.0" is row-major — translation
+    // at indices 3, 7, 11, NOT 12, 13, 14 (column-major would give 0, 0, 0).
+    const value = [
+      0,  0, -1, -4.175,
+      1,  0,  0,  3.286,
+      0, -1,  0,  5.156,
+      0,  0,  0,  1,
+    ];
+    expect(decodeTransformTranslation({ type: 'autodesk.geometry:transform.affine-1.0.0', value })).toEqual({
+      x: -4.175, y: 3.286, z: 5.156,
+    });
+  });
+
   it('decodes column-major 4x3 — translation at indices 9,10,11', () => {
     const value = [
       1, 0, 0,

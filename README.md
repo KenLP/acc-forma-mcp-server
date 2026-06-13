@@ -125,9 +125,9 @@ Then point your MCP client at the built file:
 
 ---
 
-## Available Tools — Phase 1 MVP
+## Available Tools
 
-## Tools (30)
+## Tools (33)
 
 All tools are grouped by domain. Read tools take no approval; write/mutation tools (marked ✍️) follow the [two-call dry-run protocol](#safety).
 
@@ -182,7 +182,17 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 | `aecdm_query_elements` | Query BIM elements by category with full properties. Supports multi-word categories like `Structural Columns`, `Electrical Equipment`. |
 | `aecdm_get_element_properties` | Re-fetch full properties for a specific element by node ID (requires the originating category). |
 | `aecdm_aggregate_by_parameter` | Count elements grouped by a parameter value within a category (e.g. walls by type name) — fast take-off queries. |
-| `aecdm_query_element_positions` | Query elements with origin position (x, y, z) decoded from geometry transform. Primary use: populate ACC Issue pushpins (`linked_documents[].details.position`). Optionally filter by a reference bounding box. NOTE: returns an origin *point*, not an AABB — use Model Derivative API for true bounding boxes. Uses the AECDM `geometryDataByElements` Public Beta field. |
+| `aecdm_query_element_positions` | Query elements with origin position (x, y, z) decoded from geometry transform. Primary use: populate ACC Issue pushpins (`linked_documents[].details.position`). Optionally filter by a reference bounding box. NOTE: returns an origin *point* (not an AABB). Only point-placed elements (Pipe Fittings, Fixtures, Columns, Doors) have geometry data — linear (Pipes, Ducts) and planar (Walls, Floors) elements return `position: null`. Uses the AECDM `geometryDataByElements` Public Beta field. |
+
+### Model Derivative — SVF2 Translation (3)
+
+| Tool | Purpose |
+|---|---|
+| `md_get_manifest` | Check SVF2 translation status and list available 3D/2D view GUIDs for a model version. |
+| `md_get_properties` | Fetch Revit element properties (names, parameters, category) from an SVF2-translated model. Supports category and objectId filters. |
+| `md_trigger_translation` ✍️ | Submit a new SVF2 translation job for a model version. Poll with `md_get_manifest`. |
+
+> **Note:** bounding boxes are NOT available from the MD Properties API for any SVF2 model — this is an APS platform limitation. For element bboxes, the Model Properties API (`/construction/index/v2/`) is the correct path (requires 3LO auth — Phase 3).
 
 ### Meta / Observability (2)
 
@@ -192,7 +202,7 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 | `meta_verify_audit_chain` | Verify the audit log hash chain has not been tampered with. |
 
 
-More tools in Phase 2 (RFIs, Submittals, Forms, Sheets, Files, Photos, Locations, Assets, Webhooks).
+More tools in Phase 3 (Model Properties API — bbox/clash; 3LO auth required).
 
 ---
 

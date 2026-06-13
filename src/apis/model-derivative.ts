@@ -125,11 +125,19 @@ function parseBbox(raw: unknown): MdBoundingBox | undefined {
 }
 
 function extractCategory(props: Record<string, Record<string, unknown>>): string | undefined {
-  return (
-    (props['Element']?.['Category'] as string | undefined) ??
-    (props['Identity Data']?.['Category'] as string | undefined) ??
-    undefined
-  );
+  // Common locations in Revit SVF2
+  const fromElement = props['Element']?.['Category'] as string | undefined;
+  if (fromElement) return fromElement;
+  const fromIdData = props['Identity Data']?.['Category'] as string | undefined;
+  if (fromIdData) return fromIdData;
+  // Fallback: scan all property groups for any 'Category' key
+  for (const group of Object.values(props)) {
+    if (group && typeof group === 'object') {
+      const cat = group['Category'] as string | undefined;
+      if (cat && typeof cat === 'string' && cat.length > 0) return cat;
+    }
+  }
+  return undefined;
 }
 
 export interface GetMdPropertiesOptions {
@@ -174,9 +182,17 @@ export async function getMdProperties(
 
       const props = raw.properties ?? {};
       const category = extractCategory(props);
-      if (categoryFilter && category && !category.toLowerCase().includes(categoryFilter.toLowerCase())) continue;
+      if (categoryFilter) {
+        const catLower = categoryFilter.toLowerCase();
+        // Match on category field if present; fall back to element name (common in Revit SVF2
+        // exports where the Category property group is absent from MEP/linked-file elements)
+        const catMatch = category !== undefined && category.toLowerCase().includes(catLower);
+        const nameMatch = raw.name.toLowerCase().includes(catLower);
+        if (!catMatch && !nameMatch) continue;
+      }
 
-      // __boundingBox__ lives inside the __internal__ category in Revit SVF2
+      // __boundingBox__ lives inside the __internal__ group in some Revit SVF2 translations.
+      // Not present in MEP/linked-file elements — check withBbox count in results.
       const bboxRaw = props['__internal__']?.['__boundingBox__'];
 
       const parsed = parseBbox(bboxRaw);
