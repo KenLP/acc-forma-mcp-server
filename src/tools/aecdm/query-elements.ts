@@ -24,8 +24,13 @@ export const aecdmQueryElementsTool: ReadToolDef<typeof inputSchema> = {
   name: 'aecdm_query_elements',
   title: 'Query BIM Elements by Category',
   description:
-    'Queries BIM elements in an element group (BIM model) filtered by category. ' +
-    'Returns element IDs, names, and all properties for elements in the given category. ' +
+    '**AEC Data Model (GraphQL)** — queries BIM elements by category, returning element IDs, ' +
+    'names, and semantic properties (parameters).\n\n' +
+    'Input: `element_group_id` from `aecdm_list_element_groups` — NOT a DM version URN.\n\n' +
+    '**API boundary — do NOT confuse with Model Derivative:**\n' +
+    '  • This tool uses **AECDM GraphQL** (semantic/parameter data, live BIM data).\n' +
+    '  • For element bounding boxes (AABBs) or geometry extents, use `md_get_properties` instead.\n' +
+    '  • For checking soft clash / clearance, use `md_get_properties` + `md_check_clearance`.\n\n' +
     'Possible categories: Walls, Windows, Floors, Doors, Furniture, Ceilings, Electrical Equipment. ' +
     'Use aecdm_list_categories to discover all available categories. ' +
     'Use aecdm_aggregate_by_parameter to count elements grouped by a property.',

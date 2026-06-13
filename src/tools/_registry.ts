@@ -38,6 +38,12 @@ import { aecdmAggregateByParameterTool } from './aecdm/aggregate-by-parameter.js
 import { getElementPropertiesTool } from './aecdm/get-element-properties.js';
 import { aecdmQueryElementPositionsTool } from './aecdm/query-element-positions.js';
 
+// ---- Model Derivative (geometry + translation) ------------------------------
+import { mdGetManifestTool } from './md/get-manifest.js';
+import { mdGetPropertiesTool } from './md/get-properties.js';
+import { mdCheckClearanceTool } from './md/check-clearance.js';
+import { mdTriggerTranslationTool } from './md/trigger-translation.js';
+
 // ---- Meta / Observability ---------------------------------------------------
 import { metaListChangelogTool } from './meta/list-changelog.js';
 import { metaVerifyAuditChainTool } from './meta/verify-audit-chain.js';
@@ -84,6 +90,12 @@ export const toolRegistry: AnyToolDef[] = [
   aecdmAggregateByParameterTool,
   getElementPropertiesTool,
   aecdmQueryElementPositionsTool,
+
+  // Model Derivative — geometry extraction + translation (4)
+  mdGetManifestTool,
+  mdGetPropertiesTool,
+  mdCheckClearanceTool,
+  mdTriggerTranslationTool,
 
   // Meta / Observability (2)
   metaListChangelogTool,
