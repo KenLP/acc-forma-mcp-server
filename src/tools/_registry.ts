@@ -18,9 +18,14 @@ import { listVersionsTool } from './dm/list-versions.js';
 import { listIssuesTool } from './issues/list.js';
 import { getIssueTool } from './issues/get.js';
 import { createIssueTool } from './issues/create.js';
+import { updateIssueTool } from './issues/update.js';
 import { addCommentTool } from './issues/add-comment.js';
+import { listIssueCommentsTool } from './issues/list-comments.js';
 import { listIssueTypesTool } from './issues/list-types.js';
 import { listRootCausesTool } from './issues/list-root-causes.js';
+import { getIssueUserMeTool } from './issues/get-user-me.js';
+import { listIssueAttrsTool } from './issues/list-attrs.js';
+import { listIssueAttachmentsTool } from './issues/list-attachments.js';
 
 // ---- Reviews ----------------------------------------------------------------
 import { listReviewsTool } from './reviews/list.js';
@@ -66,13 +71,18 @@ export const toolRegistry: AnyToolDef[] = [
   getItemTool,
   listVersionsTool,
 
-  // Issues (6)
+  // Issues (11)
   listIssuesTool,
   getIssueTool,
   createIssueTool,
+  updateIssueTool,
   addCommentTool,
+  listIssueCommentsTool,
   listIssueTypesTool,
   listRootCausesTool,
+  getIssueUserMeTool,
+  listIssueAttrsTool,
+  listIssueAttachmentsTool,
 
   // Reviews (4)
   listReviewsTool,

@@ -21,17 +21,32 @@ export interface IssueType {
 
 export interface Issue {
   id: string;
+  displayId?: number;
   title: string;
   status: string;
   issueTypeId: string;
   issueSubtypeId: string;
   assignedTo?: string;
+  assignedToType?: 'user' | 'company' | 'role';
   dueDate?: string;
+  startDate?: string;
   description?: string;
+  createdBy?: string;
   createdAt?: string;
+  updatedBy?: string;
   updatedAt?: string;
+  closedBy?: string;
+  closedAt?: string;
   locationId?: string;
+  subLocationId?: string;
   rootCauseId?: string;
+  published?: boolean;
+  linkedDocuments?: LinkedDocument[];
+  customAttributes?: Array<{ attributeDefinitionId: string; value: unknown }>;
+  /** Only returned by GET /issues/{id} — what fields the caller may PATCH. */
+  permittedAttributes?: string[];
+  /** Only returned by GET /issues/{id} — valid status transitions from current state. */
+  permittedStatuses?: string[];
 }
 
 export interface RootCause {
@@ -173,11 +188,56 @@ export async function listRootCauses(
   return data.results ?? [];
 }
 
+export interface UpdateIssuePayload {
+  title?: string;
+  description?: string;
+  status?: string;
+  issueSubtypeId?: string;
+  assignedTo?: string;
+  assignedToType?: 'user' | 'company' | 'role';
+  dueDate?: string;
+  startDate?: string;
+  locationId?: string;
+  subLocationId?: string;
+  rootCauseId?: string;
+  customAttributes?: Array<{ attributeDefinitionId: string; value: unknown }>;
+}
+
+export async function updateIssue(
+  auth: AuthProvider,
+  projectId: string,
+  issueId: string,
+  payload: UpdateIssuePayload,
+): Promise<Issue> {
+  const pid = stripBPrefix(projectId);
+  return apsRequest<Issue>(
+    auth,
+    `/construction/issues/v1/projects/${pid}/issues/${issueId}`,
+    { baseUrl: APS_BASE, method: 'PATCH', body: payload },
+  );
+}
+
 export interface IssueComment {
   id: string;
   body: string;
   createdBy?: string;
   createdAt?: string;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+export async function listIssueComments(
+  auth: AuthProvider,
+  projectId: string,
+  issueId: string,
+  params?: { limit?: number; offset?: number },
+): Promise<{ results: IssueComment[]; pagination: { totalResults: number; limit: number; offset: number } }> {
+  const pid = stripBPrefix(projectId);
+  return apsRequest(
+    auth,
+    `/construction/issues/v1/projects/${pid}/issues/${issueId}/comments`,
+    { baseUrl: APS_BASE, params: params as Record<string, string | number | undefined> },
+  );
 }
 
 export async function addIssueComment(
@@ -191,5 +251,82 @@ export async function addIssueComment(
     auth,
     `/construction/issues/v1/projects/${pid}/issues/${issueId}/comments`,
     { baseUrl: APS_BASE, method: 'POST', body: { body } },
+  );
+}
+
+// ---- Users / permissions ----------------------------------------------------
+
+export interface IssueUserProfile {
+  id?: string;
+  name?: string;
+  email?: string;
+  /** Whether this identity can create issues in the project. */
+  canCreateIssues?: boolean;
+  /** Whether this identity can update issues in the project. */
+  canUpdateIssues?: boolean;
+  /** Whether this identity can add comments. */
+  canCreateComments?: boolean;
+}
+
+export async function getIssueUserMe(
+  auth: AuthProvider,
+  projectId: string,
+): Promise<IssueUserProfile> {
+  const pid = stripBPrefix(projectId);
+  return apsRequest<IssueUserProfile>(
+    auth,
+    `/construction/issues/v1/projects/${pid}/users/me`,
+    { baseUrl: APS_BASE },
+  );
+}
+
+// ---- Custom attribute definitions -------------------------------------------
+
+export interface IssueAttrDefinition {
+  id: string;
+  title: string;
+  type: string;
+  dataType?: string;
+  description?: string;
+  /** Allowed values for enum-type attributes. */
+  metadata?: { list?: Array<{ id: string; value: string }> };
+}
+
+export async function listIssueAttrs(
+  auth: AuthProvider,
+  projectId: string,
+): Promise<IssueAttrDefinition[]> {
+  const pid = stripBPrefix(projectId);
+  const data = await apsRequest<{ results: IssueAttrDefinition[] }>(
+    auth,
+    `/construction/issues/v1/projects/${pid}/issues/attrs`,
+    { baseUrl: APS_BASE },
+  );
+  return data.results ?? [];
+}
+
+// ---- Attachments ------------------------------------------------------------
+
+export interface IssueAttachment {
+  id: string;
+  name?: string;
+  urn?: string;
+  /** 'dm' = Data Management file, 'url' = external URL */
+  attachmentType?: string;
+  createdBy?: string;
+  createdAt?: string;
+}
+
+export async function listIssueAttachments(
+  auth: AuthProvider,
+  projectId: string,
+  issueId: string,
+  params?: { limit?: number; offset?: number },
+): Promise<{ results: IssueAttachment[]; pagination: { totalResults: number; limit: number; offset: number } }> {
+  const pid = stripBPrefix(projectId);
+  return apsRequest(
+    auth,
+    `/construction/issues/v1/projects/${pid}/issues/${issueId}/attachments`,
+    { baseUrl: APS_BASE, params: params as Record<string, string | number | undefined> },
   );
 }
