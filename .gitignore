@@ -32,6 +32,10 @@ REVIEW_FINDINGS*.md
 scripts/diag-*.ts
 scripts/test-*.ts
 
+# Research artifacts (downloaded SDK/HTML files from agent research passes)
+*.gen.cs
+*.html
+
 # Personal Claude Code skill configs and local session notes (not for public)
 skills/
 CLAUDE.md

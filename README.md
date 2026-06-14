@@ -15,7 +15,7 @@
 
 | Capability | Other ACC/APS MCP servers | acc-forma-mcp-server |
 |---|---|---|
-| Issues read + write | Partial | ✅ |
+| Issues read + write (full CRUD + comments + attachments) | Partial | ✅ |
 | Reviews read + write | Partial | ✅ |
 | AEC Data Model (BIM element queries) | Separate .NET server only | ✅ |
 | **AECDM element position queries (Issue pushpin support)** | ❌ | ✅ |
@@ -127,7 +127,7 @@ Then point your MCP client at the built file:
 
 ## Available Tools
 
-## Tools (33)
+## Tools (38)
 
 All tools are grouped by domain. Read tools take no approval; write/mutation tools (marked ✍️) follow the [two-call dry-run protocol](#safety).
 
@@ -151,16 +151,23 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 | `dm_get_item` | Get metadata for a single item (file or folder). |
 | `dm_list_versions` | List all versions of a file with version numbers and timestamps. |
 
-### Issues (6)
+### Issues (11)
 
 | Tool | Purpose |
 |---|---|
 | `issues_list` | List issues in a project with filters (status, type, assignee). |
-| `issues_get` | Get a single issue including comments and attachments metadata. |
-| `issues_create` ✍️ | Create a new issue with subtype, location, due date, assignment. |
+| `issues_get` | Get a single issue with full details, including `permittedStatuses` and `permittedAttributes` for the current user. |
+| `issues_create` ✍️ | Create a new issue with subtype, location, due date, assignment, and optional pushpin links. |
+| `issues_update` ✍️ | Update an existing issue — status, title, description, assignee, due date, subtype, location (sparse PATCH; only provided fields change). |
 | `issues_add_comment` ✍️ | Add a comment to an existing issue. |
+| `issues_list_comments` | List the comment thread on an issue, paginated. |
 | `issues_list_types` | List valid issue types and subtypes (with `isActive` flag) for a project. |
 | `issues_list_root_causes` | List configured root cause categories for a project. |
+| `issues_get_user_me` | Get the current identity's permission flags for the Issues module (canCreate, canUpdate, canCreateComments). |
+| `issues_list_attrs` | List custom attribute definitions for a project — use to get UUIDs needed by `customAttributes` in create/update. |
+| `issues_list_attachments` | List files and links attached to an issue, paginated. |
+
+> **Status values (confirmed from live ACC API):** `draft` \| `open` \| `pending` \| `in_review` \| `closed` \| `void`. Valid transitions depend on the project workflow — check `permittedStatuses` from `issues_get` before updating.
 
 ### Reviews (4)
 
