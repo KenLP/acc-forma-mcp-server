@@ -29,6 +29,14 @@ const inputSchema = z.object({
       'New status. Valid transitions depend on current status — use issues_get to check ' +
         '`permittedStatuses` before updating.',
     ),
+  issue_subtype_id: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Change the issue subtype (i.e. issue type/category). ' +
+        'Use issues_list_types to get valid subtype IDs for this project.',
+    ),
   title: z
     .string()
     .min(1)
@@ -76,7 +84,7 @@ registerValidator<UpdateIssueInput>('issues_update', async (input, _ctx) => {
 
   // At least one field to update must be provided
   const updatableFields = [
-    'status', 'title', 'description', 'assigned_to',
+    'status', 'issue_subtype_id', 'title', 'description', 'assigned_to',
     'due_date', 'root_cause_id', 'location_id',
   ] as const;
   const hasUpdate = updatableFields.some((f) => input[f] !== undefined);
@@ -143,6 +151,7 @@ export const updateIssueTool: MutationToolDef<typeof inputSchema> = {
     // Build sparse PATCH body — only include explicitly-set fields
     const body: Record<string, unknown> = {};
     if (input.status !== undefined) body['status'] = input.status;
+    if (input.issue_subtype_id !== undefined) body['issueSubtypeId'] = input.issue_subtype_id;
     if (input.title !== undefined) body['title'] = input.title;
     if (input.description !== undefined) body['description'] = input.description;
     if (input.assigned_to !== undefined) body['assignedTo'] = input.assigned_to;
@@ -156,6 +165,7 @@ export const updateIssueTool: MutationToolDef<typeof inputSchema> = {
       `PATCH issue ${input.issue_id} in project ${pid}`,
       `Fields to update: ${changedFields}`,
       ...(input.status ? [`Status → ${input.status}`] : []),
+      ...(input.issue_subtype_id ? [`Subtype → ${input.issue_subtype_id}`] : []),
       ...(input.assigned_to
         ? [`Assignee → ${input.assigned_to_type ?? 'user'} ${input.assigned_to}`]
         : []),
@@ -178,6 +188,7 @@ export const updateIssueTool: MutationToolDef<typeof inputSchema> = {
   execute: async (input, ctx) => {
     const payload: Record<string, unknown> = {};
     if (input.status !== undefined) payload['status'] = input.status;
+    if (input.issue_subtype_id !== undefined) payload['issueSubtypeId'] = input.issue_subtype_id;
     if (input.title !== undefined) payload['title'] = input.title;
     if (input.description !== undefined) payload['description'] = input.description;
     if (input.assigned_to !== undefined) payload['assignedTo'] = input.assigned_to;
