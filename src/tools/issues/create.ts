@@ -53,7 +53,7 @@ const inputSchema = z.object({
     .optional()
     .describe('Root cause ID. Use issues_list_root_causes to get valid IDs.'),
   status: z
-    .enum(['open', 'pending', 'in_progress', 'completed', 'not_approved', 'in_dispute', 'closed'])
+    .enum(['draft', 'open', 'pending', 'in_review', 'closed', 'void'])
     .default('open')
     .describe('Initial status of the issue. Defaults to "open".'),
   assigned_to_type: z

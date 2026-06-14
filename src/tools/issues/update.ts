@@ -23,11 +23,12 @@ const inputSchema = z.object({
 
   // Updatable fields — all optional (at least one must be provided)
   status: z
-    .enum(['open', 'pending', 'in_progress', 'completed', 'not_approved', 'in_dispute', 'closed'])
+    .enum(['draft', 'open', 'pending', 'in_review', 'closed', 'void'])
     .optional()
     .describe(
       'New status. Valid transitions depend on current status — use issues_get to check ' +
-        '`permittedStatuses` before updating.',
+        '`permittedStatuses` before updating. ' +
+        'Confirmed values from ACC API: draft | open | pending | in_review | closed | void.',
     ),
   issue_subtype_id: z
     .string()
