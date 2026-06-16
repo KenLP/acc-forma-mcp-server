@@ -5,6 +5,7 @@ import {
   buildRasterPushpin,
   isNormalized,
   DOCS_FILES_PLACEMENT,
+  DOCS_ORIGIN_CONTEXT,
   METERS_TO_FEET,
 } from '../../../../src/apis/pushpin.js';
 
@@ -126,25 +127,27 @@ describe('buildRasterPushpin — 2D PDF sheet pin assembly', () => {
     expect(pin.createdAtVersion).toBe(2);
   });
 
-  it('defaults placements to the Docs files origin context', () => {
+  it('sets originContext at top level (not inside placements array)', () => {
     const pin = buildRasterPushpin({
       lineageUrn: 'urn:adsk.wipprod:dm.lineage:pdf1',
       viewableId: 'Layout1',
       position: { x: 0.5, y: 0.5 },
     });
-    expect(pin.placements).toEqual([{ originContext: { product: 'docs', tool: 'files' } }]);
+    expect(pin.originContext).toEqual({ product: 'docs', tool: 'files' });
+    expect((pin as unknown as Record<string, unknown>).placements).toBeUndefined();
+    expect(DOCS_ORIGIN_CONTEXT.product).toBe('docs');
     expect(DOCS_FILES_PLACEMENT.originContext.product).toBe('docs');
   });
 
-  it('honors caller-supplied placements', () => {
-    const placements = [{ originContext: { product: 'docs', tool: 'reviews' } }];
+  it('honors caller-supplied originContext', () => {
+    const originContext = { product: 'docs', tool: 'reviews' };
     const pin = buildRasterPushpin({
       lineageUrn: 'urn:adsk.wipprod:dm.lineage:pdf1',
       viewableId: 'Layout1',
       position: { x: 0.5, y: 0.5 },
-      placements,
+      originContext,
     });
-    expect(pin.placements).toEqual(placements);
+    expect(pin.originContext).toEqual(originContext);
   });
 
   it('throws when position is not normalized (raw PDF points)', () => {

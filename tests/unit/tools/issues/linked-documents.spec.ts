@@ -151,7 +151,7 @@ describe('issues_create buildPreview — linked_documents pushpin plumbing', () 
     type: 'TwoDRasterPushpin' as const,
     urn: 'urn:adsk.wipprod:dm.lineage:pdf1',
     createdAtVersion: 2,
-    placements: [{ originContext: { product: 'docs', tool: 'files' } }],
+    originContext: { product: 'docs', tool: 'files' },
     details: {
       viewable: { viewableId: 'Layout1', is3D: false },
       position: { x: 0.25, y: 0.6 },
@@ -206,9 +206,9 @@ describe('issues_create buildPreview — linked_documents pushpin plumbing', () 
     expect(result.success).toBe(false);
   });
 
-  it('rejects a raster pin missing the docs placement', () => {
+  it('rejects a raster pin missing originContext', () => {
     const schema = createIssueTool.inputSchema;
-    const noPlacement = {
+    const noOriginContext = {
       type: rasterPin.type,
       urn: rasterPin.urn,
       createdAtVersion: rasterPin.createdAtVersion,
@@ -216,7 +216,7 @@ describe('issues_create buildPreview — linked_documents pushpin plumbing', () 
     };
     const result = schema.safeParse({
       ...baseInput,
-      linked_documents: [noPlacement],
+      linked_documents: [noOriginContext],
     });
     expect(result.success).toBe(false);
   });

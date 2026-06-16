@@ -95,25 +95,17 @@ const inputSchema = z.object({
             .positive()
             .optional()
             .describe('Version number of the document the pin was created against.'),
-          placements: z
-            .array(
-              z
-                .object({
-                  originContext: z
-                    .object({
-                      product: z.string().optional(),
-                      tool: z.string().optional(),
-                    })
-                    .passthrough()
-                    .optional(),
-                })
-                .passthrough(),
-            )
+          originContext: z
+            .object({
+              product: z.string().optional(),
+              tool: z.string().optional(),
+            })
+            .passthrough()
             .optional()
             .describe(
-              'Origin context for the pin. Required for TwoDRasterPushpin on a Docs PDF: ' +
-                '[{ originContext: { product: "docs", tool: "files" } }]. ' +
-                'Defaults are NOT applied — supply this explicitly for PDF pins.',
+              'Origin context at the TOP LEVEL of the linked document. ' +
+                'REQUIRED for TwoDRasterPushpin: { product: "docs", tool: "files" }. ' +
+                'Must be a top-level field — NOT inside a nested placements array.',
             ),
           details: z
             .object({
@@ -208,15 +200,14 @@ const inputSchema = z.object({
                 'A Model Derivative SVF2 GUID will be rejected by the markups service.',
             });
           }
-          const hasDocsPlacement = doc.placements?.some(
-            (p) => p.originContext?.product === 'docs',
-          );
-          if (!hasDocsPlacement) {
+          if (doc.originContext?.product !== 'docs') {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
-              path: ['placements'],
+              path: ['originContext'],
               message:
-                'TwoDRasterPushpin requires placements: [{ originContext: { product: "docs", tool: "files" } }].',
+                'TwoDRasterPushpin requires originContext: { product: "docs", tool: "files" } ' +
+                'as a TOP-LEVEL field on the linked document. ' +
+                'Do NOT nest it inside a placements array — that does not propagate to the issue routing placement.',
             });
           }
         }),

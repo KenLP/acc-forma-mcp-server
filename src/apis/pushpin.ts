@@ -106,10 +106,11 @@ export function buildPushpin(opts: BuildPushpinOptions): LinkedDocument {
 
 // ── 2D PDF raster pushpins ──────────────────────────────────────────────────
 
-/** Default Docs origin context for a PDF-sheet pin (product=docs, tool=files). */
-export const DOCS_FILES_PLACEMENT = {
-  originContext: { product: 'docs', tool: 'files' },
-} as const;
+/** Default origin context for a Docs PDF-sheet pin: `{ product: "docs", tool: "files" }`. */
+export const DOCS_ORIGIN_CONTEXT = { product: 'docs', tool: 'files' } as const;
+
+/** @deprecated Use DOCS_ORIGIN_CONTEXT. */
+export const DOCS_FILES_PLACEMENT = { originContext: DOCS_ORIGIN_CONTEXT } as const;
 
 /** True when both components are finite and within the normalized 0–1 range (inclusive). */
 export function isNormalized(p: Vec2): boolean {
@@ -151,10 +152,11 @@ export interface BuildRasterPushpinOptions {
   /** Version of the PDF the pin was created against. */
   createdAtVersion?: number;
   /**
-   * Origin-context placements. Defaults to the Docs files context
-   * (`{ product: "docs", tool: "files" }`), which is what the ACC UI sends.
+   * Origin context placed at the **top level** of the linked document (NOT inside a
+   * nested `placements` array — that does not propagate to the issue's routing placement).
+   * Defaults to `{ product: "docs", tool: "files" }`, which is what the ACC UI sends.
    */
-  placements?: LinkedDocument['placements'];
+  originContext?: LinkedDocument['originContext'];
 }
 
 /**
@@ -185,7 +187,7 @@ export function buildRasterPushpin(opts: BuildRasterPushpinOptions): LinkedDocum
     type: 'TwoDRasterPushpin',
     urn: opts.lineageUrn,
     ...(opts.createdAtVersion !== undefined ? { createdAtVersion: opts.createdAtVersion } : {}),
-    placements: opts.placements ?? [{ ...DOCS_FILES_PLACEMENT }],
+    originContext: opts.originContext ?? { ...DOCS_ORIGIN_CONTEXT },
     details: {
       viewable: {
         viewableId: opts.viewableId,

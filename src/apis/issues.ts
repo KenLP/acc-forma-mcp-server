@@ -81,13 +81,11 @@ export interface LinkedDocument {
   /** Version of the document the pin was created against. */
   createdAtVersion?: number;
   /**
-   * Origin context for the pin. Required for `TwoDRasterPushpin` on a Docs PDF:
-   * `[{ originContext: { product: "docs", tool: "files" } }]`.
+   * Origin context for the pin. Required for `TwoDRasterPushpin` on a Docs PDF.
+   * Must be `{ product: "docs", tool: "files" }` at the **top level** of the linked
+   * document entry — NOT nested inside a `placements` array (which the API ignores).
    */
-  placements?: Array<{
-    originContext?: { product?: string; tool?: string; [k: string]: unknown };
-    [k: string]: unknown;
-  }>;
+  originContext?: { product?: string; tool?: string; [k: string]: unknown };
   details?: {
     viewable?: {
       /** Model Derivative SVF2 viewable GUID — for vector/3D pins only. */
