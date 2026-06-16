@@ -67,6 +67,12 @@ export interface BuildPushpinOptions {
   lineageUrn: string;
   /** 3D viewable GUID from `md_get_manifest`. */
   viewableGuid: string;
+  /**
+   * 3D view name from `md_get_manifest` (e.g. "{3D}", "3D Plumbing"). REQUIRED — the
+   * ACC Issues API rejects a pin whose `details.viewable` has no `name` with HTTP 400
+   * `ISSUES_SERVICE_BAD_REQUEST` ("must have required property 'name'").
+   */
+  viewableName: string;
   /** Pin position in VIEWER space (run the AECDM origin through `aecdmPositionToViewer` first). */
   position: Vec3;
   /** SVF dbId. Resolve by matching the element's External ID against `md_get_properties`. */
@@ -90,7 +96,7 @@ export function buildPushpin(opts: BuildPushpinOptions): LinkedDocument {
     urn: opts.lineageUrn,
     ...(opts.createdAtVersion !== undefined ? { createdAtVersion: opts.createdAtVersion } : {}),
     details: {
-      viewable: { guid: opts.viewableGuid, is3D: true },
+      viewable: { guid: opts.viewableGuid, name: opts.viewableName, is3D: true },
       position: opts.position,
       ...(opts.objectId !== undefined ? { objectId: opts.objectId } : {}),
       ...(opts.externalId !== undefined ? { externalId: opts.externalId } : {}),
@@ -121,10 +127,20 @@ export interface BuildRasterPushpinOptions {
   /** DM lineage URN of the PDF the pin attaches to (urn:adsk.…:dm.lineage:…). */
   lineageUrn: string;
   /**
-   * ACC Docs-native viewable id (e.g. "Layout1"). This is NOT a Model Derivative
-   * SVF2 GUID — the markups service rejects SVF2 GUIDs for raster PDF pins.
+   * ACC Docs-native viewable id (e.g. "Layout1", or a page id like "1"). NOT a bare
+   * Model Derivative SVF2 GUID — the markups service rejects a guid-only raster pin.
    */
   viewableId: string;
+  /**
+   * The SVF2 `guid` of the SAME 2D viewable node that carries `viewableId`
+   * (from `docs_get_viewables`). **Strongly recommended — effectively required when a
+   * document has multiple 2D nodes sharing one `viewableId`** (e.g. a PDF whose pages
+   * all report `viewableId: "1"`). Without it ACC stores `guid: null`, cannot resolve
+   * which viewable to anchor, fails to build the routing placement, and the issue shows
+   * "This issue is unavailable. Adjust your filters and try again." in the document viewer.
+   * Proven against issue #99 (broken: no guid) vs #1 (works: viewableId + guid).
+   */
+  guid?: string;
   /**
    * Pin position in NORMALIZED sheet coordinates: x,y in [0,1], top-left origin.
    * (0,0) is the top-left corner of the page, (1,1) the bottom-right.
@@ -148,7 +164,9 @@ export interface BuildRasterPushpinOptions {
  * project — a working hand-placed PDF pin):
  *   - `type: "TwoDRasterPushpin"`         (NOT TwoDVectorPushpin)
  *   - `position: { x, y }`                normalized 0–1, top-left origin, NO z
- *   - `viewable.viewableId: "Layout1"`    an ACC Docs-native viewable (NOT an SVF2 GUID)
+ *   - `viewable.viewableId: "Layout1"`    an ACC Docs-native viewable (NOT a bare SVF2 GUID)
+ *   - `viewable.guid: "<2D node guid>"`   the matching 2D viewable's guid (from docs_get_viewables);
+ *                                         needed to disambiguate documents whose pages share a viewableId
  *   - `placements: [{ originContext: { product: "docs", tool: "files" } }]`
  *
  * Throws if `position` is not normalized — sending out-of-range or 3D coordinates
@@ -171,6 +189,7 @@ export function buildRasterPushpin(opts: BuildRasterPushpinOptions): LinkedDocum
     details: {
       viewable: {
         viewableId: opts.viewableId,
+        ...(opts.guid !== undefined ? { guid: opts.guid } : {}),
         is3D: false,
         ...(opts.viewableName !== undefined ? { name: opts.viewableName } : {}),
       },

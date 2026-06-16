@@ -126,7 +126,13 @@ const inputSchema = z.object({
                 })
                 .passthrough()
                 .optional()
-                .describe('Viewable (sheet/view) inside the document.'),
+                .describe(
+                  'Viewable (sheet/view) inside the document. ' +
+                    'For TwoDRasterPushpin pass BOTH viewableId AND its matching guid from ' +
+                    'docs_get_viewables — a PDF whose pages share one viewableId (e.g. "1") needs ' +
+                    'the guid to disambiguate, else ACC stores guid:null and the issue shows as ' +
+                    '"unavailable" in the document viewer.',
+                ),
               position: z
                 .object({ x: z.number(), y: z.number(), z: z.number().optional() })
                 .optional()

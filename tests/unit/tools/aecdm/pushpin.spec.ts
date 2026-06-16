@@ -57,6 +57,7 @@ describe('buildPushpin — linkedDocuments assembly', () => {
     const pin = buildPushpin({
       lineageUrn: 'urn:adsk.wipprod:dm.lineage:abc',
       viewableGuid: 'guid-123',
+      viewableName: '{3D}',
       position: { x: 1, y: 2, z: 3 },
       objectId: 867,
       externalId: '55df8d60-74fa-4925-bbf0-72fad4c5d365-0018d796',
@@ -66,6 +67,7 @@ describe('buildPushpin — linkedDocuments assembly', () => {
     expect(pin.type).toBe('TwoDVectorPushpin');
     expect(pin.details?.viewable?.is3D).toBe(true);
     expect(pin.details?.viewable?.guid).toBe('guid-123');
+    expect(pin.details?.viewable?.name).toBe('{3D}');
     expect(pin.details?.position).toEqual({ x: 1, y: 2, z: 3 });
     expect(pin.details?.objectId).toBe(867);
     expect(pin.details?.externalId).toBe('55df8d60-74fa-4925-bbf0-72fad4c5d365-0018d796');
@@ -77,6 +79,7 @@ describe('buildPushpin — linkedDocuments assembly', () => {
     const pin = buildPushpin({
       lineageUrn: 'urn:adsk.wipprod:dm.lineage:abc',
       viewableGuid: 'guid-123',
+      viewableName: '{3D}',
       position: { x: 0, y: 0, z: 0 },
     });
     expect(pin.details?.objectId).toBeUndefined();
@@ -152,5 +155,27 @@ describe('buildRasterPushpin — 2D PDF sheet pin assembly', () => {
         position: { x: 306, y: 396 },
       }),
     ).toThrow(/normalized 0–1/);
+  });
+
+  it('includes viewable.guid when supplied (disambiguates multi-page PDFs)', () => {
+    // Regression for issue #99: a PDF whose pages all report viewableId "1" needs the
+    // matching 2D node guid, or ACC stores guid:null → "issue unavailable".
+    const pin = buildRasterPushpin({
+      lineageUrn: 'urn:adsk.wipprod:dm.lineage:zoh3ja5XRyW94kaEbxuKUg',
+      viewableId: '1',
+      guid: '90676fc9-3b78-54a6-96d5-6a59252761e3',
+      position: { x: 0.187, y: 0.382 },
+    });
+    expect(pin.details?.viewable?.viewableId).toBe('1');
+    expect(pin.details?.viewable?.guid).toBe('90676fc9-3b78-54a6-96d5-6a59252761e3');
+  });
+
+  it('omits guid when not supplied', () => {
+    const pin = buildRasterPushpin({
+      lineageUrn: 'urn:adsk.wipprod:dm.lineage:pdf1',
+      viewableId: 'Layout1',
+      position: { x: 0.5, y: 0.5 },
+    });
+    expect(pin.details?.viewable?.guid).toBeUndefined();
   });
 });
