@@ -60,26 +60,57 @@ export interface RootCause {
  * /construction/issues/v1/.../issues `linkedDocuments[]`. Inner field names
  * are camelCase to match the API contract 1:1 (so callers can forward
  * Forma Viewer state verbatim without renaming keys).
+ *
+ * Three pin flavours, each with a distinct coordinate contract:
+ *  - `ThreeDVectorPushpin` / `TwoDVectorPushpin` (with `is3D: true`) — 3D model pins.
+ *    `position` is a 3D viewer-space point `{x, y, z}` (global − globalOffset).
+ *  - `TwoDRasterPushpin` — pins on a 2D PDF sheet rendered in ACC Docs. `position`
+ *    is NORMALIZED `{x, y}` in 0–1, top-left origin, NO z. `details.viewable.viewableId`
+ *    must reference an **ACC Docs-native viewable** (e.g. "Layout1") — Model Derivative
+ *    SVF2 GUIDs are rejected by the markups service. `placements` carries the Docs
+ *    origin context (`{ product: "docs", tool: "files" }`).
  */
 export interface LinkedDocument {
-  /** 'TwoDVectorPushpin' for sheets/2D, 'ThreeDVectorPushpin' for 3D models. */
-  type: 'TwoDVectorPushpin' | 'ThreeDVectorPushpin';
+  /**
+   * 'TwoDVectorPushpin' / 'ThreeDVectorPushpin' for vector (model/sheet-point) pins,
+   * 'TwoDRasterPushpin' for normalized pins on a rasterized 2D PDF sheet.
+   */
+  type: 'TwoDVectorPushpin' | 'ThreeDVectorPushpin' | 'TwoDRasterPushpin';
   /** Document lineage URN (item URN) of the file the pin attaches to. */
   urn: string;
   /** Version of the document the pin was created against. */
   createdAtVersion?: number;
+  /**
+   * Origin context for the pin. Required for `TwoDRasterPushpin` on a Docs PDF:
+   * `[{ originContext: { product: "docs", tool: "files" } }]`.
+   */
+  placements?: Array<{
+    originContext?: { product?: string; tool?: string; [k: string]: unknown };
+    [k: string]: unknown;
+  }>;
   details?: {
     viewable?: {
-      guid: string;
+      /** Model Derivative SVF2 viewable GUID — for vector/3D pins only. */
+      guid?: string;
       name?: string;
       is3D?: boolean;
+      /**
+       * ACC Docs-native viewable id (e.g. "Layout1"). REQUIRED for TwoDRasterPushpin.
+       * SVF2 GUIDs are NOT accepted by the markups service for raster PDF pins.
+       */
       viewableId?: string;
     };
-    /** 3D point in viewer coordinates. */
-    position?: { x: number; y: number; z: number };
-    /** Forma Viewer dbId of the element the pin is anchored to. */
+    /**
+     * Pin position. For vector/3D pins: a viewer-space point `{x, y, z}`
+     * (global − globalOffset; see src/apis/pushpin.ts). For TwoDRasterPushpin:
+     * NORMALIZED `{x, y}` in 0–1 with top-left origin and no `z`.
+     */
+    position?: { x: number; y: number; z?: number };
+    /** Forma Viewer dbId (SVF objectId) of the element the pin is anchored to. */
     objectId?: number;
-    /** Opaque viewer camera/section state passthrough. */
+    /** Revit UniqueId (AECDM "External ID" property) — the durable element anchor. */
+    externalId?: string;
+    /** Opaque viewer camera/section state passthrough (includes globalOffset). */
     viewerState?: Record<string, unknown>;
   };
 }

@@ -127,7 +127,7 @@ Then point your MCP client at the built file:
 
 ## Available Tools
 
-## Tools (38)
+## Tools (39)
 
 All tools are grouped by domain. Read tools take no approval; write/mutation tools (marked ✍️) follow the [two-call dry-run protocol](#safety).
 
@@ -189,7 +189,7 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 | `aecdm_query_elements` | Query BIM elements by category with full properties. Supports multi-word categories like `Structural Columns`, `Electrical Equipment`. |
 | `aecdm_get_element_properties` | Re-fetch full properties for a specific element by node ID (requires the originating category). |
 | `aecdm_aggregate_by_parameter` | Count elements grouped by a parameter value within a category (e.g. walls by type name) — fast take-off queries. |
-| `aecdm_query_element_positions` | Query elements with origin position (x, y, z) decoded from geometry transform. Primary use: populate ACC Issue pushpins (`linked_documents[].details.position`). Optionally filter by a reference bounding box. NOTE: returns an origin *point* (not an AABB). Only point-placed elements (Pipe Fittings, Fixtures, Columns, Doors) have geometry data — linear (Pipes, Ducts) and planar (Walls, Floors) elements return `position: null`. Uses the AECDM `geometryDataByElements` Public Beta field. |
+| `aecdm_query_element_positions` | Query elements with origin position (x, y, z) **in metres**, plus each element's `external_id` (Revit UniqueId). Primary use: populate ACC Issue pushpins. For a 3D pin, convert to viewer space first: `metres × 3.280839895 − globalOffset` (imperial). NOTE: returns an origin *point* (not an AABB). Only point-placed elements (Pipe Fittings, Fixtures, Columns, Doors) have geometry — linear (Pipes, Ducts) and planar (Walls, Floors) return `position: null`. Uses the AECDM `geometryDataByElements` Public Beta field. |
 
 ### Model Derivative — SVF2 Translation (3)
 
@@ -200,6 +200,12 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 | `md_trigger_translation` ✍️ | Submit a new SVF2 translation job for a model version. Poll with `md_get_manifest`. |
 
 > **Note:** bounding boxes are NOT available from the MD Properties API for any SVF2 model — this is an APS platform limitation. For element bboxes, the Model Properties API (`/construction/index/v2/`) is the correct path (requires 3LO auth — Phase 3).
+
+### ACC Docs — Viewables (1)
+
+| Tool | Purpose |
+|---|---|
+| `docs_get_viewables` | Resolve the ACC Docs-native **`viewableId`** (e.g. `"Layout1"`) and page/sheet name(s) for a document version URN, so you can place a 2D PDF pushpin (`issues_create` with `type=TwoDRasterPushpin`). This is the manifest `viewableID` field — **distinct from the SVF2 `guid`** returned by `md_get_manifest`, which the markups service rejects for raster PDF pins. `markupCapable: false` means the document has no Docs-native viewable yet (e.g. a raw PDF uploaded via the DM API that ACC has not processed — re-publish through ACC Docs or the Sheets API). |
 
 ### Meta / Observability (2)
 

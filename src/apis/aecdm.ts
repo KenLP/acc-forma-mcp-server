@@ -49,8 +49,17 @@ export interface BoundingBox {
 export interface AecElementPosition {
   id: string;
   name: string;
-  /** Element origin (world-space) decoded from `pieces[0].transform`. Null if no geometry data or unknown matrix layout. */
+  /**
+   * Element origin in **metres** (AECDM native unit), decoded from `pieces[0].transform`.
+   * Null if no geometry data or unknown matrix layout.
+   * For an ACC pushpin, convert with `aecdmPositionToViewer` (see src/apis/pushpin.ts):
+   * imperial viewer = metres × 3.280839895 − globalOffset.
+   */
   position: Vec3 | null;
+  /** Revit UniqueId (the "External ID" property) — use as the pushpin `externalId` anchor. */
+  externalId?: string;
+  /** Revit Element ID (integer, as string) — handy for cross-referencing. */
+  revitElementId?: string;
   properties: ElementProperty[];
 }
 
@@ -164,6 +173,12 @@ function mapElements(
 }
 
 // ---- Internal helpers ------------------------------------------------------
+
+/** Find a property value by exact name, coerced to string. Undefined if absent/null. */
+function findPropValue(props: ElementProperty[], name: string): string | undefined {
+  const p = props.find((x) => x.name === name);
+  return p && p.value != null ? String(p.value) : undefined;
+}
 
 /**
  * Validate that a category name is safe to interpolate into the filter DSL.
@@ -383,12 +398,18 @@ export async function queryElementPositions(
     }
   }
 
-  const positions: AecElementPosition[] = elements.map((el) => ({
-    id: el.id,
-    name: el.name,
-    position: decodeTransformTranslation(transformByElementId.get(el.id)),
-    properties: el.properties,
-  }));
+  const positions: AecElementPosition[] = elements.map((el) => {
+    const externalId = findPropValue(el.properties, 'External ID');
+    const revitElementId = findPropValue(el.properties, 'Revit Element ID');
+    return {
+      id: el.id,
+      name: el.name,
+      position: decodeTransformTranslation(transformByElementId.get(el.id)),
+      ...(externalId !== undefined ? { externalId } : {}),
+      ...(revitElementId !== undefined ? { revitElementId } : {}),
+      properties: el.properties,
+    };
+  });
 
   if (!referenceBox) return positions;
 

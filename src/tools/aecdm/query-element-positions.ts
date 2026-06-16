@@ -31,8 +31,7 @@ const inputSchema = z.object({
     .describe(
       'Optional reference bounding box. When supplied, only elements whose ' +
         'position lies inside the box are returned (point-in-box filter). ' +
-        'Coordinates are in the source model\'s units (typically millimetres ' +
-        'for metric Revit, feet for imperial).',
+        'Coordinates must be in **metres** (AECDM native unit), same as the returned positions.',
     ),
   max_elements: z
     .number()
@@ -57,16 +56,21 @@ export const aecdmQueryElementPositionsTool: ReadToolDef<typeof inputSchema> = {
   name: 'aecdm_query_element_positions',
   title: 'Query BIM Element Positions',
   description:
-    'Returns BIM elements with their origin position (x, y, z in model coordinates). ' +
-    'Each position is decoded from the element\'s first geometry piece transform.\n\n' +
-    'Primary use case: populate ACC Issue pushpins — `linked_documents[].details.position` — ' +
-    'so reviewers can click "View in Model" and jump to the element in the Forge Viewer.\n\n' +
-    'Optional `reference_bbox` filters results to elements whose position lies inside the ' +
-    'box (point-in-box test) — useful for room-occupancy or zone queries.\n\n' +
-    'NOTE: AECDM `geometryDataByElements` is currently in **Public Beta** (Autodesk). ' +
-    'This tool returns an *origin point*, not an axis-aligned bbox — AECDM does not expose ' +
-    'AABBs directly. For a true bbox, use Model Derivative API. Elements without geometry ' +
-    'data return `position: null`.',
+    'Returns BIM elements with their origin position (x, y, z) **in metres** (AECDM native unit) ' +
+    'plus each element\'s `external_id` (Revit UniqueId). ' +
+    'Position is decoded from the element\'s first geometry piece transform.\n\n' +
+    'Primary use case: populate ACC Issue pushpins — `linked_documents[].details.position`.\n\n' +
+    '⚠️ **Pushpin coordinates are NOT the raw position.** The ACC viewer for an imperial Revit ' +
+    'model is in feet, with a per-model `globalOffset`. Convert before pinning:\n' +
+    '  `viewer_pos = position_metres × 3.280839895 − globalOffset`\n' +
+    'Get `globalOffset` once from any existing pin (`issues_get` → `viewerState.globalOffset`); ' +
+    'get the 3D viewable GUID from `md_get_manifest`; use `external_id` as the pin anchor ' +
+    '(and resolve the SVF `objectId`/dbId by matching it in `md_get_properties`). ' +
+    'ACC 3D pins use `type: "TwoDVectorPushpin"` with `is3D: true`.\n\n' +
+    'Optional `reference_bbox` (in metres) filters to elements inside the box (point-in-box test).\n\n' +
+    'NOTE: AECDM `geometryDataByElements` is **Public Beta**. Returns an *origin point*, not an ' +
+    'AABB. Only point-placed elements (fittings, fixtures, columns, doors) have geometry; linear ' +
+    '(pipes, ducts) and planar (walls, floors) elements return `position: null`.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],
@@ -104,9 +108,10 @@ export const aecdmQueryElementPositionsTool: ReadToolDef<typeof inputSchema> = {
 
     const fmt = (v: number): string => v.toFixed(3);
     const lines = elements.slice(0, 50).map((el) => {
-      if (!el.position) return `• ${el.name}  (ID: ${el.id})  [no geometry data]`;
+      const ext = el.externalId ? `  externalId: ${el.externalId}` : '';
+      if (!el.position) return `• ${el.name}  (ID: ${el.id})${ext}  [no geometry data]`;
       const { x, y, z } = el.position;
-      return `• ${el.name}  (ID: ${el.id})\n  position: (${fmt(x)}, ${fmt(y)}, ${fmt(z)})`;
+      return `• ${el.name}  (ID: ${el.id})${ext}\n  position (m): (${fmt(x)}, ${fmt(y)}, ${fmt(z)})`;
     });
 
     const truncated = elements.length > 50 ? `\n\n…and ${elements.length - 50} more` : '';

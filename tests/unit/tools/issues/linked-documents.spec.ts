@@ -144,4 +144,89 @@ describe('issues_create buildPreview — linked_documents pushpin plumbing', () 
     });
     expect(result.success).toBe(false);
   });
+
+  // ── TwoDRasterPushpin (2D PDF sheet) contract ──────────────────────────────
+
+  const rasterPin = {
+    type: 'TwoDRasterPushpin' as const,
+    urn: 'urn:adsk.wipprod:dm.lineage:pdf1',
+    createdAtVersion: 2,
+    placements: [{ originContext: { product: 'docs', tool: 'files' } }],
+    details: {
+      viewable: { viewableId: 'Layout1', is3D: false },
+      position: { x: 0.25, y: 0.6 },
+    },
+  };
+
+  it('accepts a well-formed TwoDRasterPushpin and forwards it verbatim', async () => {
+    const preview = await createIssueTool.buildPreview(
+      { ...baseInput, linked_documents: [rasterPin] },
+      makeCtx(),
+    );
+    const body = preview.body as { linkedDocuments?: unknown[] };
+    expect(body.linkedDocuments).toEqual([rasterPin]);
+  });
+
+  it('rejects a raster pin with non-normalized position', () => {
+    const schema = createIssueTool.inputSchema;
+    const result = schema.safeParse({
+      ...baseInput,
+      linked_documents: [
+        { ...rasterPin, details: { ...rasterPin.details, position: { x: 306, y: 396 } } },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a raster pin carrying a z coordinate', () => {
+    const schema = createIssueTool.inputSchema;
+    const result = schema.safeParse({
+      ...baseInput,
+      linked_documents: [
+        { ...rasterPin, details: { ...rasterPin.details, position: { x: 0.2, y: 0.3, z: 1 } } },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a raster pin keyed on an SVF2 guid instead of viewableId', () => {
+    const schema = createIssueTool.inputSchema;
+    const result = schema.safeParse({
+      ...baseInput,
+      linked_documents: [
+        {
+          ...rasterPin,
+          details: {
+            viewable: { guid: 'svf2-guid-abc', is3D: false },
+            position: { x: 0.2, y: 0.3 },
+          },
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a raster pin missing the docs placement', () => {
+    const schema = createIssueTool.inputSchema;
+    const noPlacement = {
+      type: rasterPin.type,
+      urn: rasterPin.urn,
+      createdAtVersion: rasterPin.createdAtVersion,
+      details: rasterPin.details,
+    };
+    const result = schema.safeParse({
+      ...baseInput,
+      linked_documents: [noPlacement],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('does not impose raster rules on vector pins (3D z allowed)', () => {
+    const schema = createIssueTool.inputSchema;
+    const result = schema.safeParse({
+      ...baseInput,
+      linked_documents: [samplePin],
+    });
+    expect(result.success).toBe(true);
+  });
 });

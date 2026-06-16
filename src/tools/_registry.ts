@@ -48,6 +48,9 @@ import { mdGetManifestTool } from './md/get-manifest.js';
 import { mdGetPropertiesTool } from './md/get-properties.js';
 import { mdTriggerTranslationTool } from './md/trigger-translation.js';
 
+// ---- ACC Docs (viewables for 2D PDF pushpins) -------------------------------
+import { docsGetViewablesTool } from './docs/get-viewables.js';
+
 // ---- Meta / Observability ---------------------------------------------------
 import { metaListChangelogTool } from './meta/list-changelog.js';
 import { metaVerifyAuditChainTool } from './meta/verify-audit-chain.js';
@@ -104,6 +107,9 @@ export const toolRegistry: AnyToolDef[] = [
   mdGetManifestTool,
   mdGetPropertiesTool,
   mdTriggerTranslationTool,
+
+  // ACC Docs — viewables for 2D PDF pushpins (1)
+  docsGetViewablesTool,
 
   // Meta / Observability (2)
   metaListChangelogTool,

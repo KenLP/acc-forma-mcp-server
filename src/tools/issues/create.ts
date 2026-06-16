@@ -76,10 +76,14 @@ const inputSchema = z.object({
       z
         .object({
           type: z
-            .enum(['TwoDVectorPushpin', 'ThreeDVectorPushpin'])
+            .enum(['TwoDVectorPushpin', 'ThreeDVectorPushpin', 'TwoDRasterPushpin'])
             .describe(
-              'TwoDVectorPushpin for 2D sheets, ThreeDVectorPushpin for 3D model viewables. ' +
-                'Must match the viewable type referenced by details.viewable.guid.',
+              'Pushpin type. ' +
+                'ThreeDVectorPushpin (or TwoDVectorPushpin with details.viewable.is3D=true) ' +
+                'for 3D model viewables — position is a 3D viewer point {x,y,z} keyed by viewable.guid. ' +
+                'TwoDRasterPushpin for a pin on a 2D PDF sheet rendered in ACC Docs — position is ' +
+                'NORMALIZED {x,y} in 0–1 (top-left origin, no z), keyed by an ACC Docs-native ' +
+                'viewable.viewableId (e.g. "Layout1"); SVF2 GUIDs are NOT accepted for PDF pins.',
             ),
           urn: z
             .string()
@@ -91,11 +95,31 @@ const inputSchema = z.object({
             .positive()
             .optional()
             .describe('Version number of the document the pin was created against.'),
+          placements: z
+            .array(
+              z
+                .object({
+                  originContext: z
+                    .object({
+                      product: z.string().optional(),
+                      tool: z.string().optional(),
+                    })
+                    .passthrough()
+                    .optional(),
+                })
+                .passthrough(),
+            )
+            .optional()
+            .describe(
+              'Origin context for the pin. Required for TwoDRasterPushpin on a Docs PDF: ' +
+                '[{ originContext: { product: "docs", tool: "files" } }]. ' +
+                'Defaults are NOT applied — supply this explicitly for PDF pins.',
+            ),
           details: z
             .object({
               viewable: z
                 .object({
-                  guid: z.string().min(1),
+                  guid: z.string().min(1).optional(),
                   name: z.string().optional(),
                   is3D: z.boolean().optional(),
                   viewableId: z.string().optional(),
@@ -104,9 +128,12 @@ const inputSchema = z.object({
                 .optional()
                 .describe('Viewable (sheet/view) inside the document.'),
               position: z
-                .object({ x: z.number(), y: z.number(), z: z.number() })
+                .object({ x: z.number(), y: z.number(), z: z.number().optional() })
                 .optional()
-                .describe('Pin position in viewer coordinates.'),
+                .describe(
+                  'Pin position. Vector/3D pins: viewer point {x,y,z}. ' +
+                    'TwoDRasterPushpin: normalized {x,y} in 0–1, top-left origin, no z.',
+                ),
               objectId: z
                 .number()
                 .int()
@@ -123,15 +150,79 @@ const inputSchema = z.object({
             .passthrough()
             .optional(),
         })
-        .passthrough(),
+        .passthrough()
+        .superRefine((doc, ctx) => {
+          if (doc.type !== 'TwoDRasterPushpin') return;
+          // PDF raster pins have a strict, distinct contract — validate it up front so the
+          // caller gets a clear message instead of an opaque HTTP 400
+          // ISSUES_SERVICE_FAILED_TO_UPDATE_MARKUPS that rolls the whole issue back.
+          const pos = doc.details?.position;
+          if (!pos) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['details', 'position'],
+              message: 'TwoDRasterPushpin requires details.position with normalized {x,y} (0–1, top-left origin).',
+            });
+          } else {
+            if (pos.z !== undefined) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['details', 'position', 'z'],
+                message: 'TwoDRasterPushpin position must be 2D {x,y} only — remove z.',
+              });
+            }
+            for (const axis of ['x', 'y'] as const) {
+              const v = pos[axis];
+              if (v < 0 || v > 1) {
+                ctx.addIssue({
+                  code: z.ZodIssueCode.custom,
+                  path: ['details', 'position', axis],
+                  message: `TwoDRasterPushpin position.${axis} must be normalized 0–1 (top-left origin), got ${v}. Divide pixel/PDF-point coordinates by the page width/height.`,
+                });
+              }
+            }
+          }
+          const viewable = doc.details?.viewable;
+          if (!viewable?.viewableId) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['details', 'viewable', 'viewableId'],
+              message:
+                'TwoDRasterPushpin requires details.viewable.viewableId — an ACC Docs-native viewable ' +
+                'id such as "Layout1". The PDF must already be processed by ACC Docs; Model Derivative ' +
+                'SVF2 viewable GUIDs are NOT accepted for PDF pins (out-of-band md_trigger_translation does not help).',
+            });
+          }
+          if (viewable?.guid && !viewable.viewableId) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['details', 'viewable', 'guid'],
+              message:
+                'TwoDRasterPushpin keys on viewable.viewableId (e.g. "Layout1"), not viewable.guid. ' +
+                'A Model Derivative SVF2 GUID will be rejected by the markups service.',
+            });
+          }
+          const hasDocsPlacement = doc.placements?.some(
+            (p) => p.originContext?.product === 'docs',
+          );
+          if (!hasDocsPlacement) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['placements'],
+              message:
+                'TwoDRasterPushpin requires placements: [{ originContext: { product: "docs", tool: "files" } }].',
+            });
+          }
+        }),
     )
     .max(50)
     .optional()
     .describe(
-      'Pushpin links from this issue to model document(s) / element(s). ' +
+      'Pushpin links from this issue to model document(s) / element(s) / 2D PDF sheet(s). ' +
         'When present, ACC renders a "View in Model" deep link and the Revit Issues add-in ' +
         'will highlight the linked element. Inner field shape matches the APS linkedDocuments ' +
-        'contract verbatim — pass Forma Viewer state through as-is.',
+        'contract verbatim — pass Forma Viewer state through as-is. ' +
+        'For PDF sheet pins use type=TwoDRasterPushpin (normalized 0–1 position + ACC Docs-native viewableId).',
     ),
 });
 
