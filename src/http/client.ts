@@ -69,7 +69,11 @@ export async function apsRequest<T>(
     }
 
     if (!resp.ok) {
-      const responseBody = await resp.json().catch(async () => await resp.text());
+      // Read body once as text, then attempt JSON parse — avoids "body already read" if
+      // the error response is HTML/plain text (resp.json() would consume the body on failure).
+      const text = await resp.text();
+      let responseBody: unknown;
+      try { responseBody = JSON.parse(text) as unknown; } catch { responseBody = text; }
       throw new ApsApiError(resp.status, method, url, responseBody);
     }
 

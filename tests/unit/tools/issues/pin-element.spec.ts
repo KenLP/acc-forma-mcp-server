@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { IssueType, Issue } from '../../../../src/apis/issues.js';
-import type { MdManifest, MdElement } from '../../../../src/apis/model-derivative.js';
+import type { MdManifest, MdElement, MdView } from '../../../../src/apis/model-derivative.js';
 import type { AecElementPosition } from '../../../../src/apis/aecdm.js';
 import type { ToolContext } from '../../../../src/tools/_types.js';
 
@@ -35,6 +35,7 @@ vi.mock('../../../../src/apis/issues.js', async (importOriginal) => {
 
 const getMdManifestMock = vi.fn<(...args: unknown[]) => Promise<MdManifest>>();
 const getMdPropertiesMock = vi.fn<(...args: unknown[]) => Promise<MdElement[]>>();
+const getMdViewsMock = vi.fn<(...args: unknown[]) => Promise<MdView[]>>();
 
 vi.mock('../../../../src/apis/model-derivative.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../src/apis/model-derivative.js')>();
@@ -42,6 +43,7 @@ vi.mock('../../../../src/apis/model-derivative.js', async (importOriginal) => {
     ...actual,
     getMdManifest: (...args: unknown[]) => getMdManifestMock(...args),
     getMdProperties: (...args: unknown[]) => getMdPropertiesMock(...args),
+    getMdViews: (...args: unknown[]) => getMdViewsMock(...args),
     // extractDocsViewables is pure — let it run on the mock manifest data
   };
 });
@@ -199,6 +201,9 @@ describe('issues_pin_element — buildPreview', () => {
     vi.resetModules();
     listIssueTypesMock.mockReset().mockResolvedValue(TYPES);
     getMdManifestMock.mockReset().mockResolvedValue(MANIFEST);
+    getMdViewsMock.mockReset().mockResolvedValue([
+      { guid: '3d-meta-guid', name: '{3D}', role: '3d' as const },
+    ]);
     queryElementPositionsMock.mockReset().mockResolvedValue([ELEMENT]);
     getMdPropertiesMock.mockReset().mockResolvedValue(MD_ELEMENTS);
     apsRequestMock.mockReset().mockResolvedValue(ISSUES_WITH_OFFSET);

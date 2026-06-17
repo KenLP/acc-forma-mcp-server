@@ -31,6 +31,7 @@ docs/REMEDIATION-PLAN.md
 REVIEW_FINDINGS*.md
 scripts/diag-*.ts
 scripts/test-*.ts
+scripts/probe-*.ts
 
 # Research artifacts (downloaded SDK/HTML files from agent research passes)
 *.gen.cs

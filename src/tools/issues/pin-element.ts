@@ -10,6 +10,7 @@ import { registerValidator, BusinessRuleError } from '../../safety/business-rule
 import {
   getMdManifest,
   getMdProperties,
+  getMdViews,
   extractDocsViewables,
 } from '../../apis/model-derivative.js';
 import { queryElementPositions, validateCategoryName } from '../../apis/aecdm.js';
@@ -314,15 +315,23 @@ async function resolvePin(input: PinElementInput, ctx: ToolContext): Promise<Res
   const viewerPosition = aecdmPositionToViewer(aecdmEl.position, globalOffset, input.unit_factor);
 
   // 7. Resolve objectId via MD properties (best-effort; enables "View in Model" deep link)
+  // NOTE: /manifest and /metadata use DIFFERENT GUID namespaces. getMdProperties requires
+  // the /metadata GUID — getMdViews retrieves them, matched by view name to chosen.
   let objectId: number | undefined;
   try {
-    const mdElements = await getMdProperties(ctx.auth, input.model_version_urn, {
-      viewGuid: chosen.guid,
-      categoryFilter: input.category,
-      maxResults: 2000,
-    });
-    const mdEl = mdElements.find((e) => e.externalId === input.element_external_id);
-    if (mdEl) objectId = mdEl.objectId;
+    const metaViews = await getMdViews(ctx.auth, input.model_version_urn);
+    const metaView =
+      metaViews.find((v) => v.name === chosen.name && v.role === '3d') ??
+      metaViews.find((v) => v.role === '3d');
+    if (metaView) {
+      const mdElements = await getMdProperties(ctx.auth, input.model_version_urn, {
+        viewGuid: metaView.guid,
+        categoryFilter: input.category,
+        maxResults: 2000,
+      });
+      const mdEl = mdElements.find((e) => e.externalId === input.element_external_id);
+      if (mdEl) objectId = mdEl.objectId;
+    }
   } catch {
     // objectId is optional — proceed without it; pin will still render but won't highlight element
   }
