@@ -340,15 +340,20 @@ async function resolvePin(input: PinElementInput, ctx: ToolContext): Promise<Res
   // Extract version number from model_version_urn (?version=N) — required by ACC Issues API.
   const versionMatch = /[?&]version=(\d+)/.exec(input.model_version_urn);
   const createdAtVersion = versionMatch ? parseInt(versionMatch[1]!, 10) : undefined;
+  // seedURN = URL-safe base64 of the version URN (no padding), placed in viewerState.
+  const seedUrn = Buffer.from(input.model_version_urn).toString('base64url');
 
   const linkedDocument = buildPushpin({
     lineageUrn,
     viewableGuid: chosen.guid,
     viewableName: chosen.name,
+    ...(chosen.viewableId !== undefined ? { viewableId: chosen.viewableId } : {}),
     position: viewerPosition,
     ...(objectId !== undefined ? { objectId } : {}),
     externalId: input.element_external_id,
     ...(createdAtVersion !== undefined ? { createdAtVersion } : {}),
+    globalOffset,
+    seedUrn,
   });
 
   // 9. Build issue body

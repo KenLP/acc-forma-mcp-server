@@ -101,6 +101,7 @@ const MANIFEST: MdManifest = {
               type: 'geometry',
               role: '3d',
               name: '{3D}',
+              viewableID: 'test-viewable-id-001',
             },
             {
               guid: '2d-view-guid',
@@ -227,8 +228,11 @@ describe('issues_pin_element — buildPreview', () => {
     expect(pin!['urn']).toBe('urn:adsk.wipprod:dm.lineage:testlineage');
 
     const details = pin!['details'] as Record<string, unknown>;
-    expect((details['viewable'] as Record<string, unknown>)['guid']).toBe('3d-view-guid');
-    expect((details['viewable'] as Record<string, unknown>)['is3D']).toBe(true);
+    const viewable = details['viewable'] as Record<string, unknown>;
+    expect(viewable['guid']).toBe('3d-view-guid');
+    expect(viewable['is3D']).toBe(true);
+    // viewableId from manifest viewableID field — required for ACC viewer routing
+    expect(viewable['viewableId']).toBe('test-viewable-id-001');
     expect(details['objectId']).toBe(1234);
     expect(details['externalId']).toBe('ext-id-door-001');
 
@@ -236,6 +240,19 @@ describe('issues_pin_element — buildPreview', () => {
     const pos = details['position'] as { x: number; y: number; z: number };
     expect(pos.x).toBeCloseTo(1.1441 * 3.280839895 - (-19.068394820), 3);
     expect(pos.y).toBeCloseTo(-8.5012 * 3.280839895 - (-5.405197144), 3);
+
+    // viewerState must be present — required for ACC viewer to navigate to the pin
+    const vs = details['viewerState'] as Record<string, unknown>;
+    expect(vs).toBeDefined();
+    expect(vs['version']).toBe('2.0');
+    // seedURN = base64url of model_version_urn
+    expect(vs['seedURN']).toBe(
+      Buffer.from('urn:adsk.wipprod:fs.file:vf.testlineage?version=1').toString('base64url'),
+    );
+    const vsOffset = vs['globalOffset'] as { x: number; y: number; z: number };
+    expect(vsOffset.x).toBeCloseTo(-19.068394820, 5);
+    expect(vsOffset.y).toBeCloseTo(-5.405197144, 5);
+    expect(vsOffset.z).toBeCloseTo(25.708333651, 5);
 
     expect(preview.businessRulesPassed).toContain('element_found_in_aecdm_category');
     expect(preview.businessRulesPassed).toContain('element_has_geometry_origin');

@@ -73,6 +73,13 @@ export interface BuildPushpinOptions {
    * `ISSUES_SERVICE_BAD_REQUEST` ("must have required property 'name'").
    */
   viewableName: string;
+  /**
+   * ACC Docs-native 3D viewable ID from the manifest `viewableID` field (e.g.
+   * "bb5eff03-9b0b-4912-a74c-a723242f0b4b-002c43bd"). Required for the ACC viewer to
+   * route the issue to the correct 3D view; without it the pin exists but the viewer
+   * cannot navigate to it. Get from `extractDocsViewables` as `chosen.viewableId`.
+   */
+  viewableId?: string;
   /** Pin position in VIEWER space (run the AECDM origin through `aecdmPositionToViewer` first). */
   position: Vec3;
   /** SVF dbId. Resolve by matching the element's External ID against `md_get_properties`. */
@@ -81,6 +88,80 @@ export interface BuildPushpinOptions {
   externalId?: string;
   /** Version of the model the pin was created against. */
   createdAtVersion?: number;
+  /**
+   * Viewer globalOffset for this model. When provided, a `viewerState` is included in
+   * the pin — required for ACC to open the correct view when the user clicks the issue.
+   */
+  globalOffset?: Vec3;
+  /**
+   * URL-safe base64 of the model version URN (no padding). Becomes `viewerState.seedURN`.
+   * Compute: `Buffer.from(versionUrn).toString('base64url')`.
+   */
+  seedUrn?: string;
+}
+
+/**
+ * Build a minimal `viewerState` for a 3D pushpin. Modelled on the structure observed
+ * in hand-placed working pin #102 from the Ken-MCP test project. The camera is placed
+ * above and slightly offset so the target (= pin position) is centred in an orthographic view.
+ */
+function buildViewerState(position: Vec3, globalOffset: Vec3, seedUrn?: string): Record<string, unknown> {
+  // Camera offset: 25 units back in -X, 75 units up in +Z — matches #102 reference.
+  const ex = position.x - 25, ey = position.y, ez = position.z + 75;
+  return {
+    version: '2.0',
+    ...(seedUrn !== undefined ? { seedURN: seedUrn } : {}),
+    viewport: {
+      name: '',
+      eye: [ex, ey, ez],
+      target: [position.x, position.y, position.z],
+      up: [0.32, 0, 0.95],
+      worldUpVector: [0, 0, 1],
+      pivotPoint: [position.x, position.y, position.z],
+      projection: 'orthographic',
+      aspectRatio: 1.756,
+      isOrthographic: true,
+      distanceToOrbit: 79,
+      orthographicHeight: 30,
+    },
+    cutplanes: [],
+    floorGuid: null,
+    objectSet: [
+      {
+        id: [],
+        hidden: [],
+        idType: 'lmv',
+        isolated: [],
+        explodeScale: 0,
+        explodeOptions: { magnitude: 4, depthDampening: 0 },
+      },
+    ],
+    globalOffset: { x: globalOffset.x, y: globalOffset.y, z: globalOffset.z },
+    renderOptions: {
+      toneMap: { method: 1, exposure: -7, lightMultiplier: -1e-20 },
+      appearance: {
+        ghostHidden: true,
+        antiAliasing: true,
+        displayLines: true,
+        ambientShadow: true,
+        displayPoints: true,
+        swapBlackAndWhite: false,
+        progressiveDisplay: true,
+      },
+      environment: 'Boardwalk',
+      ambientOcclusion: { radius: 8, enabled: true, intensity: 1 },
+    },
+    autocam: {
+      cubeFront: { x: 1, y: 0, z: 0 },
+      sceneUpDirection: { x: 0, y: 0, z: 1 },
+      sceneFrontDirection: { x: 0, y: 1, z: 0 },
+    },
+    floorOffsetMax: 0,
+    floorOffsetMin: 0,
+    floorLineageUrn: null,
+    floorVersionUrn: null,
+    attributesVersion: 2,
+  };
 }
 
 /**
@@ -89,6 +170,10 @@ export interface BuildPushpinOptions {
  * IMPORTANT: ACC 3D model pins use `type: "TwoDVectorPushpin"` with
  * `details.viewable.is3D = true` — NOT "ThreeDVectorPushpin". This is confirmed from
  * a working pin placed via the ACC UI; using "ThreeDVectorPushpin" can fail to render.
+ *
+ * Pass `viewableId` (from `extractDocsViewables` → `chosen.viewableId`) and `globalOffset`
+ * (+ `seedUrn`) to enable ACC viewer routing. Without them the pin exists in the API but
+ * is not navigable — the viewer shows "This issue is unavailable."
  */
 export function buildPushpin(opts: BuildPushpinOptions): LinkedDocument {
   return {
@@ -96,10 +181,18 @@ export function buildPushpin(opts: BuildPushpinOptions): LinkedDocument {
     urn: opts.lineageUrn,
     ...(opts.createdAtVersion !== undefined ? { createdAtVersion: opts.createdAtVersion } : {}),
     details: {
-      viewable: { guid: opts.viewableGuid, name: opts.viewableName, is3D: true },
+      viewable: {
+        guid: opts.viewableGuid,
+        name: opts.viewableName,
+        is3D: true,
+        ...(opts.viewableId !== undefined ? { viewableId: opts.viewableId } : {}),
+      },
       position: opts.position,
       ...(opts.objectId !== undefined ? { objectId: opts.objectId } : {}),
       ...(opts.externalId !== undefined ? { externalId: opts.externalId } : {}),
+      ...(opts.globalOffset !== undefined
+        ? { viewerState: buildViewerState(opts.position, opts.globalOffset, opts.seedUrn) }
+        : {}),
     },
   };
 }
