@@ -26,6 +26,7 @@ import { listRootCausesTool } from './issues/list-root-causes.js';
 import { getIssueUserMeTool } from './issues/get-user-me.js';
 import { listIssueAttrsTool } from './issues/list-attrs.js';
 import { listIssueAttachmentsTool } from './issues/list-attachments.js';
+import { pinElementTool } from './issues/pin-element.js';
 
 // ---- Reviews ----------------------------------------------------------------
 import { listReviewsTool } from './reviews/list.js';
@@ -74,7 +75,7 @@ export const toolRegistry: AnyToolDef[] = [
   getItemTool,
   listVersionsTool,
 
-  // Issues (11)
+  // Issues (12)
   listIssuesTool,
   getIssueTool,
   createIssueTool,
@@ -86,6 +87,7 @@ export const toolRegistry: AnyToolDef[] = [
   getIssueUserMeTool,
   listIssueAttrsTool,
   listIssueAttachmentsTool,
+  pinElementTool,
 
   // Reviews (4)
   listReviewsTool,
