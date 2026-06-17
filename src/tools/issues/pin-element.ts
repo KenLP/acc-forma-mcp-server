@@ -23,6 +23,20 @@ import { apsRequest } from '../../http/client.js';
 
 const APS_BASE = 'https://developer.api.autodesk.com';
 
+/**
+ * Derive the DM lineage URN from a file version URN.
+ *   'urn:adsk.wipprod:fs.file:vf.XXXXX?version=N' → 'urn:adsk.wipprod:dm.lineage:XXXXX'
+ */
+function lineageFromVersionUrn(versionUrn: string): string {
+  const match = /^urn:adsk\.wipprod:fs\.file:vf\.([^?]+)/.exec(versionUrn);
+  if (!match) {
+    throw new Error(
+      `Cannot derive lineage from "${versionUrn}". Expected urn:adsk.wipprod:fs.file:vf.XXXXX?version=N.`,
+    );
+  }
+  return `urn:adsk.wipprod:dm.lineage:${match[1]!}`;
+}
+
 // ---- Input schema ----------------------------------------------------------
 
 const inputSchema = z.object({
@@ -56,14 +70,13 @@ const inputSchema = z.object({
         'Found in aecdm_query_element_positions results as the externalId field. ' +
         'This is the durable element anchor used to look up the objectId in the chosen viewable.',
     ),
-  model_lineage_urn: z
+  model_version_urn: z
     .string()
-    .startsWith('urn:adsk.wipprod:dm.lineage:')
+    .startsWith('urn:adsk.wipprod:fs.file:')
     .describe(
-      'DM lineage URN of the model file (urn:adsk.wipprod:dm.lineage:…). ' +
-        'Get from dm_get_item or dm_list_versions. ' +
-        'Used to fetch the viewable GUID and, if global_offset is not supplied, ' +
-        'to scan existing pins on this model for a calibrated offset.',
+      'File version URN of the model (urn:adsk.wipprod:fs.file:vf.XXXXX?version=N). ' +
+        'Get from aecdm_list_element_groups → fileVersionUrn, or dm_list_versions → id. ' +
+        'The tool derives the DM lineage URN internally for the pushpin; you only need this one URN.',
     ),
   global_offset: z
     .object({ x: z.number(), y: z.number(), z: z.number() })
@@ -73,8 +86,8 @@ const inputSchema = z.object({
         'If omitted, auto-detected from existing pins on this model via filter[linkedDocumentUrn]. ' +
         'Defaults to {x:0,y:0,z:0} with a WARNING when no existing pins are found. ' +
         'Known calibrated offsets (Ken-MCP test project) — ' +
-        'Plumbing model (lineage zxhzGseAS7yHZSRRho0H1A): {x:-14.327438466,y:3.055270374,z:26.715703010}; ' +
-        'Architectural model (lineage mMOB5AnzRTO6kouVvXmlRw): {x:-19.068394820,y:-5.405197144,z:25.708333651}.',
+        'Plumbing model (vf.zxhzGseAS7yHZSRRho0H1A?version=3): {x:-14.327438466,y:3.055270374,z:26.715703010}; ' +
+        'Architectural model (vf.mMOB5AnzRTO6kouVvXmlRw?version=4): {x:-19.068394820,y:-5.405197144,z:25.708333651}.',
     ),
   unit_factor: z
     .number()
@@ -184,6 +197,8 @@ interface ResolvedPin {
 
 async function resolvePin(input: PinElementInput, ctx: ToolContext): Promise<ResolvedPin> {
   const pid = stripBPrefix(input.project_id);
+  // Derive DM lineage URN (used for pin urn + globalOffset filter) from the version URN
+  const lineageUrn = lineageFromVersionUrn(input.model_version_urn);
 
   // 1. Validate issue_subtype_id
   const types = await listIssueTypes(ctx.auth, input.project_id);
@@ -206,7 +221,7 @@ async function resolvePin(input: PinElementInput, ctx: ToolContext): Promise<Res
   // 2. Parallel: MD manifest + AECDM positions
   validateCategoryName(input.category);
   const [manifest, aecdmPositions] = await Promise.all([
-    getMdManifest(ctx.auth, input.model_lineage_urn),
+    getMdManifest(ctx.auth, input.model_version_urn),
     queryElementPositions(ctx.auth, input.element_group_id, input.category, {
       maxElements: 2000,
     }),
@@ -217,7 +232,7 @@ async function resolvePin(input: PinElementInput, ctx: ToolContext): Promise<Res
   if (viewables3d.length === 0) {
     throw new BusinessRuleError(
       'no_3d_viewable',
-      `No 3D viewable found in the manifest for model ${input.model_lineage_urn}. ` +
+      `No 3D viewable found in the manifest for model ${input.model_version_urn}. ` +
         `Run md_trigger_translation first and wait for status "success".`,
     );
   }
@@ -272,7 +287,7 @@ async function resolvePin(input: PinElementInput, ctx: ToolContext): Promise<Res
       }>;
     }>(ctx.auth, `/construction/issues/v1/projects/${pid}/issues`, {
       baseUrl: APS_BASE,
-      params: { 'filter[linkedDocumentUrn]': input.model_lineage_urn, limit: 5 },
+      params: { 'filter[linkedDocumentUrn]': lineageUrn, limit: 5 },
     });
 
     let found: Vec3 | undefined;
@@ -301,7 +316,7 @@ async function resolvePin(input: PinElementInput, ctx: ToolContext): Promise<Res
   // 7. Resolve objectId via MD properties (best-effort; enables "View in Model" deep link)
   let objectId: number | undefined;
   try {
-    const mdElements = await getMdProperties(ctx.auth, input.model_lineage_urn, {
+    const mdElements = await getMdProperties(ctx.auth, input.model_version_urn, {
       viewGuid: chosen.guid,
       categoryFilter: input.category,
       maxResults: 2000,
@@ -313,13 +328,18 @@ async function resolvePin(input: PinElementInput, ctx: ToolContext): Promise<Res
   }
 
   // 8. Build pushpin linkedDocument
+  // Extract version number from model_version_urn (?version=N) — required by ACC Issues API.
+  const versionMatch = /[?&]version=(\d+)/.exec(input.model_version_urn);
+  const createdAtVersion = versionMatch ? parseInt(versionMatch[1]!, 10) : undefined;
+
   const linkedDocument = buildPushpin({
-    lineageUrn: input.model_lineage_urn,
+    lineageUrn,
     viewableGuid: chosen.guid,
     viewableName: chosen.name,
     position: viewerPosition,
     ...(objectId !== undefined ? { objectId } : {}),
     externalId: input.element_external_id,
+    ...(createdAtVersion !== undefined ? { createdAtVersion } : {}),
   });
 
   // 9. Build issue body
@@ -399,7 +419,7 @@ export const pinElementTool: MutationToolDef<typeof inputSchema> = {
       ...(resolved.globalOffsetSource === 'fallback_zero'
         ? [
             `WARNING: global_offset defaulted to (0,0,0) — no existing pins found for model ` +
-              `${input.model_lineage_urn}. Pin X/Y position will be in global space and may appear ` +
+              `${input.model_version_urn}. Pin X/Y position will be in global space and may appear ` +
               `off-model. Provide global_offset explicitly for accuracy.`,
           ]
         : [`globalOffset source: ${resolved.globalOffsetSource} → (${resolved.globalOffset.x}, ${resolved.globalOffset.y}, ${resolved.globalOffset.z})`]),

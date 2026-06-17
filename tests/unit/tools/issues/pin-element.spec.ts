@@ -81,7 +81,7 @@ const TYPES: IssueType[] = [
 
 /** Minimal SVF2 manifest with one 3D viewable and one 2D viewable */
 const MANIFEST: MdManifest = {
-  urn: 'urn:adsk.wipprod:dm.lineage:testlineage',
+  urn: 'urn:adsk.wipprod:fs.file:vf.testlineage?version=1',
   status: 'success',
   progress: '100%',
   derivatives: [
@@ -172,7 +172,7 @@ const BASE_INPUT = {
   element_group_id: 'urn:adsk.aecdm:el-group:abc',
   category: 'Doors',
   element_external_id: 'ext-id-door-001',
-  model_lineage_urn: 'urn:adsk.wipprod:dm.lineage:testlineage',
+  model_version_urn: 'urn:adsk.wipprod:fs.file:vf.testlineage?version=1',
   title: 'Door clearance issue',
   issue_subtype_id: 'subtype-active',
   status: 'open' as const,
@@ -219,7 +219,7 @@ describe('issues_pin_element — buildPreview', () => {
 
     const pin = (body['linkedDocuments'] as Array<Record<string, unknown>>)[0];
     expect(pin!['type']).toBe('TwoDVectorPushpin');
-    expect(pin!['urn']).toBe(BASE_INPUT.model_lineage_urn);
+    expect(pin!['urn']).toBe('urn:adsk.wipprod:dm.lineage:testlineage');
 
     const details = pin!['details'] as Record<string, unknown>;
     expect((details['viewable'] as Record<string, unknown>)['guid']).toBe('3d-view-guid');
