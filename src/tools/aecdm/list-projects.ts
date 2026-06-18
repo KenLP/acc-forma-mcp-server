@@ -17,7 +17,8 @@ export const aecdmListProjectsTool: ReadToolDef<typeof inputSchema> = {
   title: 'List AEC Data Model Projects',
   description:
     'Lists projects available in the AEC Data Model (BIM GraphQL API). ' +
-    'Returns project IDs and names for use with aecdm_list_element_groups. ' +
+    'Returns the AECDM project id (for element queries) AND the Data Management project id ' +
+    '(dataManagementProjectId, b.<guid>) for use with Issues/Reviews APIs — both ids in one call. ' +
     'Requires an AECDM hub ID from aecdm_list_hubs (not the same as a DM hub ID).',
   kind: 'read',
   scopes: ['data:read'],
@@ -41,7 +42,12 @@ export const aecdmListProjectsTool: ReadToolDef<typeof inputSchema> = {
       };
     }
 
-    const lines = projects.map((p) => `• ${p.name}  (ID: ${p.id})`);
+    const lines = projects.map((p) => {
+      const dmLine = p.dataManagementProjectId
+        ? `\n    DM/Issues id: ${p.dataManagementProjectId}`
+        : '';
+      return `• ${p.name}\n    AECDM id: ${p.id}${dmLine}`;
+    });
 
     return {
       content: [
@@ -50,7 +56,8 @@ export const aecdmListProjectsTool: ReadToolDef<typeof inputSchema> = {
           text:
             `Found ${projects.length} AEC project(s):\n\n` +
             lines.join('\n') +
-            '\n\nUse a project ID with aecdm_list_element_groups to see BIM models.',
+            '\n\nUse the AECDM id with aecdm_list_element_groups. ' +
+            'Use the DM/Issues id (dataManagementProjectId) with issues_*, reviews_*, and dm_* tools.',
         },
       ],
       structuredContent: { projects },

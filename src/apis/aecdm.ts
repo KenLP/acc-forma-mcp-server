@@ -11,6 +11,13 @@ export interface AecdmHub {
 export interface AecProject {
   id: string;
   name: string;
+  /**
+   * Data Management project id (`b.<guid>`) for this project, resolved from
+   * `alternativeIdentifiers.dataManagementAPIProjectId`. Use this id with Issues, Reviews,
+   * and other ACC APIs that require a DM project id. May be undefined if the platform does
+   * not return the field for a given project.
+   */
+  dataManagementProjectId?: string;
 }
 
 export interface AecElementGroup {
@@ -84,7 +91,11 @@ const LIST_PROJECTS_QUERY = /* GraphQL */ `
   query ListProjects($hubId: ID!) {
     projects(hubId: $hubId) {
       pagination { cursor }
-      results { id name }
+      results {
+        id
+        name
+        alternativeIdentifiers { dataManagementAPIProjectId }
+      }
     }
   }
 `;
@@ -252,9 +263,21 @@ export async function listAecdmProjects(
   hubId: string,
 ): Promise<AecProject[]> {
   const data = await apsGraphQL<{
-    projects: { results: Array<{ id: string; name: string }> };
+    projects: {
+      results: Array<{
+        id: string;
+        name: string;
+        alternativeIdentifiers?: { dataManagementAPIProjectId?: string } | null;
+      }>;
+    };
   }>(auth, LIST_PROJECTS_QUERY, { hubId });
-  return data.projects.results ?? [];
+  return (data.projects.results ?? []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    ...(p.alternativeIdentifiers?.dataManagementAPIProjectId
+      ? { dataManagementProjectId: p.alternativeIdentifiers.dataManagementAPIProjectId }
+      : {}),
+  }));
 }
 
 export async function listAecdmElementGroups(
