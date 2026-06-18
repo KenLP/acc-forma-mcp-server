@@ -12,6 +12,14 @@ describe('project-id utils', () => {
     it('only removes leading b.', () => {
       expect(stripBPrefix('b.b.abc')).toBe('b.abc');
     });
+    it('extracts GUID from workspace URN (urn:adsk.workspace:env.project:GUID)', () => {
+      expect(
+        stripBPrefix('urn:adsk.workspace:prod.project:80424913-8ca5-4e39-80b0-ebf00ad69385'),
+      ).toBe('80424913-8ca5-4e39-80b0-ebf00ad69385');
+    });
+    it('extracts last segment from any urn: prefixed id', () => {
+      expect(stripBPrefix('urn:adsk.workspace:staging.project:abc-def-123')).toBe('abc-def-123');
+    });
   });
 
   describe('addBPrefix', () => {
