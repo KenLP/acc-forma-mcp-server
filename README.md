@@ -127,7 +127,7 @@ Then point your MCP client at the built file:
 
 ## Available Tools
 
-## Tools (39)
+## Tools (42)
 
 All tools are grouped by domain. Read tools take no approval; write/mutation tools (marked ✍️) follow the [two-call dry-run protocol](#safety).
 
@@ -151,13 +151,14 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 | `dm_get_item` | Get metadata for a single item (file or folder). |
 | `dm_list_versions` | List all versions of a file with version numbers and timestamps. |
 
-### Issues (11)
+### Issues (12)
 
 | Tool | Purpose |
 |---|---|
 | `issues_list` | List issues in a project with filters (status, type, assignee). |
 | `issues_get` | Get a single issue with full details, including `permittedStatuses` and `permittedAttributes` for the current user. |
 | `issues_create` ✍️ | Create a new issue with subtype, location, due date, assignment, and optional pushpin links. |
+| `issues_pin_element` ✍️ | Create an issue with a 3D pushpin auto-placed on a BIM element — resolves the viewable GUID, objectId, globalOffset and viewer position from the element's External ID in one call. |
 | `issues_update` ✍️ | Update an existing issue — status, title, description, assignee, due date, subtype, location (sparse PATCH; only provided fields change). |
 | `issues_add_comment` ✍️ | Add a comment to an existing issue. |
 | `issues_list_comments` | List the comment thread on an issue, paginated. |
@@ -200,6 +201,13 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 | `md_trigger_translation` ✍️ | Submit a new SVF2 translation job for a model version. Poll with `md_get_manifest`. |
 
 > **Note:** bounding boxes are NOT available from the MD Properties API for any SVF2 model — this is an APS platform limitation. For element bboxes, the Model Properties API (`/construction/index/v2/`) is the correct path (requires 3LO auth — Phase 3).
+
+### Model Coordination — Clash Detection (2)
+
+| Tool | Purpose |
+|---|---|
+| `mc_list_modelsets` | List the coordination modelsets (coordination spaces) in a project. The SSA needs **Model Coordination product access** (Member/Administrator) or the API returns 404. |
+| `mc_list_clashes` | Pull clash-detection results for a modelset — each clash pair with its two models, element identities (objectId/dbId), and penetration depth (`distance` negative = hard clash). Joins the clash/instance/document result files; sorted worst-first. Feeds `issues_pin_element` to turn a clash into a pinned issue. |
 
 ### ACC Docs — Viewables (1)
 

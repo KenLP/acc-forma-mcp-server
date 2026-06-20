@@ -49,6 +49,10 @@ import { mdGetManifestTool } from './md/get-manifest.js';
 import { mdGetPropertiesTool } from './md/get-properties.js';
 import { mdTriggerTranslationTool } from './md/trigger-translation.js';
 
+// ---- Model Coordination (clash detection) -----------------------------------
+import { mcListModelSetsTool } from './mc/list-modelsets.js';
+import { mcListClashesTool } from './mc/list-clashes.js';
+
 // ---- ACC Docs (viewables for 2D PDF pushpins) -------------------------------
 import { docsGetViewablesTool } from './docs/get-viewables.js';
 
@@ -109,6 +113,10 @@ export const toolRegistry: AnyToolDef[] = [
   mdGetManifestTool,
   mdGetPropertiesTool,
   mdTriggerTranslationTool,
+
+  // Model Coordination — clash detection (2)
+  mcListModelSetsTool,
+  mcListClashesTool,
 
   // ACC Docs — viewables for 2D PDF pushpins (1)
   docsGetViewablesTool,
