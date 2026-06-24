@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ReadToolDef } from '../_types.js';
-import { getMdProperties } from '../../apis/model-derivative.js';
+import { getMdProperties, aggregateMdProperties } from '../../apis/model-derivative.js';
 
 const inputSchema = z.object({
   urn: z
@@ -62,7 +62,28 @@ const inputSchema = z.object({
         '  • Floors by level + area:  fields=["Level", "Area"]\n' +
         '  • Walls by level + area:   fields=["Base Constraint", "Area"]  (walls use "Base Constraint", not "Level")\n' +
         '  • Also useful: "Volume", "Top Constraint", "Phase Created", "Type Name", "Material".\n' +
-        'Each element returns a `properties` map of the matched params; group/sum them in your reasoning.',
+        'Each element returns a `properties` map of the matched params; group/sum them in your reasoning. ' +
+        'NOTE: per-element output is capped at max_results and only ~30 rows render in text — for a ' +
+        'whole-building total use `group_by` instead (it sums server-side across EVERY element).',
+    ),
+  group_by: z
+    .string()
+    .optional()
+    .describe(
+      '⭐ Server-side GROUP + SUM across the ENTIRE category (no 30-row display cap, no max_results ' +
+        'limit). Set this to the level/grouping parameter and the tool returns one compact row per ' +
+        'group — count + summed area — covering every element in the building. This is the correct ' +
+        'way to answer "total floor/wall area per level":\n' +
+        '  • Floors per level:  category_filter="Floors", group_by="Level"\n' +
+        '  • Walls per level:   category_filter="Walls",  group_by="Base Constraint"\n' +
+        'By default it sums "Area" (see sum_fields). Pair with category_filter for a clean take-off.',
+    ),
+  sum_fields: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Numeric parameters to SUM within each group when group_by is set. Defaults to ["Area"]. ' +
+        'E.g. ["Area", "Volume"]. Values are coerced to numbers (unit suffixes like "ft^2" are stripped).',
     ),
 });
 
@@ -76,10 +97,14 @@ export const mdGetPropertiesTool: ReadToolDef<typeof inputSchema> = {
     'needing Revit constraints/parameters.** MD/SVF2 exposes the complete parameter set — ' +
     '`Level`, `Base Constraint`, `Top Constraint`, `Area`, `Volume`, `Phase`, materials — that ' +
     '**AECDM omits** (AECDM drops the Level/Constraint association, so it cannot group Floors/Walls ' +
-    'by storey). Example: "total floor & wall area per level" →\n' +
-    '  • `md_get_properties(urn, category_filter="Floors", fields=["Level","Area"])`\n' +
-    '  • `md_get_properties(urn, category_filter="Walls", fields=["Base Constraint","Area"])`\n' +
-    'then group by the level field and sum Area in your reasoning (one call per category, up to 1000 elements).\n\n' +
+    'by storey).\n\n' +
+    '⭐⭐ **For whole-building take-offs, use `group_by` — it sums server-side across EVERY element** ' +
+    '(no max_results cap, no 30-row display limit). Example "total floor & wall area per level":\n' +
+    '  • `md_get_properties(urn, category_filter="Floors", group_by="Level")`\n' +
+    '  • `md_get_properties(urn, category_filter="Walls", group_by="Base Constraint")`\n' +
+    'returns one compact row per level (count + ΣArea) for the entire building — no manual summing.\n' +
+    'Use `fields` (per-element projection) only when you need each element\'s raw values; it is capped ' +
+    'at max_results and renders ~30 rows, so do NOT sum a whole building from it — use `group_by`.\n\n' +
     'Other use cases: inspect parameters, map objectIds↔names↔categories, IFC data.\n' +
     'The model must have a successful SVF2 translation — check with `md_get_manifest` first.\n\n' +
     '**AECDM vs MD — when to use which:**\n' +
@@ -103,6 +128,71 @@ export const mdGetPropertiesTool: ReadToolDef<typeof inputSchema> = {
 
   execute: async (input, ctx) => {
     const auth = ctx.auth2lo ?? ctx.auth;
+
+    // ── Server-side group + sum (whole-category take-off, no display cap) ──────
+    if (input.group_by !== undefined) {
+      const aggOpts: import('../../apis/model-derivative.js').AggregateMdOptions = {
+        groupBy: input.group_by,
+      };
+      if (input.view_guid !== undefined) aggOpts.viewGuid = input.view_guid;
+      if (input.category_filter !== undefined) aggOpts.categoryFilter = input.category_filter;
+      if (input.sum_fields !== undefined) aggOpts.sumFields = input.sum_fields;
+      const agg = await aggregateMdProperties(auth, input.urn, aggOpts);
+
+      if (agg.totalCount === 0) {
+        const msg = input.category_filter
+          ? `No elements found matching category "${input.category_filter}". ` +
+            'Verify the category name and that the model has a successful SVF2 translation.'
+          : 'No elements found. The model may not have a successful SVF2 translation — run md_get_manifest to check.';
+        return {
+          content: [{ type: 'text', text: msg }],
+          structuredContent: { groups: [], totalCount: 0 },
+        };
+      }
+
+      const num = (n: number): string =>
+        n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+      const sumStr = (sums: Record<string, number>): string =>
+        agg.sumFields
+          .map((f) => {
+            const v = sums[f];
+            return `Σ${f} ${v !== undefined ? num(v) : '—'}`;
+          })
+          .join(', ');
+
+      const catLabel = input.category_filter ?? 'elements';
+      const rows = agg.groups.map(
+        (g) => `• ${g.group}: ${g.count} ${catLabel}, ${sumStr(g.sums)}`,
+      );
+      const totals = `Total: ${agg.totalCount} ${catLabel}, ${sumStr(agg.grandTotals)}`;
+      const note =
+        `\n\n(Summed server-side across all ${agg.scanned} scanned elements — ` +
+        `values in model units, ft² for US-imperial Revit.` +
+        (agg.truncated ? ' ⚠️ scan hit the safety cap; totals may be partial.' : '') +
+        ')';
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text:
+              `${catLabel} grouped by "${agg.groupByField}" — ${agg.groups.length} group(s):\n\n` +
+              rows.join('\n') +
+              `\n\n${totals}${note}`,
+          },
+        ],
+        structuredContent: {
+          groups: agg.groups,
+          totalCount: agg.totalCount,
+          grandTotals: agg.grandTotals,
+          groupByField: agg.groupByField,
+          sumFields: agg.sumFields,
+          scanned: agg.scanned,
+          truncated: agg.truncated,
+        },
+      };
+    }
+
     const propertiesOpts: import('../../apis/model-derivative.js').GetMdPropertiesOptions = {
       maxResults: input.max_results,
     };

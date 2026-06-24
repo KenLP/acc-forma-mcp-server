@@ -221,8 +221,29 @@ export interface GetMdPropertiesOptions {
 }
 
 /**
+ * Find a single Revit parameter in an MD property tree (groups → fields).
+ * Exact (case-insensitive) match preferred; falls back to the first substring match.
+ * Returns the actual key found plus its value, or undefined.
+ */
+function findParam(
+  props: Record<string, Record<string, unknown>>,
+  name: string,
+): { key: string; value: unknown } | undefined {
+  const fl = name.toLowerCase();
+  let fuzzy: { key: string; value: unknown } | undefined;
+  for (const group of Object.values(props)) {
+    if (!group || typeof group !== 'object') continue;
+    for (const [k, v] of Object.entries(group)) {
+      const kl = k.toLowerCase();
+      if (kl === fl) return { key: k, value: v };
+      if (!fuzzy && kl.includes(fl)) fuzzy = { key: k, value: v };
+    }
+  }
+  return fuzzy;
+}
+
+/**
  * Project requested parameter names from an MD property tree (groups → fields).
- * Exact (case-insensitive) match preferred; falls back to substring match.
  * Returns a flat map keyed by the actual parameter name found.
  */
 function projectFields(
@@ -231,22 +252,31 @@ function projectFields(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const field of fields) {
-    const fl = field.toLowerCase();
-    let found: { key: string; value: unknown } | undefined;
-    let fuzzy: { key: string; value: unknown } | undefined;
-    for (const group of Object.values(props)) {
-      if (!group || typeof group !== 'object') continue;
-      for (const [k, v] of Object.entries(group)) {
-        const kl = k.toLowerCase();
-        if (kl === fl) { found = { key: k, value: v }; break; }
-        if (!fuzzy && kl.includes(fl)) fuzzy = { key: k, value: v };
-      }
-      if (found) break;
-    }
-    const hit = found ?? fuzzy;
+    const hit = findParam(props, field);
     if (hit) out[hit.key] = hit.value;
   }
   return out;
+}
+
+/** Stringify a scalar MD parameter value for use as a group key. */
+function scalarToString(v: unknown): string {
+  if (v === null || v === undefined) return '(none)';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean' || typeof v === 'bigint') return String(v);
+  return JSON.stringify(v) ?? '(none)';
+}
+
+/** Coerce an MD parameter value to a number — handles raw numbers and unit-suffixed strings ("465.6 ft^2"). */
+function toNumber(v: unknown): number | undefined {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  if (typeof v === 'string') {
+    const m = v.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+    if (m) {
+      const n = parseFloat(m[0]);
+      return Number.isFinite(n) ? n : undefined;
+    }
+  }
+  return undefined;
 }
 
 interface MdTreeNode {
@@ -357,6 +387,136 @@ export async function getMdProperties(
   } while (cursor);
 
   return elements;
+}
+
+// ── Server-side aggregation (group + sum) ──────────────────────────────────────
+
+export interface MdAggregateGroup {
+  /** Group value (e.g. a level name "L3"), or "(no <field>)" when the element lacks it. */
+  group: string;
+  /** Number of elements in this group. */
+  count: number;
+  /** Summed value per requested numeric field (e.g. {"Area": 12626.4}). */
+  sums: Record<string, number>;
+}
+
+export interface MdAggregateResult {
+  groups: MdAggregateGroup[];
+  /** Elements that matched the category filter and were grouped. */
+  totalCount: number;
+  /** Grand total per summed field across all groups. */
+  grandTotals: Record<string, number>;
+  groupByField: string;
+  sumFields: string[];
+  /** Total elements scanned from the model (before category filtering). */
+  scanned: number;
+  /** True if the scan hit the maxScan safety cap (results may be partial). */
+  truncated: boolean;
+}
+
+export interface AggregateMdOptions {
+  viewGuid?: string;
+  categoryFilter?: string;
+  /** Parameter to group by (e.g. "Level" for floors, "Base Constraint" for walls). */
+  groupBy: string;
+  /** Numeric parameters to sum within each group. Defaults to ["Area"]. */
+  sumFields?: string[];
+  /** Safety cap on elements scanned. Defaults to 100000 (covers any real model). */
+  maxScan?: number;
+}
+
+/**
+ * Group ALL elements of a category by a Revit parameter and sum numeric fields, server-side.
+ *
+ * Unlike `getMdProperties` (which caps at `maxResults` and the tool only displays the first 30),
+ * this paginates through the ENTIRE model and returns a compact per-group rollup — so "total floor
+ * area per level" covers every floor in the building, not a 30-element sample. This is the reliable
+ * way to answer take-off questions without dumping thousands of rows into context.
+ */
+export async function aggregateMdProperties(
+  auth: AuthProvider,
+  urn: string,
+  opts: AggregateMdOptions,
+): Promise<MdAggregateResult> {
+  const encoded = encodeMdUrn(urn);
+  const { categoryFilter, groupBy } = opts;
+  const sumFields = opts.sumFields && opts.sumFields.length > 0 ? opts.sumFields : ['Area'];
+  const maxScan = opts.maxScan ?? 100000;
+
+  let guid = opts.viewGuid;
+  if (!guid) {
+    const views = await getMdViews(auth, urn);
+    const view3d = views.find((v) => v.role === '3d') ?? views[0];
+    if (!view3d) throw new Error('No views in derivative — translate the model first (md_trigger_translation).');
+    guid = view3d.guid;
+  }
+
+  const categoryMap = categoryFilter ? await getMdCategoryMap(auth, urn, guid) : undefined;
+
+  const groups = new Map<string, { count: number; sums: Record<string, number> }>();
+  let scanned = 0;
+  let matched = 0;
+  let truncated = false;
+  let cursor: string | undefined;
+
+  do {
+    const params: Record<string, string | number | boolean | undefined> = { forceget: true };
+    if (cursor) params['pageState'] = cursor;
+
+    const resp = await apsRequest<RawPropertiesResp>(
+      auth,
+      `/modelderivative/v2/designdata/${encoded}/metadata/${guid}/properties`,
+      { params },
+    );
+
+    for (const raw of resp.data?.collection ?? []) {
+      if (scanned >= maxScan) { truncated = true; break; }
+      scanned++;
+
+      const props = raw.properties ?? {};
+      const category = categoryMap?.get(raw.objectid) ?? extractCategory(props);
+      if (categoryFilter) {
+        const catLower = categoryFilter.toLowerCase();
+        const catMatch = category !== undefined && category.toLowerCase().includes(catLower);
+        const nameMatch = raw.name.toLowerCase().includes(catLower);
+        if (!catMatch && !nameMatch) continue;
+      }
+
+      const gp = findParam(props, groupBy);
+      const groupKey = gp ? scalarToString(gp.value) : `(no ${groupBy})`;
+      matched++;
+
+      let g = groups.get(groupKey);
+      if (!g) { g = { count: 0, sums: {} }; groups.set(groupKey, g); }
+      g.count++;
+      for (const sf of sumFields) {
+        const hit = findParam(props, sf);
+        const n = hit ? toNumber(hit.value) : undefined;
+        if (n !== undefined) g.sums[sf] = (g.sums[sf] ?? 0) + n;
+      }
+    }
+
+    cursor = scanned < maxScan ? resp.pagination?.cursor : undefined;
+  } while (cursor);
+
+  const groupArr: MdAggregateGroup[] = Array.from(groups.entries())
+    .map(([group, v]) => ({ group, count: v.count, sums: v.sums }))
+    .sort((a, b) => b.count - a.count);
+
+  const grandTotals: Record<string, number> = {};
+  for (const g of groupArr) {
+    for (const [k, v] of Object.entries(g.sums)) grandTotals[k] = (grandTotals[k] ?? 0) + v;
+  }
+
+  return {
+    groups: groupArr,
+    totalCount: matched,
+    grandTotals,
+    groupByField: groupBy,
+    sumFields,
+    scanned,
+    truncated,
+  };
 }
 
 // ── Translation job ───────────────────────────────────────────────────────────
