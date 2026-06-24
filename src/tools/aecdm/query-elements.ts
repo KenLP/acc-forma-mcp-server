@@ -30,10 +30,14 @@ export const aecdmQueryElementsTool: ReadToolDef<typeof inputSchema> = {
     '**API boundary — do NOT confuse with Model Derivative:**\n' +
     '  • This tool uses **AECDM GraphQL** (semantic/parameter data, live BIM data).\n' +
     '  • For element bounding boxes (AABBs) or geometry extents, use `md_get_properties` instead.\n' +
-    '  • For checking soft clash / clearance, use `md_get_properties` + `md_check_clearance`.\n\n' +
+    '  • For **level/storey, Base Constraint, Top Constraint, Host** — and therefore any ' +
+    'per-level grouping or area take-off — use `md_get_properties` (with `fields=[...]`). ' +
+    'AECDM omits these reference parameters; it only returns offsets like "Base Offset" / ' +
+    '"Elevation at Bottom", never the level name, so you CANNOT group by storey from this tool.\n\n' +
     'Possible categories: Walls, Windows, Floors, Doors, Furniture, Ceilings, Electrical Equipment. ' +
     'Use aecdm_list_categories to discover all available categories. ' +
-    'Use aecdm_aggregate_by_parameter to count elements grouped by a property.',
+    'Use aecdm_aggregate_by_parameter to count elements grouped by a *value* property ' +
+    '(Type Name, Material) — NOT by level.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],
