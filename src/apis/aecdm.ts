@@ -232,7 +232,10 @@ async function fetchWithFilter(
   maxElements: number,
 ): Promise<AecElement[]> {
   const all: AecElement[] = [];
-  const pageLimit = Math.min(maxElements, 100);
+  // AECDM allows up to 500 per page (verified; 501+ → "limit must be between 1 and 500").
+  // Cursor pagination is sequential, so the larger page size collapses 5 round-trips
+  // into 1 for the common ≤500 query — the single biggest AECDM latency win.
+  const pageLimit = Math.min(maxElements, 500);
   let cursor: string | undefined;
   do {
     const data = await apsGraphQL<ElementsPage>(auth, LIST_ELEMENTS_FILTERED_QUERY, {
@@ -402,24 +405,29 @@ export async function queryElementPositions(
 
   // Batch element IDs into geometryDataByElements calls
   const transformByElementId = new Map<string, TransformDto | null>();
+  // Geometry batches are independent. AECDM `/aec/graphql` has ~2s base latency, so
+  // running them sequentially dominated wall-clock — fetch concurrently (cap 8). The
+  // shared Map is written only after each await on the single JS thread, so no race.
+  const batchTasks: Array<() => Promise<void>> = [];
   for (let i = 0; i < elements.length; i += batchSize) {
-    const chunk = elements.slice(i, i + batchSize);
-    const ids = chunk.map((el) => el.id);
-    const data = await apsGraphQL<{
-      geometryDataByElements: {
-        geometryData: Array<{
-          elementID: string;
-          pieces: Array<{ transform: TransformDto | null }> | null;
-        }> | null;
-      } | null;
-    }>(auth, LIST_GEOMETRY_DATA_QUERY, { elementIds: ids });
-
-    const rows = data.geometryDataByElements?.geometryData ?? [];
-    for (const row of rows) {
-      const firstPiece = row.pieces?.[0];
-      transformByElementId.set(row.elementID, firstPiece?.transform ?? null);
-    }
+    const ids = elements.slice(i, i + batchSize).map((el) => el.id);
+    batchTasks.push(async () => {
+      const data = await apsGraphQL<{
+        geometryDataByElements: {
+          geometryData: Array<{
+            elementID: string;
+            pieces: Array<{ transform: TransformDto | null }> | null;
+          }> | null;
+        } | null;
+      }>(auth, LIST_GEOMETRY_DATA_QUERY, { elementIds: ids });
+      const rows = data.geometryDataByElements?.geometryData ?? [];
+      for (const row of rows) {
+        const firstPiece = row.pieces?.[0];
+        transformByElementId.set(row.elementID, firstPiece?.transform ?? null);
+      }
+    });
   }
+  await withConcurrencyLimit(batchTasks, 8);
 
   const positions: AecElementPosition[] = elements.map((el) => {
     const externalId = findPropValue(el.properties, 'External ID');
@@ -500,10 +508,26 @@ const COMMON_REVIT_CATEGORIES = [
   'Columns', 'Beams',
 ];
 
+// Lightweight probe — fetches only element IDs (no name/properties), single page.
+// Category discovery just needs existence + a rough count, so the heavy
+// LIST_ELEMENTS_FILTERED_QUERY (full properties × up to 100 elements × ~60 probes)
+// was wasteful. id-only keeps each probe to one cheap round-trip.
+const PROBE_CATEGORY_QUERY = /* GraphQL */ `
+  query ProbeCategory($elementGroupId: ID!, $filter: String!, $limit: Int) {
+    elementsByElementGroup(
+      elementGroupId: $elementGroupId
+      filter: { query: $filter }
+      pagination: { limit: $limit }
+    ) {
+      results { id }
+    }
+  }
+`;
+
 /**
- * Probe a single category to count its elements. Uses limit=1 paging to
- * minimise payload — we just need to know if elements exist and roughly how many.
- * Returns the count of elements found (capped at probeLimit).
+ * Probe a single category for existence + a rough count (capped at probeLimit).
+ * Fetches IDs only in a single page — the cheapest call that confirms the category
+ * is present in the element group.
  */
 async function probeCategoryCount(
   auth: AuthProvider,
@@ -512,13 +536,14 @@ async function probeCategoryCount(
   probeLimit = 100,
 ): Promise<number> {
   try {
-    const elements = await fetchWithFilter(
-      auth,
+    const data = await apsGraphQL<{
+      elementsByElementGroup: { results: Array<{ id: string }> } | null;
+    }>(auth, PROBE_CATEGORY_QUERY, {
       elementGroupId,
-      `property.name.category=='${category}'`,
-      probeLimit,
-    );
-    return elements.length;
+      filter: `property.name.category=='${category}'`,
+      limit: probeLimit,
+    });
+    return data.elementsByElementGroup?.results?.length ?? 0;
   } catch {
     return 0;
   }
@@ -535,8 +560,9 @@ async function probeCategoryCount(
  * (whose schema doesn't match Autodesk's docs) and the no-filter
  * `elementsByElementGroup` query (which AECDM doesn't allow without a filter).
  *
- * Probes run with bounded concurrency (8 at a time) to avoid hitting APS
- * rate limits when the category list is large (~60 probes).
+ * Probes run with bounded concurrency (16 at a time) — id-only probes are cheap, so
+ * a higher cap cuts wall-clock (~60 probes / 16 ≈ 4 waves vs 8 waves at conc 8)
+ * without triggering 429s.
  * Categories with zero elements are excluded from the result.
  */
 export async function listAecdmCategories(
@@ -550,7 +576,7 @@ export async function listAecdmCategories(
     }),
   );
 
-  const results = await withConcurrencyLimit(tasks, 8);
+  const results = await withConcurrencyLimit(tasks, 16);
 
   return results
     .filter((r) => r.count > 0)
