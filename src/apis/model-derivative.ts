@@ -71,6 +71,13 @@ export interface MdElement {
   externalId: string;
   category?: string;
   bbox?: MdBoundingBox;
+  /**
+   * Projected Revit parameters requested via `GetMdPropertiesOptions.fields`
+   * (e.g. {"Level": "L3", "Base Constraint": "L1 - Block 35", "Area": "465.6 ft^2"}).
+   * MD/SVF2 exposes the FULL Revit parameter set — including Level/Constraint/Area —
+   * which AECDM omits. Keyed by the actual parameter name found.
+   */
+  properties?: Record<string, unknown>;
 }
 
 export interface MdTranslationJob {
@@ -204,6 +211,79 @@ export interface GetMdPropertiesOptions {
   categoryFilter?: string;
   objectIds?: number[];
   maxResults?: number;
+  /**
+   * Revit parameter names to project onto each element (case-insensitive; searched
+   * across all property groups). Enables grouping/quantity analysis the LLM can do
+   * in one call — e.g. fields ["Level","Area"] for floors, ["Base Constraint","Area"]
+   * for walls. Mirrors a field projection: keeps the payload lean vs the full tree.
+   */
+  fields?: string[];
+}
+
+/**
+ * Project requested parameter names from an MD property tree (groups → fields).
+ * Exact (case-insensitive) match preferred; falls back to substring match.
+ * Returns a flat map keyed by the actual parameter name found.
+ */
+function projectFields(
+  props: Record<string, Record<string, unknown>>,
+  fields: string[],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const field of fields) {
+    const fl = field.toLowerCase();
+    let found: { key: string; value: unknown } | undefined;
+    let fuzzy: { key: string; value: unknown } | undefined;
+    for (const group of Object.values(props)) {
+      if (!group || typeof group !== 'object') continue;
+      for (const [k, v] of Object.entries(group)) {
+        const kl = k.toLowerCase();
+        if (kl === fl) { found = { key: k, value: v }; break; }
+        if (!fuzzy && kl.includes(fl)) fuzzy = { key: k, value: v };
+      }
+      if (found) break;
+    }
+    const hit = found ?? fuzzy;
+    if (hit) out[hit.key] = hit.value;
+  }
+  return out;
+}
+
+interface MdTreeNode {
+  objectid?: number;
+  name?: string;
+  objects?: MdTreeNode[];
+}
+
+/**
+ * Build an `objectId → category` map from the MD object tree. Revit SVF2 nests every
+ * element under a category node (a child of the "Model" root) — e.g. "Walls", "Floors",
+ * "Doors". This is the reliable category source; the flat /properties response has none.
+ */
+export async function getMdCategoryMap(
+  auth: AuthProvider,
+  urn: string,
+  viewGuid: string,
+): Promise<Map<number, string>> {
+  const encoded = encodeMdUrn(urn);
+  const resp = await apsRequest<{ data?: { objects?: MdTreeNode[] } }>(
+    auth,
+    `/modelderivative/v2/designdata/${encoded}/metadata/${viewGuid}`,
+    { params: { forceget: true } },
+  );
+  const map = new Map<number, string>();
+  for (const root of resp.data?.objects ?? []) {
+    for (const catNode of root.objects ?? []) {
+      const cat = catNode.name ?? '';
+      const stack: MdTreeNode[] = [catNode];
+      while (stack.length > 0) {
+        const n = stack.pop()!;
+        if (typeof n.objectid === 'number') map.set(n.objectid, cat);
+        for (const child of n.objects ?? []) stack.push(child);
+      }
+    }
+  }
+  return map;
 }
 
 export async function getMdProperties(
@@ -212,7 +292,7 @@ export async function getMdProperties(
   opts: GetMdPropertiesOptions = {},
 ): Promise<MdElement[]> {
   const encoded = encodeMdUrn(urn);
-  const { categoryFilter, objectIds, maxResults = 200 } = opts;
+  const { categoryFilter, objectIds, maxResults = 200, fields } = opts;
 
   let guid = opts.viewGuid;
   if (!guid) {
@@ -221,6 +301,11 @@ export async function getMdProperties(
     if (!view3d) throw new Error('No views in derivative — translate the model first (md_trigger_translation).');
     guid = view3d.guid;
   }
+
+  // The flat /properties response has NO category field, so name/property matching is
+  // unreliable (esp. floors named "Concrete Slab…", or plural-vs-singular). The object
+  // TREE nests every element under its category node — the reliable category source.
+  const categoryMap = categoryFilter ? await getMdCategoryMap(auth, urn, guid) : undefined;
 
   const elements: MdElement[] = [];
   let cursor: string | undefined;
@@ -240,11 +325,10 @@ export async function getMdProperties(
       if (objectIds && !objectIds.includes(raw.objectid)) continue;
 
       const props = raw.properties ?? {};
-      const category = extractCategory(props);
+      // Prefer the tree-derived category (reliable); fall back to property scan.
+      const category = categoryMap?.get(raw.objectid) ?? extractCategory(props);
       if (categoryFilter) {
         const catLower = categoryFilter.toLowerCase();
-        // Match on category field if present; fall back to element name (common in Revit SVF2
-        // exports where the Category property group is absent from MEP/linked-file elements)
         const catMatch = category !== undefined && category.toLowerCase().includes(catLower);
         const nameMatch = raw.name.toLowerCase().includes(catLower);
         if (!catMatch && !nameMatch) continue;
@@ -262,6 +346,10 @@ export async function getMdProperties(
       };
       if (category !== undefined) el.category = category;
       if (parsed !== undefined) el.bbox = parsed;
+      if (fields && fields.length > 0) {
+        const projected = projectFields(props, fields);
+        if (Object.keys(projected).length > 0) el.properties = projected;
+      }
       elements.push(el);
     }
 

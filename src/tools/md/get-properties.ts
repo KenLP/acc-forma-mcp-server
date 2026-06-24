@@ -52,6 +52,18 @@ const inputSchema = z.object({
         'decimal feet for US-imperial Revit, metres for metric). ' +
         'Setting false speeds up retrieval when only element names/parameters are needed.',
     ),
+  fields: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Revit parameter names to return per element (case-insensitive; searched across all ' +
+        'property groups). This is the key to grouping/quantity analysis — MD exposes the FULL ' +
+        'Revit parameter set that AECDM omits. Examples:\n' +
+        '  • Floors by level + area:  fields=["Level", "Area"]\n' +
+        '  • Walls by level + area:   fields=["Base Constraint", "Area"]  (walls use "Base Constraint", not "Level")\n' +
+        '  • Also useful: "Volume", "Top Constraint", "Phase Created", "Type Name", "Material".\n' +
+        'Each element returns a `properties` map of the matched params; group/sum them in your reasoning.',
+    ),
 });
 
 export const mdGetPropertiesTool: ReadToolDef<typeof inputSchema> = {
@@ -59,17 +71,21 @@ export const mdGetPropertiesTool: ReadToolDef<typeof inputSchema> = {
   title: 'Get Model Derivative Element Properties',
   description:
     '**Model Derivative API** — fetches element properties for a translated model, ' +
-    'optionally including axis-aligned bounding boxes (AABBs) from the SVF2 derivative.\n\n' +
-    'Primary use cases:\n' +
-    '  • Inspect Revit element properties (dimensions, materials, IFC data)\n' +
-    '  • Map Revit objectIds to names and categories\n' +
-    '  • Get bounding boxes for spatial analysis (see ⚠️ below for SVF2 availability)\n\n' +
+    'with **field projection** (`fields`) over the FULL Revit parameter set.\n\n' +
+    '⭐ **Use this (not AECDM) for level grouping, area/quantity take-off, and any analysis ' +
+    'needing Revit constraints/parameters.** MD/SVF2 exposes the complete parameter set — ' +
+    '`Level`, `Base Constraint`, `Top Constraint`, `Area`, `Volume`, `Phase`, materials — that ' +
+    '**AECDM omits** (AECDM drops the Level/Constraint association, so it cannot group Floors/Walls ' +
+    'by storey). Example: "total floor & wall area per level" →\n' +
+    '  • `md_get_properties(urn, category_filter="Floors", fields=["Level","Area"])`\n' +
+    '  • `md_get_properties(urn, category_filter="Walls", fields=["Base Constraint","Area"])`\n' +
+    'then group by the level field and sum Area in your reasoning (one call per category, up to 1000 elements).\n\n' +
+    'Other use cases: inspect parameters, map objectIds↔names↔categories, IFC data.\n' +
     'The model must have a successful SVF2 translation — check with `md_get_manifest` first.\n\n' +
-    '**API boundary — do NOT confuse with AECDM:**\n' +
-    '  • This tool uses **Model Derivative API** (file-based, URN input, geometry data).\n' +
-    '  • For BIM parameter queries, category enumeration, or element counts by parameter, ' +
-    'use `aecdm_*` tools (they take `element_group_id`, not URN).\n' +
-    '  • AECDM returns element *origin points*; this tool returns full AABBs when available.\n\n' +
+    '**AECDM vs MD — when to use which:**\n' +
+    '  • **MD (this tool)** — full Revit parameters via `fields`; level/area/constraint grouping; URN input.\n' +
+    '  • **AECDM (`aecdm_*`)** — fast category enumeration + a curated property subset + element ' +
+    'origin points (for pushpins); takes `element_group_id`. Does NOT expose Level/Constraint.\n\n' +
     '⚠️ **Bbox availability:** bounding boxes are read from `__internal__.__boundingBox__` in SVF2. ' +
     'This field was available in the legacy SVF1 (Forge) format but is **not populated** in any ' +
     'current SVF2 translation, regardless of model type (MEP, Architecture, or Structural). ' +
@@ -93,6 +109,7 @@ export const mdGetPropertiesTool: ReadToolDef<typeof inputSchema> = {
     if (input.view_guid !== undefined) propertiesOpts.viewGuid = input.view_guid;
     if (input.category_filter !== undefined) propertiesOpts.categoryFilter = input.category_filter;
     if (input.object_ids !== undefined) propertiesOpts.objectIds = input.object_ids;
+    if (input.fields !== undefined) propertiesOpts.fields = input.fields;
     const elements = await getMdProperties(auth, input.urn, propertiesOpts);
 
     if (elements.length === 0) {
@@ -109,10 +126,15 @@ export const mdGetPropertiesTool: ReadToolDef<typeof inputSchema> = {
     const withBbox = elements.filter((e) => e.bbox !== undefined).length;
     const fmt = (n: number): string => n.toFixed(3);
 
+    const propStr = (el: typeof elements[number]): string =>
+      el.properties && Object.keys(el.properties).length > 0
+        ? `\n  ${Object.entries(el.properties).map(([k, v]) => `${k}: ${String(v)}`).join('  |  ')}`
+        : '';
+
     const lines = elements.slice(0, 30).map((el) => {
       const catStr = el.category ? `  [${el.category}]` : '';
       if (!el.bbox || !input.include_bbox) {
-        return `• ${el.name}  (objectId: ${el.objectId})${catStr}`;
+        return `• ${el.name}  (objectId: ${el.objectId})${catStr}${propStr(el)}`;
       }
       const { min, max } = el.bbox;
       const size = {
@@ -121,7 +143,7 @@ export const mdGetPropertiesTool: ReadToolDef<typeof inputSchema> = {
         z: max.z - min.z,
       };
       return (
-        `• ${el.name}  (objectId: ${el.objectId})${catStr}\n` +
+        `• ${el.name}  (objectId: ${el.objectId})${catStr}${propStr(el)}\n` +
         `  bbox: min(${fmt(min.x)}, ${fmt(min.y)}, ${fmt(min.z)})  ` +
         `max(${fmt(max.x)}, ${fmt(max.y)}, ${fmt(max.z)})  ` +
         `size(${fmt(size.x)}, ${fmt(size.y)}, ${fmt(size.z)})`
