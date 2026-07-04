@@ -1,5 +1,4 @@
 import { logger } from '../logger.js';
-import { env } from '../config/env.js';
 import type { AuthProvider } from '../auth/index.js';
 import { ApsApiError, ApsGraphQLError } from './errors.js';
 
@@ -7,6 +6,18 @@ const APS_BASE_URL = 'https://developer.api.autodesk.com';
 const GRAPHQL_URL = `${APS_BASE_URL}/aec/graphql`;
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1_000;
+
+// Region fallback when a request doesn't specify one. Kept as module state
+// (not config/env.js) so this file stays importable without FORMA env vars —
+// it is part of the `acc-forma-mcp-server/core` public surface. The MCP
+// server entrypoint overrides it from env at startup; core consumers either
+// call setDefaultApsRegion() once or pass options.region per request.
+let defaultApsRegion: string = process.env['APS_REGION'] ?? 'US';
+
+/** Override the region used when RequestOptions.region is not provided. */
+export function setDefaultApsRegion(region: string): void {
+  defaultApsRegion = region;
+}
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -31,7 +42,7 @@ export async function apsRequest<T>(
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
-      'x-ads-region': region ?? env.APS_REGION,
+      'x-ads-region': region ?? defaultApsRegion,
     };
 
     const resp = await fetch(url, {

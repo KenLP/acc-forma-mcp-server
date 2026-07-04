@@ -3,12 +3,17 @@ import { env } from './config/env.js';
 import { SsaAuthProvider } from './auth/ssa.js';
 import { TwoLeggedAuthProvider } from './auth/two-legged.js';
 import type { AuthProvider } from './auth/index.js';
+import { setDefaultApsRegion } from './http/client.js';
 import { buildServer } from './server.js';
 import { logger } from './logger.js';
 import { pruneOldAuditFiles } from './safety/audit-log.js';
 import { cleanupExpiredRows } from './persistence/db.js';
 
 async function main(): Promise<void> {
+  // http/client no longer reads config/env.js (it must stay env-free for the
+  // /core subpath) — propagate the validated region here instead.
+  setDefaultApsRegion(env.APS_REGION);
+
   logger.info(
     {
       version: '0.1.0',

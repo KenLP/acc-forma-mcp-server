@@ -317,6 +317,26 @@ Key variables:
 
 ---
 
+## Core SDK (`acc-forma-mcp-server/core`)
+
+The typed APS client layer (auth providers, `apsRequest`/`apsGraphQL`, all eight API domains) is also consumable as a **library** — no MCP server, no `APS_*`/`FORMA_*` env vars required at import:
+
+```ts
+import { SsaAuthProvider, issuesApi, mcApi } from 'acc-forma-mcp-server/core';
+
+const auth = new SsaAuthProvider(['data:read', 'data:write'], {
+  clientId, clientSecret, ssaId, ssaKeyId,
+  privateKey: pemString, // straight from a credential store — no key file needed
+});
+const issues = await issuesApi.listIssues(auth, projectId, { status: 'open' });
+```
+
+This is the shared kernel for sibling automation products (n8n nodes, cross-CDE extractors). Full guide: [docs/CORE_SDK.md](docs/CORE_SDK.md) · rationale: [ADR 0002](docs/adr/0002-core-subpath-export.md).
+
+> The safety layer (dry-run, approval tokens, audit chain) is MCP-server behavior and intentionally **not** part of core — write-guarding belongs to the server, not the HTTP client.
+
+---
+
 ## Development
 
 ```bash

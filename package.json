@@ -12,7 +12,11 @@
   },
   "main": "./dist/index.js",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js"
+    }
   },
   "keywords": [
     "mcp",
