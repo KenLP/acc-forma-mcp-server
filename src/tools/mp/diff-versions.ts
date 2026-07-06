@@ -54,6 +54,14 @@ const inputSchema = z.object({
     .max(5000)
     .default(2000)
     .describe('Cap on changed elements downloaded/detailed. Rollup counts still reflect all downloaded rows.'),
+  include_changes: z
+    .boolean()
+    .default(false)
+    .describe(
+      'Include the per-element list of changed parameters (old → new value) in structuredContent. ' +
+        'Needed to detect WHAT changed (e.g. a Room whose "Room Name"/"Department" changed = a function change). ' +
+        'Off by default to keep the response lean.',
+    ),
 });
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -181,7 +189,7 @@ export const mpDiffVersionsTool: ReadToolDef<typeof inputSchema> = {
         curVersionUrn: status.curVersionUrns[0],
         byCategory: rollup.byCategory,
         byChangeType: rollup.byChangeType,
-        elements,
+        elements: input.include_changes ? elements : elements.map(({ changes: _c, ...rest }) => rest),
         elementCount: elements.length,
         categoryFilter: input.category_filter ?? null,
       },

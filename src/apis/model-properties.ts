@@ -141,6 +141,14 @@ export async function downloadDiffFields(
 
 export type DiffChangeKind = 'ADDED' | 'REMOVED' | 'CHANGED';
 
+/** A single parameter whose value differs between the two versions. */
+export interface PropChange {
+  field: string;
+  category: string;
+  prev: unknown;
+  cur: unknown;
+}
+
 export interface DiffElement {
   /** Normalized change kind. */
   kind: DiffChangeKind;
@@ -152,6 +160,40 @@ export interface DiffElement {
   /** Viewer dbId (lmv) — anchor for pinning / viewer highlight. */
   lmvId?: number;
   svf2Id?: number;
+  /** For CHANGED rows: the parameters whose value changed (old → new). */
+  changes?: PropChange[];
+}
+
+// Internal MP field-categories to ignore when diffing property values (graph plumbing,
+// not user-meaningful). __name__ (rename) and __category__ (recategorize) are KEPT.
+const INTERNAL_CATEGORY_SKIP = new Set([
+  '__parent__', '__instanceof__', '__hastable__', '__viewable_in__',
+  '__externalref__', '__document__', '__hyperlink__', '__node_flags__',
+]);
+
+/** Diff cur vs prev property maps → the list of changed parameters, resolved to human names. */
+function computeChanges(
+  cur: Record<string, unknown>,
+  prev: Record<string, unknown>,
+  fields: Map<string, DiffField>,
+  cap = 25,
+): PropChange[] {
+  const out: PropChange[] = [];
+  for (const [key, curVal] of Object.entries(cur)) {
+    if (out.length >= cap) break;
+    if (!(key in prev)) continue;
+    const prevVal = prev[key];
+    if (asStr(prevVal) === asStr(curVal)) continue;
+    const f = fields.get(key);
+    if (f && INTERNAL_CATEGORY_SKIP.has(f.category)) continue;
+    out.push({
+      field: f?.name ?? key,
+      category: f?.category ?? '',
+      prev: prevVal,
+      cur: curVal,
+    });
+  }
+  return out;
 }
 
 const KIND_MAP: Record<string, DiffChangeKind> = {
@@ -215,6 +257,13 @@ export async function downloadDiffProperties(
       // The internal __category__ value is prefixed, e.g. "Revit Walls" → "Walls".
       el.category = asStr(props[catKey]).replace(/^Revit\s+/i, '');
     }
+
+    // For CHANGED rows, surface which parameters actually changed (old → new).
+    if (kind === 'CHANGED' && Object.keys(prevProps).length > 0) {
+      const changes = computeChanges(curProps, prevProps, fields);
+      if (changes.length > 0) el.changes = changes;
+    }
+
     out.push(el);
   }
   return out;
