@@ -127,7 +127,7 @@ Then point your MCP client at the built file:
 
 ## Available Tools
 
-## Tools (42)
+## Tools (43)
 
 All tools are grouped by domain. Read tools take no approval; write/mutation tools (marked ✍️) follow the [two-call dry-run protocol](#safety).
 
@@ -209,6 +209,12 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 | `mc_list_modelsets` | List the coordination modelsets (coordination spaces) in a project. The SSA needs **Model Coordination product access** (Member/Administrator) or the API returns 404. |
 | `mc_list_clashes` | Pull clash-detection results for a modelset — each clash pair with its two models, element identities (objectId/dbId), and penetration depth (`distance` negative = hard clash). Joins the clash/instance/document result files; sorted worst-first. Feeds `issues_pin_element` to turn a clash into a pinned issue. |
 
+### Model Properties — Version Diff (1)
+
+| Tool | Purpose |
+|---|---|
+| `mp_diff_versions` | Diff two versions of the **same** model (the backend of ACC's *Compare Versions*): returns whole-model `added/removed/modified` stats plus a rollup of changed elements **by Revit category** and by change type (`Transform` vs `Geometry` vs property-only). Works with **SSA** (no 3LO). Async — returns a resumable `diff_id` if still processing. Use the per-category counts to drive **cross-discipline change alerts** (e.g. Architecture `Rooms` changed → flag Structural to re-check loads; `Ducts`/`Mechanical Equipment` changed → flag MEP). |
+
 ### ACC Docs — Viewables (1)
 
 | Tool | Purpose |
@@ -223,7 +229,7 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 | `meta_verify_audit_chain` | Verify the audit log hash chain has not been tampered with. |
 
 
-More tools in Phase 3 (Model Properties API — bbox/clash; 3LO auth required).
+Phase 3 backlog: non-diff Model Properties single-version index (`POST indexes` + `queries`) for bbox/property queries on one version — same API family as `mp_diff_versions`, not yet wrapped.
 
 ---
 

@@ -42,5 +42,6 @@ export * as dmApi from './apis/data-management.js';
 export * as issuesApi from './apis/issues.js';
 export * as mcApi from './apis/model-coordination.js';
 export * as mdApi from './apis/model-derivative.js';
+export * as modelPropertiesApi from './apis/model-properties.js';
 export * as pushpinApi from './apis/pushpin.js';
 export * as reviewsApi from './apis/reviews.js';
