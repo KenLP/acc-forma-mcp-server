@@ -1,0 +1,106 @@
+{
+  "mcp_manifest_version": "1.0",
+  "app_model": "A",
+  "mcp_spec_version": "2025-11-25",
+  "server": {
+    "name": "acc-forma-mcp-server",
+    "version": "0.1.0",
+    "transport": "stdio",
+    "repository": "https://github.com/KenLP/acc-forma-mcp-server",
+    "license": "MIT",
+    "description": "MCP server exposing read and governed-write access to Autodesk Construction Cloud (ACC) and Autodesk Platform Services (APS) APIs — Data Management, Issues, Reviews, AEC Data Model, Model Derivative, Model Coordination, and Model Properties — for use by LLM agents in AEC/BIM QC and coordination workflows."
+  },
+  "tools": [
+    { "name": "admin_list_projects", "description": "List all projects under a hub, using account-admin (2LO) visibility.", "mutating": false },
+    { "name": "admin_get_project", "description": "Fetch a single project's metadata, scopes, and relationships.", "mutating": false },
+    { "name": "admin_list_users", "description": "List users on the account or project membership roster.", "mutating": false },
+    { "name": "admin_list_companies", "description": "List companies registered on the account.", "mutating": false },
+
+    { "name": "dm_list_hubs", "description": "List ACC/BIM 360 hubs accessible to the authenticated app.", "mutating": false },
+    { "name": "dm_list_projects", "description": "List projects within a given hub.", "mutating": false },
+    { "name": "dm_list_top_folders", "description": "List the top-level folders of a project.", "mutating": false },
+    { "name": "dm_list_folder_contents", "description": "List items — files and subfolders — inside a folder.", "mutating": false },
+    { "name": "dm_get_item", "description": "Get metadata for a single item (file or folder).", "mutating": false },
+    { "name": "dm_list_versions", "description": "List all versions of a file with version numbers and timestamps.", "mutating": false },
+
+    { "name": "issues_list", "description": "List issues in a project, filterable by status, type, or assignee.", "mutating": false },
+    { "name": "issues_get", "description": "Get full details for a single issue.", "mutating": false },
+    { "name": "issues_create", "description": "Create a new issue, including subtype, location, due date, and assignment.", "mutating": true },
+    { "name": "issues_pin_element", "description": "Create an issue with a 3D pushpin automatically placed on a specific BIM element.", "mutating": true },
+    { "name": "issues_update", "description": "Update fields on an existing issue via a sparse (partial) update.", "mutating": true },
+    { "name": "issues_add_comment", "description": "Add a comment to an existing issue.", "mutating": true },
+    { "name": "issues_list_comments", "description": "List the comment thread on an issue, paginated.", "mutating": false },
+    { "name": "issues_list_types", "description": "List the valid issue types and subtypes configured for a project.", "mutating": false },
+    { "name": "issues_list_root_causes", "description": "List the configured root-cause categories for a project.", "mutating": false },
+    { "name": "issues_get_user_me", "description": "Get the current identity's permission flags for the Issues module.", "mutating": false },
+    { "name": "issues_list_attrs", "description": "List custom attribute definitions configured for a project's issues.", "mutating": false },
+    { "name": "issues_list_attachments", "description": "List files and links attached to an issue, paginated.", "mutating": false },
+
+    { "name": "reviews_list", "description": "List reviews in a project's Reviews container.", "mutating": false },
+    { "name": "reviews_get", "description": "Get a single review, including its status and assigned reviewers.", "mutating": false },
+    { "name": "reviews_create", "description": "Create a new review with reviewers, due date, and workflow type.", "mutating": true },
+    { "name": "reviews_transition", "description": "Transition a review's state: submit, approve, reject, void, or reopen.", "mutating": true },
+
+    { "name": "aecdm_list_hubs", "description": "List AEC Data Model (AECDM)-native hubs.", "mutating": false },
+    { "name": "aecdm_list_projects", "description": "List projects within an AECDM hub.", "mutating": false },
+    { "name": "aecdm_list_element_groups", "description": "List BIM model files published to an AECDM project.", "mutating": false },
+    { "name": "aecdm_list_categories", "description": "List BIM element categories present in an element group.", "mutating": false },
+    { "name": "aecdm_query_elements", "description": "Query BIM elements by category, returning their full property sets.", "mutating": false },
+    { "name": "aecdm_get_element_properties", "description": "Re-fetch the full property set for a specific element by node ID.", "mutating": false },
+    { "name": "aecdm_aggregate_by_parameter", "description": "Count elements grouped by a given parameter value within a category.", "mutating": false },
+    { "name": "aecdm_query_element_positions", "description": "Query elements together with their origin position (x, y, z) in metres, used to place Issue pushpins.", "mutating": false },
+
+    { "name": "md_get_manifest", "description": "Check SVF2 translation status for a model version and list available viewable GUIDs.", "mutating": false },
+    { "name": "md_get_properties", "description": "Fetch Revit element properties from an SVF2-translated model.", "mutating": false },
+    { "name": "md_trigger_translation", "description": "Submit a new SVF2 translation job for a specific model version.", "mutating": true },
+
+    { "name": "mc_list_modelsets", "description": "List the coordination modelsets configured in a project.", "mutating": false },
+    { "name": "mc_list_clashes", "description": "Retrieve clash-detection results for a coordination modelset.", "mutating": false },
+
+    { "name": "mp_diff_versions", "description": "Diff two versions of the same model, returning added/removed/modified element statistics by category.", "mutating": false },
+
+    { "name": "docs_get_viewables", "description": "Resolve the ACC Docs-native viewable ID for a document version URN.", "mutating": false },
+
+    { "name": "meta_list_changelog", "description": "Read local audit-log entries, filterable by tool name, time range, or project.", "mutating": false },
+    { "name": "meta_verify_audit_chain", "description": "Verify that the local audit log's hash chain has not been tampered with.", "mutating": false }
+  ],
+  "resources": [],
+  "prompts": [],
+  "external_endpoints": [
+    {
+      "domain": "developer.api.autodesk.com",
+      "purpose": "Autodesk Platform Services (APS) REST and GraphQL APIs: Account Admin, Data Management, Construction Issues, Construction Reviews, AEC Data Model, Model Derivative, Model Coordination, and Model Properties.",
+      "protocol": "https"
+    },
+    {
+      "domain": "*.amazonaws.com",
+      "purpose": "Autodesk-issued pre-signed S3 URLs (returned by the Model Coordination clash API) for downloading clash-result resource files. URLs are short-lived (~60s TTL), issued by Autodesk, and fetched without any bearer token. No data is uploaded.",
+      "protocol": "https"
+    }
+  ],
+  "autodesk_apis_used": [
+    "Account Admin API (2LO)",
+    "Data Management API",
+    "Construction Issues API",
+    "Construction Reviews API",
+    "AEC Data Model API (GraphQL)",
+    "Model Derivative API (SVF2)",
+    "Model Coordination API",
+    "Model Properties API",
+    "ACC Docs Viewables"
+  ],
+  "ai_llm_providers": [],
+  "auth": {
+    "type": "SSA (Secure Service Account)",
+    "modes_supported": ["ssa", "2lo"],
+    "notes": "SSA is a bot identity scoped per-project via Hub Admin > Custom Integrations; it is required for user-context APIs (Issues, Reviews, AEC Data Model, Model Coordination) and is the default for everything else. 2LO (app-only client-credentials) is the preferred mode for Account Admin, Data Management, Model Derivative, and Docs viewables read tools, with SSA as fallback. Credentials are supplied by the customer via environment variables; the server ships with no credentials. End-user OAuth (3LO) is not implemented in this release; it is planned for a later phase."
+  },
+  "security_controls": [
+    "Dry-run preview required before any mutating tool executes",
+    "Explicit approval token required to confirm and apply a mutating action",
+    "Project/hub allow-list restricting which resources the server may touch",
+    "Read-only mode toggle to globally disable all mutating tools",
+    "Per-tool rate governance",
+    "SHA-256 hash-chained local audit log of all tool calls, independently verifiable via meta_verify_audit_chain"
+  ]
+}
