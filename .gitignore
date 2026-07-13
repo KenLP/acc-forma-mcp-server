@@ -23,9 +23,11 @@ forma-mcp-linux
 .acc-forma-mcp/
 
 # Internal planning & changelog (kept local; not for public repo)
+# Anything about plans, roadmap, or spinning this into other products stays local.
 CHANGELOG.md
 docs/PLANNING.md
 docs/REMEDIATION-PLAN.md
+docs/PAPER_OUTLINE.md
 
 # Local review/analysis artifacts and live-test diagnostic scripts
 REVIEW_FINDINGS*.md

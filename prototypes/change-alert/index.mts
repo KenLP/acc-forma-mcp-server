@@ -3,8 +3,14 @@
  *
  *   TRIGGER  → detect a new model version  (poll AEC Data Model for the watched file's version)
  *   DIFF     → mp_diff_versions            (Model Properties API, SSA — no 3LO)
+ *   TRIAGE   → severity.ts                 (HOW it changed + does it MATTER — the differentiator)
  *   RULES    → rules.ts                    (category/property change → discipline)
- *   ALERT    → one ACC issue per discipline (issues API; DRY-RUN by default)
+ *   ALERT    → one ACC issue per discipline, PINNED to the worst changed element (issues API)
+ *
+ * Over Forma "Compare Versions" this adds the three things its export can't do:
+ *   #1  HOW it changed — quantified old→new, incl. Geometry/Transform (severity.ts)
+ *   #2  a locatable element — a 3D pushpin on the exact changed element (pin.ts)
+ *   #3  an issue created straight from the compare, routed to the affected discipline
  *
  * Reuses the published core SDK (`acc-forma-mcp-server/core` → ../../src/core.ts).
  *
@@ -12,7 +18,8 @@
  *   npx tsx prototypes/change-alert/index.mts                 # dry-run on latest two versions
  *   FORCE=1 npx tsx prototypes/change-alert/index.mts         # ignore saved state, always diff
  *   PREV=3 CUR=4 npx tsx prototypes/change-alert/index.mts    # explicit version pair
- *   CREATE_ISSUES=1 npx tsx prototypes/change-alert/index.mts # actually create the ACC issue (draft)
+ *   MIN_SEVERITY=MEDIUM npx tsx prototypes/change-alert/index.mts  # lower the alert threshold
+ *   CREATE_ISSUES=1 npx tsx prototypes/change-alert/index.mts # actually create the ACC issue (draft) + pin
  */
 import 'dotenv/config';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -21,17 +28,25 @@ import { dirname, join } from 'node:path';
 
 import { SsaAuthProvider, aecdmApi, modelPropertiesApi, issuesApi } from '../../src/core.js';
 import type { DiffElement } from '../../src/apis/model-properties.js';
+import type { LinkedDocument } from '../../src/apis/issues.js';
 import { evaluateRules, groupByDiscipline, type RuleMatch } from './rules.js';
+import { assess, bySeverityDesc, SEVERITY_RANK, type Assessment, type Severity } from './severity.js';
+import { buildElementPin, isPinnable } from './pin.js';
 
 // ── Config (Ken - MCP Testing project) ─────────────────────────────────────────
 const CONFIG = {
   aecdmProjectId: 'urn:adsk.workspace:prod.project:80424913-8ca5-4e39-80b0-ebf00ad69385',
   dmProjectId: '57deb033-4608-46de-ab21-fcb0404de6d3', // for MP diff + issues (no b.)
   watchModel: 'R27_Snowdon Towers Sample Architectural.rvt',
+  // Calibrated viewer globalOffset for the Architectural model (see CLAUDE.md / pin-element.ts).
+  archGlobalOffset: { x: -19.068394820, y: -5.405197144, z: 25.708333651 },
 };
 const __dir = dirname(fileURLToPath(import.meta.url));
 const STATE_FILE = join(__dir, '.state.json');
 const DRY_RUN = process.env['CREATE_ISSUES'] !== '1';
+// Only alert on changes at or above this severity — suppresses low-impact noise (finish swaps,
+// nudged non-structural elements). CRITICAL > HIGH > MEDIUM > LOW.
+const MIN_SEVERITY = (process.env['MIN_SEVERITY'] as Severity) || 'HIGH';
 
 const auth = new SsaAuthProvider(['data:read', 'data:write', 'account:read']);
 
@@ -42,7 +57,9 @@ const saveState = (s: WatchState): void => writeFileSync(STATE_FILE, JSON.string
 const parseVersion = (urn: string): number => Number(/version=(\d+)/.exec(urn)?.[1] ?? '0');
 const lineageOf = (urn: string): string => urn.replace(/\?version=\d+$/, '');
 
-async function detectNewVersion(): Promise<{ prevUrn: string; curUrn: string; prev: number; cur: number } | null> {
+interface Detected { prevUrn: string; curUrn: string; prev: number; cur: number; elementGroupId: string }
+
+async function detectNewVersion(): Promise<Detected | null> {
   const groups = await aecdmApi.listAecdmElementGroups(auth, CONFIG.aecdmProjectId);
   const model = groups.find((g) => g.name === CONFIG.watchModel);
   if (!model) throw new Error(`Watched model not found: ${CONFIG.watchModel}`);
@@ -59,33 +76,77 @@ async function detectNewVersion(): Promise<{ prevUrn: string; curUrn: string; pr
     return null;
   }
   const lineage = lineageOf(model.fileVersionUrn);
-  return { prevUrn: `${lineage}?version=${last}`, curUrn: `${lineage}?version=${cur}`, prev: last, cur };
+  return {
+    prevUrn: `${lineage}?version=${last}`,
+    curUrn: `${lineage}?version=${cur}`,
+    prev: last,
+    cur,
+    elementGroupId: model.id,
+  };
 }
 
-// ── Alerting: turn rule matches into an ACC issue payload ───────────────────────
-function renderElement(el: DiffElement): string {
-  const sign = el.kind === 'ADDED' ? '+' : el.kind === 'REMOVED' ? '-' : '~';
-  let line = `  ${sign} ${el.name ?? '(unnamed)'} [${el.category ?? '?'}]`;
-  const fn = el.changes?.filter((c) => /Room Name|Department|Occupancy/i.test(c.field));
-  if (fn && fn.length) line += '  ' + fn.map((c) => `${c.field}: ${String(c.prev)} → ${String(c.cur)}`).join(', ');
-  return line;
-}
+// ── Triage: assess + dedupe + rank the elements routed to a discipline ──────────
+interface AssessedEl { el: DiffElement; assessment: Assessment }
 
-function buildIssueBody(discipline: string, matches: RuleMatch[], prev: number, cur: number): { title: string; description: string } {
-  const title = `[Auto] ${discipline} review — ${CONFIG.watchModel} v${prev}→v${cur}`;
-  const lines: string[] = [
-    `Automated change alert from the Architectural model diff (v${prev} → v${cur}).`,
-    `The following changes require ${discipline} attention:`,
-    '',
-  ];
+function assessedForDiscipline(matches: RuleMatch[]): AssessedEl[] {
+  const seen = new Map<string, AssessedEl>();
   for (const m of matches) {
-    lines.push(`• ${m.rule.reason}  (${m.elements.length} element${m.elements.length > 1 ? 's' : ''})`);
-    for (const el of m.elements.slice(0, 6)) lines.push(renderElement(el));
-    if (m.elements.length > 6) lines.push(`    …and ${m.elements.length - 6} more`);
-    lines.push('');
+    for (const el of m.elements) {
+      const key = el.externalId ?? `${el.category ?? '?'}::${el.name ?? '?'}`;
+      if (!seen.has(key)) seen.set(key, { el, assessment: assess(el) });
+    }
   }
-  lines.push('— generated by change-alert prototype (Model Properties version diff)');
-  return { title, description: lines.join('\n') };
+  return [...seen.values()].sort((a, b) => bySeverityDesc(a.assessment, b.assessment));
+}
+
+const SEVERITY_TALLY = (items: AssessedEl[]): string =>
+  (['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as Severity[])
+    .map((s) => ({ s, n: items.filter((i) => i.assessment.severity === s).length }))
+    .filter((x) => x.n > 0)
+    .map((x) => `${x.n} ${x.s.toLowerCase()}`)
+    .join(', ');
+
+// ── Alerting: turn ranked, assessed elements into an ACC issue payload ──────────
+// ACC Issues caps `description` at 1000 chars — assemble greedily within that budget.
+const DESC_MAX = 1000;
+
+function buildIssueBody(
+  discipline: string,
+  ranked: AssessedEl[],
+  prev: number,
+  cur: number,
+  pinNote?: string,
+): { title: string; description: string } {
+  const title = `[Auto] ${discipline} review — ${CONFIG.watchModel} v${prev}→v${cur} (${SEVERITY_TALLY(ranked)})`;
+
+  const header = `Impact triage of Architectural diff v${prev}→v${cur} — ${ranked.length} change(s) need ${discipline} review:`;
+  const footer = pinNote ? `\n📍 ${pinNote}` : '';
+
+  // One compact block per element: "[SEV] ~ Name [Cat] — headline · changed: detail".
+  const blocks = ranked.map(({ el, assessment }) => {
+    const sign = el.kind === 'ADDED' ? '+' : el.kind === 'REMOVED' ? '-' : '~';
+    let b = `[${assessment.severity}] ${sign} ${el.name ?? '(unnamed)'} [${el.category ?? '?'}] — ${assessment.headline}`;
+    // Only append the delta when it adds info beyond the headline (property changes).
+    if (el.changes && el.changes.length > 0) b += ` · ${assessment.detail}`;
+    return b;
+  });
+
+  const parts: string[] = [header];
+  let used = header.length + footer.length;
+  let shown = 0;
+  for (const b of blocks) {
+    const cost = b.length + 1; // + newline
+    const moreNote = `\n…and ${ranked.length - shown} more (open the model to see all)`;
+    if (used + cost + moreNote.length > DESC_MAX && shown > 0) break;
+    parts.push(b);
+    used += cost;
+    shown++;
+  }
+  if (shown < ranked.length) parts.push(`…and ${ranked.length - shown} more (open the model to see all)`);
+
+  let description = parts.join('\n') + footer;
+  if (description.length > DESC_MAX) description = description.slice(0, DESC_MAX - 1) + '…';
+  return { title, description };
 }
 
 async function pickIssueSubtypeId(): Promise<string | undefined> {
@@ -120,29 +181,86 @@ async function main(): Promise<void> {
   const fields = await modelPropertiesApi.downloadDiffFields(auth, status.fieldsUrl);
   const elements = await modelPropertiesApi.downloadDiffProperties(auth, status.propertiesUrl, fields, 5000);
 
-  console.log('\n[3] RULES — routing changes to disciplines…');
+  console.log('\n[3] TRIAGE + RULES — routing changes to disciplines by impact…');
   const matches = evaluateRules(elements);
   if (matches.length === 0) {
     console.log('  no rules matched — nothing to alert.');
-  } else {
-    for (const m of matches) console.log(`  ✓ ${m.rule.id}: ${m.elements.length} element(s) → ${m.rule.disciplines.join(', ')}`);
+    return;
   }
   const byDiscipline = groupByDiscipline(matches);
 
-  console.log('\n[4] ALERT — ' + (DRY_RUN ? 'DRY-RUN (no issue created; set CREATE_ISSUES=1 to create)' : 'creating ACC issues (draft)') + '…');
+  console.log('\n[4] ALERT — ' + (DRY_RUN ? 'DRY-RUN (set CREATE_ISSUES=1 to create + pin)' : 'creating ACC issues (draft) + pinning') + '…');
+  console.log(`  alert threshold: >= ${MIN_SEVERITY}`);
   const subtypeId = DRY_RUN ? undefined : await pickIssueSubtypeId();
 
   for (const [discipline, ms] of byDiscipline) {
-    const { title, description } = buildIssueBody(discipline, ms, ver.prev, ver.cur);
-    console.log('\n' + '─'.repeat(70));
+    const all = assessedForDiscipline(ms);
+    const ranked = all.filter((a) => SEVERITY_RANK[a.assessment.severity] >= SEVERITY_RANK[MIN_SEVERITY]);
+    const suppressed = all.length - ranked.length;
+
+    console.log(`\n  ${discipline}: ${all.length} changed element(s) — ${ranked.length} >= ${MIN_SEVERITY}, ${suppressed} suppressed as noise`);
+    if (ranked.length === 0) {
+      console.log('  → nothing above threshold; no issue.');
+      continue;
+    }
+
+    // Anchor the issue on the WORST element that can actually be pinned. Only point-placed
+    // elements (columns, doors, fixtures) have an AECDM origin, and not every instance does —
+    // so walk the ranked candidates in severity order and take the first that resolves.
+    let pin: LinkedDocument | undefined;
+    let pinNote: string | undefined;
+    const candidates = ranked.filter((a) => isPinnable(a.el.category) && a.el.externalId).slice(0, 8);
+    if (candidates.length === 0) {
+      const worst = ranked[0]!;
+      pinNote = `(No 3D pin: the top changes (${worst.el.category}) are planar/linear — no point origin in AECDM. Pinning needs a point-placed element: column, door, fixture.)`;
+      console.log('  pin: skipped — no point-placed element among the ranked changes');
+    } else {
+      const skips: string[] = [];
+      for (const cand of candidates) {
+        try {
+          const res = await buildElementPin(auth, {
+            elementGroupId: ver.elementGroupId,
+            category: cand.el.category!,
+            externalId: cand.el.externalId!,
+            modelVersionUrn: ver.curUrn,
+            globalOffset: CONFIG.archGlobalOffset,
+          });
+          if ('skipped' in res) {
+            skips.push(res.skipped);
+            continue;
+          }
+          pin = res.linkedDocument;
+          const p = res.viewerPosition;
+          pinNote = `Pinned in the 3D model on "${res.elementName}" [${cand.el.category}] ` +
+            `(externalId ${cand.el.externalId}) — open this issue in ACC to jump straight to it.`;
+          console.log(
+            `  pin: → "${res.elementName}" @ viewer (${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)})` +
+            `${res.objectId !== undefined ? `, objectId ${res.objectId}` : ' (no objectId)'}`,
+          );
+          break;
+        } catch (e) {
+          skips.push((e as Error).message);
+        }
+      }
+      if (!pin) {
+        pinNote = `(No 3D pin: none of ${candidates.length} point-placed candidate(s) had an AECDM origin.)`;
+        console.log(`  pin: skipped — tried ${candidates.length}, none resolved (${skips.slice(0, 3).join('; ')})`);
+      }
+    }
+
+    const { title, description } = buildIssueBody(discipline, ranked, ver.prev, ver.cur, pinNote);
+    console.log('\n' + '─'.repeat(72));
     console.log('TITLE:  ' + title);
     console.log(description);
+
     if (!DRY_RUN) {
       if (!subtypeId) { console.log('  (skip create — no active issue subtype found)'); continue; }
+      const published = process.env['PUBLISH'] === '1';
       const issue = await issuesApi.createIssue(auth, CONFIG.dmProjectId, {
-        title, description, issueSubtypeId: subtypeId, status: 'open', published: false,
+        title, description, issueSubtypeId: subtypeId, status: 'open', published,
+        ...(pin ? { linkedDocuments: [pin] } : {}),
       });
-      console.log(`  → created issue #${(issue as { displayId?: number }).displayId ?? '?'} (draft)`);
+      console.log(`  → created issue #${(issue as { displayId?: number }).displayId ?? '?'} (${published ? 'published' : 'draft'})${pin ? ' with 3D pin' : ''}`);
     }
   }
 
@@ -155,4 +273,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((e) => { console.error('\nERROR:', e); process.exit(1); });
+main().catch((e) => {
+  console.error('\nERROR:', e);
+  const body = (e as { body?: unknown }).body;
+  if (body) console.error('\nDETAILS:', JSON.stringify(body, null, 2));
+  process.exit(1);
+});
