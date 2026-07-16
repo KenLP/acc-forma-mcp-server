@@ -1,6 +1,6 @@
 {
   "mcp_manifest_version": "1.0",
-  "app_model": "A",
+  "app_model": "Local MCP Server",
   "mcp_spec_version": "2025-11-25",
   "server": {
     "name": "acc-forma-mcp-server",

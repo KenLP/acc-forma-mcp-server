@@ -19,7 +19,8 @@
 | `repository` | ✅ `github.com/KenLP/acc-forma-mcp-server` — **PUBLIC**, license MIT có file LICENSE |
 | `resources` / `prompts` rỗng | ✅ Đúng — server chỉ đăng ký tools, không có MCP resources/prompts |
 | `ai_llm_providers: []` | ✅ Đúng — server KHÔNG tự gọi LLM nào; LLM là client phía trên |
-| `mcp_spec_version` / `app_model: "A"` | ✅ Khớp ví dụ trong guide chính thức |
+| `mcp_spec_version` | ✅ Khớp ví dụ trong guide chính thức |
+| `app_model` | ✅ `"Local MCP Server"` — khớp đúng option trên form. Guide chỉ đưa ví dụ `"A"` mà không định nghĩa A/B/C, nên dùng thẳng nhãn của form cho khỏi mơ hồ |
 | Security controls | ✅ Khớp thực tế: dry-run, approval token, allow-list, readonly mode, rate governance, audit hash-chain |
 | `external_endpoints` | ⚠️ **ĐÃ SỬA** — thiếu domain S3 (xem dưới) |
 | `auth.notes` | ⚠️ **ĐÃ SỬA** — mô tả 2LO chưa đúng phạm vi (xem dưới) |
@@ -60,7 +61,11 @@
 
 ### 🔹 App Model — *"Which MCP architecture does your plugin use?"* (dropdown)
 
-Chọn option mô tả **local/desktop MCP server chạy bằng credentials của khách hàng** — theo guide chính thức đây là **Model A** (manifest đã khai `"app_model": "A"`). Server chạy stdio trên máy khách, không hosted, không remote service.
+**Chọn: `Local MCP Server`**
+
+Server chạy `transport: "stdio"` như một process cục bộ trên máy khách (`node dist/index.js`, do MCP client spawn), khách tự cấp credentials qua env. Không nhúng trong app nào (→ không phải *Embedded MCP App*), không host ở đâu và không có HTTP endpoint (→ không phải *Remote MCP Server*).
+
+Manifest khai `"app_model": "Local MCP Server"` — đúng nhãn của form. (Guide chỉ đưa ví dụ `"A"` mà không định nghĩa A/B/C ở bất kỳ đâu, nên dùng nhãn form là cách duy nhất không mơ hồ.)
 
 ### 🔹 MCP Tools — *"List each MCP tool and briefly describe what it does in plain language"*
 
@@ -255,7 +260,7 @@ Hello Autodesk Marketplace team,
 
 I would like to submit an MCP server for marketplace review.
 
-  • Server:      acc-forma-mcp-server v0.1.0 (stdio, App Model A)
+  • Server:      acc-forma-mcp-server v0.1.0 (stdio, Local MCP Server)
   • Repository:  https://github.com/KenLP/acc-forma-mcp-server  (public, MIT, tag v0.1.0)
   • Manifest:    attached (mcp-manifest.json, mcp_manifest_version 1.0)
   • Publisher Declaration Form: submitted via the Airtable form on <DATE>
