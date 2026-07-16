@@ -174,6 +174,18 @@ those are the deliverables of the workflows above, and every write requires an
 explicit dry-run preview and approval token before execution.
 ```
 
+### 🔹 AI / LLM Usage — *"Does the plugin send Autodesk data to an AI or LLM service?"* (Yes/No — không có ô ghi chú)
+
+**Chọn: `No`**
+
+Căn cứ (đã verify trong code):
+- Server **không** gọi bất kỳ AI/LLM service nào: không có AI SDK, không có model đóng gói, không giữ credential của provider nào. Toàn bộ network egress chỉ gồm `developer.api.autodesk.com` + pre-signed S3 của Autodesk.
+- Server trả kết quả qua **stdio về MCP host** — host là phần mềm của khách hàng, không phải "AI service". Việc dữ liệu có tới LLM hay không, và tới provider nào, do **client của khách hàng** quyết định và cấp consent.
+- **Nhất quán với manifest** `"ai_llm_providers": []`. Chọn `Yes` sẽ buộc phải khai tên provider — mà ta không có provider nào để khai → tự mâu thuẫn hồ sơ.
+- Câu hỏi này phân biệt server *tự gọi* AI (vd. gọi OpenAI để tóm tắt model — data đi tới bên thứ ba do publisher chọn) với server chỉ trả data về host. Nếu "Yes" đúng cho mọi MCP server thì câu hỏi vô nghĩa.
+
+> ⚠️ Vì ô này không cho ghi chú, **phần khai luồng gián tiếp (data tới LLM qua client của khách) đã được đưa vào email nộp hồ sơ** (Section 5) — để không có gì bị coi là che giấu, và để không xung đột với ô Compliance *"No hidden or undeclared network communication exists"*.
+
 ### 🔹 Dynamic Tool Configuration — *"Does the plugin load MCP tools or capabilities dynamically from a remote configuration or service?"*
 
 ```
@@ -253,8 +265,17 @@ Issues, Reviews, AEC Data Model, Model Derivative, Model Coordination, Model
 Properties) as 43 tools. All 7 mutating tools require a dry-run preview and a
 payload-bound approval token; all calls are hash-chain audit-logged. External
 endpoints: developer.api.autodesk.com and Autodesk-issued pre-signed S3 URLs
-(download-only). No AI/LLM providers are called by the server; no dynamic tool
-loading.
+(download-only). No dynamic tool loading — the tool registry is static and
+compiled in.
+
+One clarification on the form's AI/LLM Usage question, which I answered "No":
+the server itself calls no AI/LLM service — it bundles no AI SDK or model, holds
+no AI provider credentials, and its only network egress is the two endpoints
+above (hence ai_llm_providers is empty in the manifest). For completeness, and as
+is inherent to MCP: tool results are returned over stdio to whichever MCP client
+the customer runs, and that client is typically an LLM agent. Which LLM (if any)
+receives the data is entirely the customer's choice, configuration, and consent —
+the server neither selects, contracts with, nor transmits to any AI provider.
 
 Contact: Ken Le — ken.lephuc@gmail.com
 
