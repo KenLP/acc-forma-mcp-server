@@ -45,7 +45,10 @@ jobs:
   integration:
     name: Integration Tests
     runs-on: ubuntu-latest
-    # Only runs on push to main with secrets configured
+    # Push to main only. The live steps are additionally gated on APS credentials being
+    # present — `secrets` is not available in a job-level `if:`, so the check has to be a
+    # step. Without credentials (fork, clone, or an unconfigured environment) the job is a
+    # no-op and stays green rather than failing on every push.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: integration
     env:
@@ -60,20 +63,37 @@ jobs:
       LOG_LEVEL: debug
 
     steps:
+      - name: Check for APS credentials
+        id: creds
+        run: |
+          if [ -n "${{ secrets.APS_CLIENT_ID }}" ] && [ -n "${{ secrets.SSA_ID }}" ]; then
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::APS credentials are not configured in the `integration` environment — skipping live integration tests.'
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.creds.outputs.configured == 'true'
 
       - name: Write SSA private key
+        if: steps.creds.outputs.configured == 'true'
         run: echo "${{ secrets.SSA_PRIVATE_KEY }}" > /tmp/ssa-private.pem
 
       - uses: pnpm/action-setup@v4
+        if: steps.creds.outputs.configured == 'true'
         with:
           version: 9
 
       - uses: actions/setup-node@v4
+        if: steps.creds.outputs.configured == 'true'
         with:
           node-version: '20'
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run build
-      - run: pnpm run test -- tests/integration --passWithNoTests
+      - if: steps.creds.outputs.configured == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.creds.outputs.configured == 'true'
+        run: pnpm run build
+      - if: steps.creds.outputs.configured == 'true'
+        run: pnpm run test -- tests/integration --passWithNoTests
