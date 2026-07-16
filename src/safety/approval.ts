@@ -67,8 +67,19 @@ export function verifyAndConsumeToken(
   store.delete(token); // single-use: consume immediately
 }
 
-function hashPayload(payload: unknown): string {
+/** Canonical payload hash — shared with the idempotency binding in _wrap.ts. */
+export function hashPayload(payload: unknown): string {
   return createHash('sha256').update(JSON.stringify(payload), 'utf-8').digest('hex');
+}
+
+/**
+ * Non-reversible fingerprint of an approval token, safe to persist in the audit log.
+ * The live token must never be written to disk — anyone who can read the JSONL within
+ * the TTL could otherwise replay it to execute the mutation. The fingerprint still
+ * links a preview entry to its execute entry (same token → same fingerprint).
+ */
+export function fingerprintToken(token: string): string {
+  return createHash('sha256').update(token, 'utf-8').digest('hex').slice(0, 16);
 }
 
 // GC is handled inside getTokenStore() — memory backend runs a per-minute interval,

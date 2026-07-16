@@ -5,9 +5,9 @@ import { checkNotReadonly, ReadonlyModeError } from '../safety/readonly-mode.js'
 import { checkRateLimit, RateGovernanceError } from '../safety/rate-governance.js';
 import { runBusinessRules, BusinessRuleError } from '../safety/business-rules.js';
 import { buildDryRunPreview } from '../safety/dry-run.js';
-import { verifyAndConsumeToken, ApprovalError } from '../safety/approval.js';
+import { verifyAndConsumeToken, ApprovalError, hashPayload, fingerprintToken } from '../safety/approval.js';
 import { appendAuditEntry, AuditPersistenceError } from '../safety/audit-log.js';
-import { checkIdempotency, storeIdempotencyResult } from '../safety/idempotency.js';
+import { checkIdempotency, storeIdempotencyResult, IdempotencyError } from '../safety/idempotency.js';
 import { ApsApiError } from '../http/errors.js';
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
@@ -188,13 +188,15 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
           executePayload: preview.executePayload,
         });
 
+        // Audit the token's FINGERPRINT, never the live token — the JSONL is readable
+        // on disk and the token stays valid for the whole TTL.
         appendAuditEntry({
           tool: tool.name,
           kind: 'mutation',
           stage: 'preview',
           ...(projectId !== undefined ? { projectId } : {}),
           inputRedacted: input,
-          outputSummary: { approval_token: dryResult.approval_token },
+          outputSummary: { approval_token_fp: fingerprintToken(dryResult.approval_token) },
         });
 
         return {
@@ -203,9 +205,12 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
         };
       }
 
-      // 6b. Idempotency check (only on execute path — dry-run is never cached)
+      // 6b. Idempotency check (only on execute path — dry-run is never cached).
+      // The key is bound to (tool, payload hash): the same key with a different
+      // operation is rejected instead of silently returning the older result.
+      const payloadHash = hashPayload(preview.executePayload);
       if (idempotency_key) {
-        const cached = checkIdempotency(idempotency_key);
+        const cached = checkIdempotency(idempotency_key, tool.name, payloadHash);
         if (cached) {
           logger.info({ toolName: tool.name, idempotency_key }, 'idempotency: returning cached result');
           return cached;
@@ -242,10 +247,11 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
         ...(projectId !== undefined ? { projectId } : {}),
         inputRedacted: input,
         outputSummary: result.structuredContent ?? { success: true },
-        ...(approval_token !== undefined ? { approvalToken: approval_token } : {}),
+        // Fingerprint only — matches the preview entry's approval_token_fp.
+        ...(approval_token !== undefined ? { approvalToken: fingerprintToken(approval_token) } : {}),
       });
 
-      if (idempotency_key) storeIdempotencyResult(idempotency_key, result);
+      if (idempotency_key) storeIdempotencyResult(idempotency_key, tool.name, payloadHash, result);
 
       return result;
     } catch (err) {
@@ -301,6 +307,9 @@ function handleError(
     stage = 'failed_api';
     message = err.toMcpText();
   } else if (err instanceof ApprovalError) {
+    stage = 'failed_api';
+    message = err.message;
+  } else if (err instanceof IdempotencyError) {
     stage = 'failed_api';
     message = err.message;
   } else {

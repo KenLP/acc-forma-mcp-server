@@ -36,10 +36,28 @@ function migrateSchema(db: Database.Database): void {
     );
     CREATE TABLE IF NOT EXISTS idempotency_records (
       idem_key     TEXT    PRIMARY KEY,
+      tool_name    TEXT    NOT NULL DEFAULT '',
+      payload_hash TEXT    NOT NULL DEFAULT '',
       result_json  TEXT    NOT NULL,
       expires_at   INTEGER NOT NULL
     );
   `);
+
+  // Migrate a pre-binding idempotency_records table (no tool_name/payload_hash columns).
+  // SQLite has no ADD COLUMN IF NOT EXISTS; probe the schema and add what's missing.
+  const cols = db.prepare(`PRAGMA table_info(idempotency_records)`).all() as Array<{ name: string }>;
+  const names = new Set(cols.map((c) => c.name));
+  if (!names.has('tool_name') || !names.has('payload_hash')) {
+    if (!names.has('tool_name')) {
+      db.exec(`ALTER TABLE idempotency_records ADD COLUMN tool_name TEXT NOT NULL DEFAULT ''`);
+    }
+    if (!names.has('payload_hash')) {
+      db.exec(`ALTER TABLE idempotency_records ADD COLUMN payload_hash TEXT NOT NULL DEFAULT ''`);
+    }
+    // Unbound rows can't be verified against an operation — drop them (they are
+    // short-TTL caches; losing them only costs a re-execution).
+    db.exec(`DELETE FROM idempotency_records WHERE tool_name = ''`);
+  }
 }
 
 /** Delete expired rows from token + idempotency tables. Called once at startup. */
