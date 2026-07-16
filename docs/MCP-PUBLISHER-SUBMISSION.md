@@ -279,15 +279,18 @@ I would like to submit an MCP server for marketplace review.
   • Server:      acc-forma-mcp-server v0.1.0 (stdio, Local MCP Server)
   • Repository:  https://github.com/KenLP/acc-forma-mcp-server  (public, MIT, tag v0.1.0)
   • Manifest:    attached (mcp-manifest.json, mcp_manifest_version 1.0)
+  • Privacy policy: https://github.com/KenLP/acc-forma-mcp-server/blob/main/PRIVACY.md
   • Publisher Declaration Form: submitted via the Airtable form on <DATE>
 
 Summary: a safety-first MCP server exposing ACC/Forma APIs (Data Management,
 Issues, Reviews, AEC Data Model, Model Derivative, Model Coordination, Model
-Properties) as 43 tools. All 7 mutating tools require a dry-run preview and a
-payload-bound approval token; all calls are hash-chain audit-logged. External
-endpoints: developer.api.autodesk.com and Autodesk-issued pre-signed S3 URLs
-(download-only). No dynamic tool loading — the tool registry is static and
-compiled in.
+Properties) as 43 tools. In the default mode (preview_required), all 7 mutating
+tools require a dry-run preview and a payload-bound approval token; all calls
+are hash-chain audit-logged, and the operator can also select a trusted-client
+mode or a global read-only mode (all three are disclosed in the manifest).
+External endpoints: developer.api.autodesk.com and Autodesk-issued pre-signed
+S3 URLs (download-only). No dynamic tool loading — the tool registry is static
+and compiled in.
 
 One clarification on the form's AI/LLM Usage question, which I answered "No":
 the server itself calls no AI/LLM service — it bundles no AI SDK or model, holds

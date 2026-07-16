@@ -60,13 +60,14 @@ Each entry records:
 | `project_id` | the ACC project the call targeted |
 | `input_redacted` | the tool's inputs, **after** secret redaction (see below) |
 | `output_summary` | a short summary of the result |
-| `approval_token` | for mutating calls, the approval token used |
+| `approval_token` | for mutating calls, a SHA-256 **fingerprint** of the approval token — the live token is never written to the audit log |
 | `prev_hash`, `this_hash` | SHA-256 hash chain linking entries so tampering is detectable |
 
 **Redaction before writing.** Inputs and outputs are passed through a redactor
-(`src/utils/redact.ts`) that removes bearer tokens, JWTs, `client_secret` values, and any
-field named `access_token`, `refresh_token`, `client_secret`, `password`, `authorization`,
-`x-api-key`, `api_key`, `private_key`, or `assertion`.
+(`src/utils/redact.ts`) that removes bearer tokens, JWTs, `client_secret` values, live
+approval tokens (`appr_…` strings), and any field named `access_token`, `refresh_token`,
+`client_secret`, `password`, `authorization`, `x-api-key`, `api_key`, `private_key`,
+`assertion`, or `approval_token`.
 
 **Be aware:** redaction targets *secrets*, not *business content*. If you pass business data
 to a tool — for example an issue title or description — that content is recorded in
