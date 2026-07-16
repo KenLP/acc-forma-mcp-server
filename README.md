@@ -364,6 +364,13 @@ pnpm run test:watch
 
 ---
 
+## Privacy
+
+The publisher receives **no data** from you — no telemetry, no analytics, no phone-home. You
+run the server yourself with your own Autodesk credentials; it contacts only Autodesk's APIs,
+and the only thing written to disk is a local audit log on your own machine (90-day default
+retention). See **[PRIVACY.md](PRIVACY.md)** for the full policy.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

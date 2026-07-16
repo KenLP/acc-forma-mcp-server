@@ -225,6 +225,12 @@ variables. Because the server retains nothing else and the publisher holds no da
 this constitutes complete deletion.
 ```
 
+**Publisher Privacy Policy URL** *(required by the App Store Getting Started checklist; provide if the form or reviewer asks):*
+```
+https://github.com/KenLP/acc-forma-mcp-server/blob/main/PRIVACY.md
+```
+Covers the 4 mandated points: (1) what data is collected/how/why, (2) third-party sharing (Autodesk only; same-protection statement), (3) retention + deletion (90-day audit-log default, `FORMA_AUDIT_RETENTION_DAYS`), (4) how to revoke consent / delete data. Linked from the README (the "App description page" equivalent).
+
 **Security certifications (if any):**
 ```
 None. This is an open-source (MIT) project; no formal certification has been
