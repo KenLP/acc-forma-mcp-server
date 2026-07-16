@@ -1,6 +1,7 @@
 import { apsRequest } from '../http/client.js';
 import type { AuthProvider } from '../auth/index.js';
 import { stripBPrefix } from '../utils/project-id.js';
+import { assertAllowedUrl } from '../utils/url-guard.js';
 
 // ── Model Properties API (index v2) — version diff ──────────────────────────────
 //
@@ -99,6 +100,8 @@ export async function getVersionDiff(
 // ── NDJSON downloads (fields + properties) ──────────────────────────────────────
 
 async function fetchNdjson(auth: AuthProvider, url: string): Promise<Record<string, unknown>[]> {
+  // Bearer goes only to the declared APS host — never to an arbitrary URL from a response.
+  assertAllowedUrl(url, { exactHosts: ['developer.api.autodesk.com'] });
   const token = await auth.getAccessToken();
   const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) {

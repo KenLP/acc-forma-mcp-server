@@ -1,7 +1,16 @@
 # SPEC: Remediation đợt 2 — review findings #4/#5/#6 + follow-ons
 
-- **Ngày:** 2026-07-16 · **Trạng thái:** READY (chưa thực thi)
+- **Ngày:** 2026-07-16 · **Trạng thái:** ✅ ĐÃ THỰC THI 2026-07-16 (178/178 test pass)
 - **Người thực thi dự kiến:** session mới, KHÔNG có ngữ cảnh hội thoại này
+
+> ## ⚠️ Spec này có 2 chỗ SAI — đã sửa khi thực thi. Đọc trước khi tham chiếu lại.
+>
+> 1. **Task 1 — range dòng sai.** Spec bảo "thay block dòng ~28-40" của `src/index.ts`, nhưng dòng 28-29 là khai báo `let auth` / `let auth2lo` và dòng 40 là `auth2lo = twoLegged;` — snippet thay thế không chứa chúng. Thay verbatim sẽ **mất khai báo biến → compile error**. Thực tế chỉ thay dòng 31-35 và dòng 39 riêng lẻ. Nhánh `case '2lo'` dùng `auth = twoLegged;` (không có scope literal) → mệnh đề điều kiện của spec không áp dụng.
+> 2. **Task 5 — premise sai, D5 bị lật.** Spec chốt 7 key gồm `md_trigger_translation`. Nhưng tool đó **không có `project_id`** trong schema → `_wrap.ts:165` (`if (projectId) checkRateLimit(...)`) không bao giờ gọi → key đó là **dead config**, và câu manifest "covering every mutating tool" sẽ **SAI** (đúng class lỗi #4 mà chính đợt này đi sửa). Ken chốt **phương án 5-B**: dùng **6 key** (bỏ `md_trigger_translation`) + manifest ghi *"every **project-scoped** mutating tool"*. File `tests/unit/safety/rate-governance.spec.ts` mà spec nhắc tới **không tồn tại**.
+>
+> **Tiêu chí nghiệm thu đã đổi theo đó:** "DEFAULT_RATE_CONFIG có đúng 7 keys" → **6 keys**. Tiêu chí "`grep account:write` → 0" ban đầu bất khả thi vì chính comment spec bắt chèn có chứa literal đó — comment đã đổi thành "no account write scope is ever requested".
+>
+> **Ngoài spec, đã làm thêm** (QA/thực thi phát hiện): sửa câu *"The only data written to disk is a local audit log"* trong `docs/MCP-PUBLISHER-SUBMISSION.md` (tự mâu thuẫn với đoạn `state.db` ngay sau — blocker do QA bắt); siết `security_controls[5]` để không overclaim fingerprint ở mọi nơi lưu trữ; thêm `testTimeout: 30_000` vào `vitest.config.ts` (3 test flake trên cold cache do transform cost, 2 trong đó có sẵn từ trước).
 - **Nguồn:** `REVIEW_FINDINGS_2026-07-16.md`. Findings #1 (token trong audit), #2 (dependency vulns), #3 (idempotency binding) **đã fix ở commit `db86911`** — KHÔNG đụng lại.
 
 ## Bài toán & mục tiêu

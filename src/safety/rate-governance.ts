@@ -11,6 +11,9 @@ interface RateConfig {
 
 const DEFAULT_RATE_CONFIG: RateConfig = {
   'issues_create': { per_project_per_hour: 50 },
+  'issues_update': { per_project_per_hour: 100 },
+  'issues_add_comment': { per_project_per_hour: 100 },
+  'issues_pin_element': { per_project_per_hour: 50 },
   'reviews_create': { per_project_per_hour: 20 },
   'reviews_transition': { per_project_per_hour: 50 },
 };

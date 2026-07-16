@@ -19,8 +19,7 @@ export const MutationBaseFields = {
     .default(true)
     .describe(
       'Preview mode (default: true). When true, returns a preview of the intended API call ' +
-        'and an approval_token without executing. Set to false with a valid approval_token to execute. ' +
-        'Set FORMA_MUTATION_MODE=client_approval_only in env to skip the two-step flow.',
+        'and an approval_token without executing. Set to false with a valid approval_token to execute.',
     ),
   approval_token: z
     .string()

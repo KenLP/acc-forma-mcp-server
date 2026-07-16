@@ -106,9 +106,12 @@ Set `FORMA_AUDIT_FAIL_CLOSED=true` to surface audit write failures as errors. **
 
 The `lastHash` pointer used for SHA-256 chain continuity is in-memory. On restart, `loadLastHashFromFile()` reads the last entry from today's audit file to restore the hash, but any failure in that read (missing file, malformed JSON, permission error) resets the chain to `sha256:genesis` and logs a WARN. A chain verification that spans a restart may show a break at that point.
 
-### DM SDK: no automatic retry
+### DM SDK: same retry behavior as the rest
 
-The Data Management adapter (`src/apis/data-management.ts`) uses the APS SDK directly, which does not retry on 429 or 5xx responses. Transient errors surface immediately as `ApsApiError`. Other APIs that use `apsRequest()` from `src/http/client.ts` get automatic exponential-backoff retry.
+The Data Management adapter (`src/apis/data-management.ts`) wraps APS SDK calls in
+`callSdk()`, which applies the same exponential-backoff retry (with jitter) and
+401 token-invalidation as `apsRequest()` in `src/http/client.ts`. Errors that
+exhaust retries surface as `ApsApiError`.
 
 ### No circuit breaker
 

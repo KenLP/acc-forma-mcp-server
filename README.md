@@ -245,6 +245,8 @@ Every mutation tool defaults to `dry_run=true`. On first call, the server:
 
 To execute, re-call the same tool with `dry_run=false, approval_token=<token>`.
 
+> The two-step flow is the **default** (`FORMA_MUTATION_MODE=preview_required`). Operators may opt into `client_approval_only` (skips the token round-trip when the MCP client itself gates approvals) or `readonly` (blocks every write). See [Configuration](#configuration).
+
 ```
 Claude: "Create an issue titled 'Leak at Level 3' in project xyz"
 
@@ -368,8 +370,9 @@ pnpm run test:watch
 
 The publisher receives **no data** from you — no telemetry, no analytics, no phone-home. You
 run the server yourself with your own Autodesk credentials; it contacts only Autodesk's APIs,
-and the only thing written to disk is a local audit log on your own machine (90-day default
-retention). See **[PRIVACY.md](PRIVACY.md)** for the full policy.
+and the only things written to disk are a local audit log on your own machine (90-day default
+retention) and — only if you enable SQLite persistence — a local state.db for approval
+tokens/rate counters/idempotency records. See **[PRIVACY.md](PRIVACY.md)** for the full policy.
 
 ## License
 

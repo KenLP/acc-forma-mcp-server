@@ -75,10 +75,23 @@ to a tool — for example an issue title or description — that content is reco
 - **Where:** `~/.acc-forma-mcp/audit` by default; configurable via `FORMA_AUDIT_DIR`.
 - **Who can read it:** only you. It never leaves your machine.
 
-### 1.4 In-memory state
+### 1.4 Approval tokens, rate counters, idempotency records
 
-Approval tokens and rate-limit counters are held **in memory only** and are discarded when
-the process exits. They are never written to disk or transmitted.
+By default (`FORMA_PERSISTENCE_MODE=memory`) approval tokens, rate-limit counters, and
+idempotency records are held **in memory only** and are discarded when the process exits.
+
+If you opt into `FORMA_PERSISTENCE_MODE=sqlite`, the same data is instead stored in a
+local SQLite database on your machine (default `~/.acc-forma-mcp/state.db`, configurable
+via `FORMA_DB_PATH`) so that restarts do not invalidate in-flight approvals:
+
+| Table | Contents |
+|---|---|
+| `approval_tokens` | live approval token ids, the tool name, a SHA-256 payload hash, expiry |
+| `rate_counters` | per-tool/per-project hourly counters |
+| `idempotency_records` | idempotency keys, tool name, payload hash, and the **cached tool result** — which can include Autodesk project/business data returned by that call |
+
+Rows expire with the approval-token TTL and are purged at startup. Like the audit log,
+`state.db` never leaves your machine — treat it with the same care as project data.
 
 ---
 
@@ -118,7 +131,7 @@ software neither selects, contracts with, nor transmits to any AI provider.
 |---|---|
 | Credentials | Not retained. Held in process memory only; discarded on exit. |
 | Autodesk project data | Not retained. Held in memory for the duration of a call. |
-| Approval tokens, rate counters | Not retained. In memory only; discarded on exit. |
+| Approval tokens, rate counters, idempotency records | Memory mode (default): discarded on exit. SQLite mode: stored in `state.db` on your machine until the approval-token TTL expires; expired rows are purged at startup. |
 | Audit log | Retained on **your** machine for **90 days by default**, then deleted automatically. Configurable via `FORMA_AUDIT_RETENTION_DAYS`. Old files are pruned at server startup (`pruneOldAuditFiles()`). |
 
 Because the publisher holds no data, there is nothing for the publisher to retain or delete.
@@ -139,8 +152,10 @@ You are in full control at all times:
   to limit which hubs and projects the software may touch, and/or
   `FORMA_MUTATION_MODE=readonly` to disable every write.
 - **Delete all stored data:** delete the audit directory (`~/.acc-forma-mcp/audit`, or your
-  `FORMA_AUDIT_DIR`) and unset the environment variables. Nothing else is stored anywhere,
-  so this is complete deletion.
+  `FORMA_AUDIT_DIR`), delete `state.db` if you enabled SQLite persistence
+  (`~/.acc-forma-mcp/state.db`, or your `FORMA_DB_PATH`), and unset the environment
+  variables. With the audit directory and state.db removed, nothing else is stored
+  anywhere — this is complete deletion.
 
 There is no publisher-side account, so there is no consent to withdraw from the publisher
 and no deletion request to file.

@@ -28,15 +28,18 @@ async function main(): Promise<void> {
   let auth: AuthProvider;
   let auth2lo: AuthProvider | undefined;
 
+  // Minimum privilege: no account write scope is ever requested (Admin tools only read),
+  // and the data write scope is only requested when the server can actually write.
+  const writesEnabled = !(env.FORMA_READONLY || env.FORMA_MUTATION_MODE === 'readonly');
+  const scopes = ['data:read', 'account:read', ...(writesEnabled ? ['data:write'] : [])];
+
   // 2-legged provider is always created alongside SSA so DM/Admin tools can use
   // hub-wide project visibility (SSA only sees projects the account is assigned to).
-  const twoLegged = new TwoLeggedAuthProvider([
-    'data:read', 'data:write', 'account:read', 'account:write',
-  ]);
+  const twoLegged = new TwoLeggedAuthProvider(scopes);
 
   switch (env.APS_AUTH_MODE) {
     case 'ssa':
-      auth = new SsaAuthProvider(['data:read', 'data:write', 'account:read', 'account:write']);
+      auth = new SsaAuthProvider(scopes);
       auth2lo = twoLegged; // DM/Admin tools will use this for full hub visibility
       logger.info('Dual auth: SSA (default) + 2LO (DM/Admin tools)');
       break;

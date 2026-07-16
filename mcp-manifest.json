@@ -96,11 +96,11 @@
     "notes": "SSA is a bot identity scoped per-project via Hub Admin > Custom Integrations; it is required for user-context APIs (Issues, Reviews, AEC Data Model, Model Coordination) and is the default for everything else. 2LO (app-only client-credentials) is the preferred mode for Account Admin, Data Management, Model Derivative, and Docs viewables read tools, with SSA as fallback. Credentials are supplied by the customer via environment variables; the server ships with no credentials. End-user OAuth (3LO) is not implemented in this release; it is planned for a later phase."
   },
   "security_controls": [
-    "Dry-run preview required before any mutating tool executes",
-    "Explicit approval token required to confirm and apply a mutating action",
+    "Two-step mutation flow (default FORMA_MUTATION_MODE=preview_required): a dry-run preview plus a payload-bound, single-use approval token are required before any mutating tool executes",
+    "Operator-configurable mutation modes, disclosed here: preview_required (default, two-step), client_approval_only (the operator's MCP client is trusted to approve; the two-step token flow is skipped), readonly (all mutations disabled)",
     "Project/hub allow-list restricting which resources the server may touch",
     "Read-only mode toggle to globally disable all mutating tools",
-    "Per-tool rate governance",
-    "SHA-256 hash-chained local audit log of all tool calls, independently verifiable via meta_verify_audit_chain"
+    "Per-tool, per-project hourly rate limits covering every project-scoped mutating tool (defaults built in; overridable via FORMA_RATE_CONFIG_PATH)",
+    "SHA-256 hash-chained local audit log of all tool calls, independently verifiable via meta_verify_audit_chain; the audit log records only a token fingerprint, never the live approval token"
   ]
 }

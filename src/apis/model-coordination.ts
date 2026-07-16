@@ -2,6 +2,7 @@ import { gunzipSync } from 'node:zlib';
 import { apsRequest } from '../http/client.js';
 import type { AuthProvider } from '../auth/index.js';
 import { stripBPrefix } from '../utils/project-id.js';
+import { assertAllowedUrl } from '../utils/url-guard.js';
 
 const APS_BASE = 'https://developer.api.autodesk.com';
 
@@ -213,6 +214,7 @@ export async function getClashResults(
   let documents: ClashDocument[] = [];
   for (const r of resData.resources ?? []) {
     // Pre-signed S3 URL — fetch WITHOUT the APS bearer token.
+    assertAllowedUrl(r.url, { hostSuffixes: ['.amazonaws.com'] });
     const dl = await fetch(r.url);
     if (!dl.ok) continue;
     const json = JSON.parse(decodeResource(Buffer.from(await dl.arrayBuffer()))) as Record<string, unknown>;

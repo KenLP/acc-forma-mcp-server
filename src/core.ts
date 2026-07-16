@@ -34,6 +34,7 @@ export { ApsApiError, ApsGraphQLError } from './http/errors.js';
 // ---- Utils ----------------------------------------------------------------
 export { stripBPrefix, addBPrefix, normalizeProjectId } from './utils/project-id.js';
 export { redact } from './utils/redact.js';
+export { assertAllowedUrl, DisallowedUrlError, type UrlPolicy } from './utils/url-guard.js';
 
 // ---- Typed APS API clients (namespaced per domain) -------------------------
 export * as adminApi from './apis/admin.js';

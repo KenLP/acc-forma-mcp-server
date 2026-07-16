@@ -204,10 +204,15 @@ no capability download at runtime.
 **Data retention policy:**
 ```
 The server is stateless with respect to Autodesk design data — no project data is
-persisted. The only data written to disk is a local audit log (JSONL) of tool calls
-on the customer's own machine, with tokens/secrets redacted before writing. Approval
-tokens and rate counters are held in memory only and vanish on process exit. The
-publisher receives no data of any kind (no telemetry, no analytics).
+persisted beyond the records below. By default the only file written to disk is a
+local audit log (JSONL) of tool calls on the customer's own machine, with
+tokens/secrets redacted before writing. Approval tokens, rate counters, and
+idempotency records are held in memory only by default and vanish on process exit.
+If the customer opts into FORMA_PERSISTENCE_MODE=sqlite, a second file is also
+written on the customer's own machine — a local SQLite database (state.db) holding
+that same data, including cached tool results for idempotency replay, which can
+contain Autodesk project data; expired rows are purged at startup. The publisher
+receives no data of any kind (no telemetry, no analytics).
 ```
 
 **Where data is stored:**
@@ -215,14 +220,19 @@ publisher receives no data of any kind (no telemetry, no analytics).
 Only on the customer's machine: the local audit log defaults to
 ~/.acc-forma-mcp/audit (configurable via FORMA_AUDIT_DIR). Autodesk credentials are
 supplied by the customer as environment variables and are never written to disk by
-the server. No publisher-side or third-party storage exists.
+the server. Optionally, if FORMA_PERSISTENCE_MODE=sqlite is set, approval tokens, rate
+counters, and idempotency records (default: memory-only) are persisted to a local
+SQLite file at ~/.acc-forma-mcp/state.db (configurable via FORMA_DB_PATH). No
+publisher-side or third-party storage exists.
 ```
 
 **Data deletion process:**
 ```
-Delete the local audit directory (~/.acc-forma-mcp/audit) and unset the environment
-variables. Because the server retains nothing else and the publisher holds no data,
-this constitutes complete deletion.
+Delete the local audit directory (~/.acc-forma-mcp/audit) and, if
+FORMA_PERSISTENCE_MODE=sqlite was enabled, the local state.db file
+(~/.acc-forma-mcp/state.db, or FORMA_DB_PATH), then unset the environment variables.
+The server retains nothing else and the publisher holds no data, so removing those two
+paths constitutes complete deletion.
 ```
 
 **Publisher Privacy Policy URL** *(required by the App Store Getting Started checklist; provide if the form or reviewer asks):*
