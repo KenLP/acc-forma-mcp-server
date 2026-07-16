@@ -313,6 +313,7 @@ Key variables:
 | `APS_CLIENT_ID` | — | Required |
 | `APS_CLIENT_SECRET` | — | Required |
 | `APS_AUTH_MODE` | `ssa` | `ssa`, `2lo`, or `3lo` (3lo: Phase 3) |
+| `APS_REGION` | `US` | `US`, `EMEA`, or `AUS` |
 | `SSA_ID` | — | Required for SSA mode |
 | `SSA_KEY_ID` | — | Required for SSA mode |
 | `SSA_KEY_PATH` | — | Path to PEM private key file |
@@ -320,8 +321,17 @@ Key variables:
 | `FORMA_MUTATION_MODE` | `preview_required` | See Safety section |
 | `FORMA_ALLOWED_HUBS` | `*` | Comma-separated hub IDs |
 | `FORMA_ALLOWED_PROJECTS` | `*` | Comma-separated project UUIDs |
+| `FORMA_APPROVAL_TOKEN_TTL` | `300` | Approval-token lifetime, in seconds. Also bounds idempotency records. |
+| `FORMA_RATE_CONFIG_PATH` | — | JSON file overriding the built-in per-tool hourly limits |
 | `FORMA_AUDIT_DIR` | `~/.acc-forma-mcp/audit` | JSONL audit log directory |
+| `FORMA_AUDIT_INCLUDE_READS` | `true` | Set `false` to audit mutations only |
+| `FORMA_AUDIT_RETENTION_DAYS` | `90` | Audit files older than this are deleted at startup |
 | `FORMA_AUDIT_FAIL_CLOSED` | `false` | Surface audit write failures as errors. When `true` and the write fails after an APS mutation, the response indicates whether the change was applied. |
+| `FORMA_AUDIT_INDEX` | `none` | `none` or `sqlite` (`sqlite` not implemented yet) |
+| `FORMA_PERSISTENCE_MODE` | `memory` | `memory` or `sqlite`. `sqlite` keeps approval tokens, rate counters and idempotency records across restarts — see [PRIVACY.md](PRIVACY.md) for what it stores. ⚠️ `pnpm install` skips the `better-sqlite3` build script by default; run `pnpm approve-builds` first or this mode fails with "Could not locate bindings". |
+| `FORMA_DB_PATH` | `~/.acc-forma-mcp/state.db` | SQLite file, only used when `FORMA_PERSISTENCE_MODE=sqlite` |
+| `LOG_LEVEL` | `info` | `trace`, `debug`, `info`, `warn`, `error`, `fatal` |
+| `LOG_PRETTY` | `false` | Human-readable log output (stderr) |
 
 ---
 

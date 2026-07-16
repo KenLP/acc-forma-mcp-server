@@ -29,6 +29,13 @@ docs/PLANNING.md
 docs/REMEDIATION-PLAN.md
 docs/PAPER_OUTLINE.md
 
+# Working notes: handoffs, backlogs, submission prep, specs written for a later
+# session. These are our working conversation, not product documentation.
+docs/HANDOFF.md
+docs/BACKLOG-*.md
+docs/MCP-PUBLISHER-SUBMISSION.md
+docs/specs/
+
 # Local review/analysis artifacts and live-test diagnostic scripts
 REVIEW_FINDINGS*.md
 scripts/diag-*.ts
