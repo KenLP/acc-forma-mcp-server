@@ -136,8 +136,8 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 | Tool | Purpose |
 |---|---|
 | `admin_list_projects` | List all projects under a hub (hub-wide visibility via 2LO). |
-| `admin_get_project` | Fetch a single project's metadata, scopes, and relationships. |
-| `admin_list_users` | List users in the account / project membership. |
+| `admin_get_project` | Fetch a single project's admin metadata: status, type, job number, address, and start/end dates. |
+| `admin_list_users` | List the members of the account. Account-level directory only — the Account Admin API has no project-roster endpoint. |
 | `admin_list_companies` | List companies registered on the account. |
 
 ### Data Management (6)
@@ -148,14 +148,14 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 | `dm_list_projects` | List projects in a hub. |
 | `dm_list_top_folders` | List the top-level folders of a project (Plans, Project Files, etc.). |
 | `dm_list_folder_contents` | List items (files + subfolders) in a folder. |
-| `dm_get_item` | Get metadata for a single item (file or folder). |
+| `dm_get_item` | Get metadata for a single item (a file/document), including its tip version id. |
 | `dm_list_versions` | List all versions of a file with version numbers and timestamps. |
 
 ### Issues (12)
 
 | Tool | Purpose |
 |---|---|
-| `issues_list` | List issues in a project with filters (status, type, assignee). |
+| `issues_list` | List issues in a project, filterable by status or assignee. |
 | `issues_get` | Get a single issue with full details, including `permittedStatuses` and `permittedAttributes` for the current user. |
 | `issues_create` ✍️ | Create a new issue with subtype, location, due date, assignment, and optional pushpin links. |
 | `issues_pin_element` ✍️ | Create an issue with a 3D pushpin auto-placed on a BIM element — resolves the viewable GUID, objectId, globalOffset and viewer position from the element's External ID in one call. |
@@ -225,7 +225,7 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 
 | Tool | Purpose |
 |---|---|
-| `meta_list_changelog` | Read the local audit log entries with filters by tool, time, or project. |
+| `meta_list_changelog` | Read the local audit log for one date, filterable by tool name and audit stage. |
 | `meta_verify_audit_chain` | Verify the audit log hash chain has not been tampered with. |
 
 
@@ -265,8 +265,9 @@ Tool: issues_create(dry_run=false, approval_token="appr_01JXW...")
 
 Tool calls are appended to `~/.acc-forma-mcp/audit/audit-YYYY-MM-DD.jsonl` with SHA-256 hash chaining — every outcome, not just the successful ones: `preview`, `executed`, each `denied_*` reason, `idempotent_replay`, `failed_api`, and `outcome_unknown`.
 
-Two operator settings change what actually lands on disk:
+Three limits worth knowing:
 
+- **Only invocations that reach a tool handler are audited.** A call whose input fails the MCP SDK's schema validation, or that names a tool that does not exist, is rejected by the protocol layer before any handler runs — nothing is logged, because nothing was done: no Autodesk API is touched on that path.
 - `FORMA_AUDIT_INCLUDE_READS=false` drops read-tool entries (mutations are always attempted).
 - Audit writes are **fail-open** by default: if the file cannot be written, the error is logged and the call still proceeds. Set `FORMA_AUDIT_FAIL_CLOSED=true` to abort the call instead, so no action goes unrecorded.
 

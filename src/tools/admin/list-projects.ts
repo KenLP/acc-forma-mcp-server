@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { ReadToolDef } from '../_types.js';
 import { adminListProjects } from '../../apis/admin.js';
-import { isProjectAllowed } from '../../safety/allowlist.js';
+import { isProjectAllowed, isAllowlistActive } from '../../safety/allowlist.js';
 
 const inputSchema = z.object({
   hub_id: z
@@ -39,16 +39,27 @@ export const adminListProjectsTool: ReadToolDef<typeof inputSchema> = {
     });
 
     // Account Admin API returns every project in the hub regardless of the allow-list;
-    // filter the page before it reaches the caller. `pagination.totalResults` as returned
-    // by APS counts the UNFILTERED set, which would leak how many projects exist outside
-    // the allow-list. Report the filtered count instead so nothing about the excluded
-    // projects is observable from the response.
+    // filter this page before it reaches the caller. `pagination.totalResults` as returned
+    // by APS is the count across ALL pages of the UNFILTERED set — it is NOT this page's
+    // size, and it is NOT recoverable by substituting `projects.length` (that's only this
+    // page's filtered count, not a cross-page total; page 1 could show 0 while allowed
+    // projects exist on page 2). So:
+    //   - allow-list inactive (nothing filtered): nothing to hide, pass APS's pagination
+    //     (including the real totalResults) through unchanged.
+    //   - allow-list active: the true allowed-total is unknowable without scanning every
+    //     APS page, and the APS totalResults would leak how many projects exist outside the
+    //     allow-list either way (correct or "fixed"). Omit totalResults entirely rather than
+    //     report a number that's wrong in either direction. Do NOT "fix" this back to
+    //     projects.length — see the regression that guards against exactly that in
+    //     tests/unit/tools/admin/list-projects.spec.ts.
     const projects = results.filter((p) => isProjectAllowed(p.id));
-    const filteredPagination = { ...pagination, totalResults: projects.length };
+    const filteredPagination = isAllowlistActive()
+      ? { limit: pagination.limit, offset: pagination.offset }
+      : pagination;
 
     if (projects.length === 0) {
       return {
-        content: [{ type: 'text', text: 'No projects found for this hub.' }],
+        content: [{ type: 'text', text: 'No projects found on this page.' }],
         structuredContent: { projects: [], pagination: filteredPagination },
       };
     }
@@ -62,7 +73,7 @@ export const adminListProjectsTool: ReadToolDef<typeof inputSchema> = {
       content: [
         {
           type: 'text',
-          text: `Found ${projects.length} project(s):\n\n` + lines.join('\n'),
+          text: `Found ${projects.length} project(s) on this page:\n\n` + lines.join('\n'),
         },
       ],
       structuredContent: { projects, pagination: filteredPagination },

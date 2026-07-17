@@ -30,8 +30,15 @@ Every mutation tool call passes through this pipeline in order:
                           "outcome_unknown" if the request got no response at all)
 ```
 
-Every branch above records an entry — there is no path that returns without one. That is what
-lets the log answer "what did the agent actually do", including the times it was stopped.
+Every branch above records an entry — no path through the wrapper returns without one. That is
+what lets the log answer "what did the agent actually do", including the times it was stopped.
+
+One boundary to know: the wrapper is only reached once the MCP SDK has validated the call
+against the tool's input schema. A request with malformed input, or naming a tool that does not
+exist, is refused by the protocol layer and never reaches step 0 — so it produces no audit
+entry. Nothing is lost by that: such a call touches no Autodesk API and performs no action.
+The claim the manifest makes is therefore "every invocation that reaches a handler", not
+"every byte that arrived on stdin".
 
 ## Audit Log
 

@@ -1,10 +1,10 @@
 {
   "mcp_manifest_version": "1.0",
-  "app_model": "Local MCP Server",
+  "app_model": "A",
   "mcp_spec_version": "2025-11-25",
   "server": {
     "name": "acc-forma-mcp-server",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "transport": "stdio",
     "repository": "https://github.com/KenLP/acc-forma-mcp-server",
     "license": "MIT",
@@ -102,6 +102,6 @@
     "Hub/project allow-list (FORMA_ALLOWED_HUBS, FORMA_ALLOWED_PROJECTS) restricting which resources the server may touch. Every tool declares how it binds to the allow-list, and the binding is enforced centrally: tools that take a Data Management hub/project id are checked against it; discovery tools (dm_list_hubs, dm_list_projects, admin_list_projects) additionally filter their own results down to allow-listed entries. Tools addressed by an id that cannot be mapped back to a DM hub/project — a Model Derivative URN, or an AEC Data Model-native id, neither of whose endpoints are project-scoped — are refused outright while an allow-list is active, rather than allowed through unchecked; this covers all AEC Data Model tools, md_get_manifest, md_get_properties, md_trigger_translation, docs_get_viewables, and issues_pin_element",
     "Read-only mode toggle to globally disable all mutating tools",
     "Per-tool, per-project hourly rate limits covering every project-scoped mutating tool (defaults built in; overridable via FORMA_RATE_CONFIG_PATH). md_trigger_translation is not rate-limited: it is addressed by URN and has no project id to bucket a counter on",
-    "SHA-256 hash-chained local audit log, independently verifiable via meta_verify_audit_chain. An entry is attempted for every tool call at whatever outcome it reaches: preview, executed, idempotent_replay, failed_api, outcome_unknown, or a specific denial reason (denied_readonly, denied_allowlist, denied_rate_limit, denied_business_rule, denied_auth_mode, denied_missing_approval, denied_approval, denied_idempotency). Two operator settings narrow this and are disclosed here: FORMA_AUDIT_INCLUDE_READS=false excludes read-tool calls (mutation calls are always attempted), and audit writes are fail-open by default — a write failure is logged and the call still proceeds — unless FORMA_AUDIT_FAIL_CLOSED=true is set, which aborts the call instead. The log records only a SHA-256 fingerprint of an approval token, never the live token"
+    "SHA-256 hash-chained local audit log, independently verifiable via meta_verify_audit_chain. An entry is attempted for every tool invocation that reaches a tool handler, at whatever outcome it reaches: preview, executed, idempotent_replay, failed_api, outcome_unknown, or a specific denial reason (denied_readonly, denied_allowlist, denied_rate_limit, denied_business_rule, denied_auth_mode, denied_missing_approval, denied_approval, denied_idempotency). Three limits are disclosed rather than implied: a request rejected by the MCP SDK's own input-schema validation, or naming an unknown tool, is refused by the protocol layer before any handler runs and so is not audited (no Autodesk data is touched on that path); FORMA_AUDIT_INCLUDE_READS=false excludes read-tool calls (mutation calls are always attempted); and audit writes are fail-open by default — a write failure is logged and the call still proceeds — unless FORMA_AUDIT_FAIL_CLOSED=true is set, which aborts the call instead. The log records only a SHA-256 fingerprint of an approval token, never the live token"
   ]
 }
