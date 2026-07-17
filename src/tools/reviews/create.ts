@@ -75,11 +75,9 @@ export const createReviewTool: MutationToolDef<typeof inputSchema> = {
   name: 'reviews_create',
   title: 'Create Review',
   description:
-    'Creates a new review in an ACC project.\n\n' +
-    'WORKFLOW: Call with dry_run=true first, then dry_run=false + approval_token to execute. ' +
-    'Use admin_list_users to find reviewer IDs. ' +
-    'Use dm_list_versions to get model version URNs for linked_documents. ' +
-    'Requires hub_id from dm_list_hubs to resolve the Reviews container ID.',
+    'Creates a new review in an ACC project. reviewer_ids are Autodesk user IDs; ' +
+    'linked_documents reference model version URNs to attach. ' +
+    'Resolving the Reviews container requires hub_id in addition to project_id.',
   kind: 'mutation',
   scopes: ['data:read', 'data:write'],
   requiredAuthModes: ['ssa', '3lo'],

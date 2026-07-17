@@ -43,7 +43,8 @@ whatever the tool you invoked is for.
   tool call you (or your agent) makes.
 - **Used for:** producing that tool's result. It is held in memory for the duration of the
   call and returned to your MCP client.
-- **Not stored** by the software, other than the audit-log record described in §1.3.
+- **Not stored** by the software, other than the audit-log record described in §1.3 and —
+  only if you enable SQLite persistence — the cached tool result described in §1.4.
 
 ### 1.3 The local audit log
 
@@ -74,7 +75,9 @@ to a tool — for example an issue title or description — that content is reco
 `input_redacted`. Treat the audit directory with the same care as the project data itself.
 
 - **Where:** `~/.acc-forma-mcp/audit` by default; configurable via `FORMA_AUDIT_DIR`.
-- **Who can read it:** only you. It never leaves your machine.
+- **Who can read it:** only you. The server creates the audit directory with `0700` and each
+  log file with `0600` on POSIX systems, so other local users cannot read them; on Windows
+  the files inherit the parent directory's ACL. Nothing ever leaves your machine.
 
 ### 1.4 Approval tokens, rate counters, idempotency records
 
@@ -91,8 +94,11 @@ via `FORMA_DB_PATH`) so that restarts do not invalidate in-flight approvals:
 | `rate_counters` | per-tool/per-project hourly counters |
 | `idempotency_records` | idempotency keys, tool name, payload hash, and the **cached tool result** — which can include Autodesk project/business data returned by that call |
 
-Rows expire with the approval-token TTL and are purged at startup. Like the audit log,
-`state.db` never leaves your machine — treat it with the same care as project data.
+Approval tokens and idempotency records expire with the approval-token TTL; rate counters
+are keyed by the hour and stale buckets are discarded. All expired rows are purged at
+startup. Like the audit log, `state.db` never leaves your machine — treat it with the same
+care as project data. `state.db` is also created inside a `0700` directory, for the same
+reason as the audit directory above.
 
 ---
 

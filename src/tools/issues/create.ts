@@ -261,12 +261,9 @@ export const createIssueTool: MutationToolDef<typeof inputSchema> = {
   name: 'issues_create',
   title: 'Create ACC Issue',
   description:
-    'Creates a new issue in an Autodesk Forma (ACC) project.\n\n' +
-    'WORKFLOW (FORMA_MUTATION_MODE=preview_required, the default):\n' +
-    '  1. Call with dry_run=true (default) — returns a preview + approval_token.\n' +
-    '  2. Call again with dry_run=false and approval_token=<token> to execute.\n\n' +
-    'Requires issue_subtype_id — call issues_list_types first to get valid IDs.\n' +
-    'The server validates that the subtype exists before issuing the approval_token.',
+    'Creates a new issue in an Autodesk Forma (ACC) project. ' +
+    'Requires a valid issue_subtype_id from the project\'s configured issue types — ' +
+    'the server validates that the subtype exists and is active before creating the issue.',
   kind: 'mutation',
   scopes: ['data:read', 'data:write'],
   requiredAuthModes: ['ssa', '3lo'],

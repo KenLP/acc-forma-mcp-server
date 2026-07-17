@@ -127,16 +127,11 @@ export const updateIssueTool: MutationToolDef<typeof inputSchema> = {
   name: 'issues_update',
   title: 'Update ACC Issue',
   description:
-    'Updates one or more fields of an existing ACC issue (PATCH).\n\n' +
-    'All update fields are optional — only provide what you want to change. ' +
-    'At least one field is required.\n\n' +
-    'WORKFLOW (default FORMA_MUTATION_MODE=preview_required):\n' +
-    '  1. Call with dry_run=true (default) — returns a preview + approval_token.\n' +
-    '  2. Call again with dry_run=false and approval_token=<token> to execute.\n\n' +
-    'TIP — check permittedStatuses before changing status:\n' +
-    '  `issues_get(issue_id=...)` returns `permittedStatuses` and `permittedAttributes` ' +
-    'for the current user. Status transitions must respect the project workflow.\n\n' +
-    'Auth: SSA or 3LO required (2LO not supported for Issues API).',
+    'Updates one or more fields of an existing ACC issue via a sparse PATCH — ' +
+    'only the explicitly provided fields are changed; at least one field is required. ' +
+    'Valid status transitions depend on the issue\'s current status and the calling ' +
+    'user\'s permitted statuses/attributes, which vary per issue and project workflow. ' +
+    'Auth: SSA or 3LO required (2LO is not supported for the Issues API).',
   kind: 'mutation',
   scopes: ['data:read', 'data:write'],
   requiredAuthModes: ['ssa', '3lo'],

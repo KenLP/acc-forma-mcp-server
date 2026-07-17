@@ -11,7 +11,9 @@ export function getDb(): Database.Database {
 
   const dbPath = env.FORMA_DB_PATH;
   const dir = dirname(dbPath);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  // 0o700: state.db holds approval tokens and rate/idempotency records and must
+  // not be world-readable. POSIX only — on Windows the dir inherits the parent ACL.
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
 
   _db = new Database(dbPath);
   _db.pragma('journal_mode = WAL');
@@ -60,16 +62,30 @@ function migrateSchema(db: Database.Database): void {
   }
 }
 
+// Mirrors hourBucket() in src/safety/rate-governance.ts (`${year}-${month}-${day}-${hour}`,
+// UTC, 0-based month) — not imported directly to avoid a persistence -> safety -> persistence
+// import cycle (rate-governance.ts already imports persistence/rate-store.ts).
+function currentHourBucket(): string {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}-${d.getUTCHours()}`;
+}
+
 /** Delete expired rows from token + idempotency tables. Called once at startup. */
 export function cleanupExpiredRows(): void {
   const db = getDb();
   const now = Date.now();
   const ap = db.prepare('DELETE FROM approval_tokens   WHERE expires_at < ?').run(now);
   const id = db.prepare('DELETE FROM idempotency_records WHERE expires_at < ?').run(now);
-  const total = (ap.changes ?? 0) + (id.changes ?? 0);
+  // rate_counters has no expires_at — rows are bucketed by hour instead. Only the
+  // current hour's bucket is still useful for rate limiting; anything from an
+  // earlier bucket is dead weight that would otherwise accumulate forever.
+  const rate = db
+    .prepare('DELETE FROM rate_counters WHERE hour_bucket != ?')
+    .run(currentHourBucket());
+  const total = (ap.changes ?? 0) + (id.changes ?? 0) + (rate.changes ?? 0);
   if (total > 0) {
     logger.debug(
-      { deleted_tokens: ap.changes, deleted_idem: id.changes },
+      { deleted_tokens: ap.changes, deleted_idem: id.changes, deleted_rate: rate.changes },
       'persistence: cleaned expired rows',
     );
   }

@@ -33,13 +33,34 @@ import { evaluateRules, groupByDiscipline, type RuleMatch } from './rules.js';
 import { assess, bySeverityDesc, SEVERITY_RANK, type Assessment, type Severity } from './severity.js';
 import { buildElementPin, isPinnable } from './pin.js';
 
-// ── Config (Ken - MCP Testing project) ─────────────────────────────────────────
+// ── Config — supply your own project via env (see README) ──────────────────────
+function required(name: string): string {
+  const v = process.env[name];
+  if (!v) {
+    throw new Error(
+      `Missing ${name}. This prototype needs your own project — set ALERT_AECDM_PROJECT_ID, ` +
+        `ALERT_DM_PROJECT_ID and ALERT_WATCH_MODEL (see prototypes/change-alert/README.md).`,
+    );
+  }
+  return v;
+}
+
+/** Viewer globalOffset for the watched model, as "x,y,z". Read it from any existing pin. */
+function parseOffset(raw: string | undefined): { x: number; y: number; z: number } {
+  const parts = (raw ?? '0,0,0').split(',').map((n) => Number(n.trim()));
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) {
+    throw new Error(`ALERT_GLOBAL_OFFSET must be "x,y,z" numbers — got "${raw ?? ''}"`);
+  }
+  return { x: parts[0]!, y: parts[1]!, z: parts[2]! };
+}
+
 const CONFIG = {
-  aecdmProjectId: 'urn:adsk.workspace:prod.project:80424913-8ca5-4e39-80b0-ebf00ad69385',
-  dmProjectId: '57deb033-4608-46de-ab21-fcb0404de6d3', // for MP diff + issues (no b.)
-  watchModel: 'R27_Snowdon Towers Sample Architectural.rvt',
-  // Calibrated viewer globalOffset for the Architectural model (see CLAUDE.md / pin-element.ts).
-  archGlobalOffset: { x: -19.068394820, y: -5.405197144, z: 25.708333651 },
+  aecdmProjectId: required('ALERT_AECDM_PROJECT_ID'),
+  dmProjectId: required('ALERT_DM_PROJECT_ID'), // for MP diff + issues (no b. prefix)
+  watchModel: required('ALERT_WATCH_MODEL'),
+  // Per-model viewer constant. Without the real value the pin lands in global coords,
+  // offset by however far the model's origin sits from the viewer origin.
+  archGlobalOffset: parseOffset(process.env['ALERT_GLOBAL_OFFSET']),
 };
 const __dir = dirname(fileURLToPath(import.meta.url));
 const STATE_FILE = join(__dir, '.state.json');

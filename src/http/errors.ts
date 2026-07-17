@@ -59,3 +59,23 @@ export class ApsGraphQLError extends ApsApiError {
     this.message = `GraphQL error: ${errors.map((e) => e.message).join('; ')}`;
   }
 }
+
+/**
+ * A non-GET request failed without a response (timeout, socket error), so it is unknown
+ * whether APS applied the change. Callers must verify state before retrying — a blind
+ * retry can duplicate the mutation.
+ */
+export class ApsIndeterminateError extends Error {
+  constructor(
+    public readonly method: string,
+    public readonly url: string,
+    public readonly cause: unknown,
+  ) {
+    super(
+      `${method} ${url} failed without a response (${cause instanceof Error ? cause.message : String(cause)}). ` +
+        `The request may or may not have been applied by Autodesk — verify the current state before retrying, ` +
+        `as retrying could duplicate the change.`,
+    );
+    this.name = 'ApsIndeterminateError';
+  }
+}

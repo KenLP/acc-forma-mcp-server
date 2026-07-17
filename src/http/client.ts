@@ -1,6 +1,6 @@
 import { logger } from '../logger.js';
 import type { AuthProvider } from '../auth/index.js';
-import { ApsApiError, ApsGraphQLError } from './errors.js';
+import { ApsApiError, ApsGraphQLError, ApsIndeterminateError } from './errors.js';
 
 const APS_BASE_URL = 'https://developer.api.autodesk.com';
 const GRAPHQL_URL = `${APS_BASE_URL}/aec/graphql`;
@@ -25,6 +25,12 @@ export interface RequestOptions {
   body?: unknown;
   region?: string;
   baseUrl?: string;
+  /**
+   * Retry 5xx for a non-GET request. Only set this for endpoints Autodesk documents as
+   * idempotent — a blind retry of a normal mutation can create duplicates. GET is always
+   * retried regardless of this flag.
+   */
+  retryOn5xx?: boolean;
 }
 
 /** Generic APS REST request with retry/backoff */
@@ -33,7 +39,8 @@ export async function apsRequest<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { method = 'GET', params, body, region, baseUrl = APS_BASE_URL } = options;
+  const { method = 'GET', params, body, region, baseUrl = APS_BASE_URL, retryOn5xx = false } =
+    options;
   const url = buildUrl(baseUrl, path, params);
   let backoffMs = INITIAL_BACKOFF_MS;
 
@@ -45,12 +52,29 @@ export async function apsRequest<T>(
       'x-ads-region': region ?? defaultApsRegion,
     };
 
-    const resp = await fetch(url, {
-      method,
-      headers,
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-      signal: AbortSignal.timeout(30_000),
-    });
+    let resp: Response;
+    try {
+      resp = await fetch(url, {
+        method,
+        headers,
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch (err) {
+      // No response at all (timeout, socket error). For GET this is safe to retry — nothing
+      // was mutated. For any other method, whether APS applied the change is unknown; retrying
+      // blind could duplicate it, so surface that explicitly instead of retrying.
+      if (method !== 'GET') {
+        throw new ApsIndeterminateError(method, url, err);
+      }
+      if (attempt < MAX_RETRIES) {
+        logger.warn({ path, attempt, err }, 'APS request failed without a response; retrying (GET)');
+        await sleep(backoffMs * (0.5 + Math.random() * 0.5));
+        backoffMs = Math.min(backoffMs * 2, 30_000);
+        continue;
+      }
+      throw err;
+    }
 
     // Expired/invalid token — invalidate cache and retry once with a fresh token
     if (resp.status === 401 && attempt < MAX_RETRIES) {
@@ -71,8 +95,11 @@ export async function apsRequest<T>(
       }
     }
 
-    // Transient server errors — jitter prevents synchronized retry storms
-    if (resp.status >= 500 && attempt < MAX_RETRIES) {
+    // Transient server errors. Only retried when the call is safe to repeat: GET, or an
+    // endpoint the caller has explicitly marked idempotent. Retrying an ordinary mutation
+    // could duplicate it — APS may have applied the change before failing.
+    const safeToRetry = method === 'GET' || retryOn5xx;
+    if (resp.status >= 500 && safeToRetry && attempt < MAX_RETRIES) {
       logger.warn({ path, status: resp.status, attempt }, 'APS 5xx; retrying');
       await sleep(backoffMs * (0.5 + Math.random() * 0.5));
       backoffMs = Math.min(backoffMs * 2, 30_000);
@@ -107,6 +134,10 @@ export async function apsGraphQL<T>(
     method: 'POST',
     body: { query, variables },
     baseUrl: '',   // path IS the full URL
+    // GraphQL is POST at the transport level, but every query this server sends is a read
+    // (the AEC Data Model schema exposes no mutation we use). Repeating one cannot create
+    // or duplicate anything, so a 5xx here is safe to retry.
+    retryOn5xx: true,
   });
 
   if (result.errors && result.errors.length > 0) {

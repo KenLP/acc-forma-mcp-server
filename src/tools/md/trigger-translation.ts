@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { MutationToolDef } from '../_types.js';
 import { triggerMdTranslation, encodeMdUrn } from '../../apis/model-derivative.js';
+import { checkUnscopedToolAllowed } from '../../safety/allowlist.js';
 
 const inputSchema = z.object({
   urn: z
@@ -37,6 +38,12 @@ export const mdTriggerTranslationTool: MutationToolDef<typeof inputSchema> = {
 
   // eslint-disable-next-line @typescript-eslint/require-await
   buildPreview: async (input) => {
+    // This tool takes a URN, not a project_id — it has no getProjectId, so
+    // wrapMutationTool's allow-list check (which only runs when a project id is
+    // present) never fires for it. Enforce fail-closed here instead: while an
+    // allow-list is configured, refuse rather than silently bypass it.
+    checkUnscopedToolAllowed('md_trigger_translation', 'Model Derivative URN');
+
     const encoded = encodeMdUrn(input.urn);
     const body = {
       input: { urn: encoded, ...(input.force_regenerate ? { compressedUrn: false } : {}) },

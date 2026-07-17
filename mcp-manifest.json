@@ -4,7 +4,7 @@
   "mcp_spec_version": "2025-11-25",
   "server": {
     "name": "acc-forma-mcp-server",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "transport": "stdio",
     "repository": "https://github.com/KenLP/acc-forma-mcp-server",
     "license": "MIT",

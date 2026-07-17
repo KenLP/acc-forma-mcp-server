@@ -392,21 +392,15 @@ export const pinElementTool: MutationToolDef<typeof inputSchema> = {
   title: 'Create ACC Issue with 3D Element Pin',
   description:
     'Creates an ACC issue and automatically places a 3D pushpin on a specific BIM element ' +
-    'by resolving the viewable GUID, element objectId, and viewer position in one call.\n\n' +
-    'This replaces the multi-step workflow of manually calling md_get_manifest → ' +
-    'aecdm_query_element_positions → md_get_properties → computing the coordinate transform → ' +
-    'issues_create.\n\n' +
-    'PREREQUISITES (one-time per model):\n' +
-    '  1. aecdm_list_hubs → aecdm_list_projects → aecdm_list_element_groups → get element_group_id\n' +
-    '  2. aecdm_query_element_positions → find the element → get element_external_id\n\n' +
+    'by resolving the viewable GUID, element objectId, and viewer position in one call — ' +
+    'combining what would otherwise require separately calling md_get_manifest, ' +
+    'aecdm_query_element_positions, md_get_properties, and issues_create with a manually ' +
+    'computed coordinate transform.\n\n' +
     'ELEMENT TYPES: Only point-placed elements (Doors, Pipe Fittings, Columns, Plumbing Fixtures) ' +
     'have a geometry origin in AECDM. Linear (Pipes, Beams) and planar (Walls, Floors) elements ' +
     'have no position and cannot be auto-pinned.\n\n' +
-    'GLOBALOFFSET: Auto-detected from existing pins if omitted. ' +
-    'Provide explicitly for highest accuracy (read from any existing pin\'s viewerState.globalOffset).\n\n' +
-    'WORKFLOW (FORMA_MUTATION_MODE=preview_required, the default):\n' +
-    '  1. Call with dry_run=true (default) — returns a full preview with computed coordinates.\n' +
-    '  2. Call again with dry_run=false and approval_token=<token> to create the issue.',
+    'GLOBALOFFSET: Auto-detected from existing pins on the model if omitted; ' +
+    'can be provided explicitly for highest accuracy.',
   kind: 'mutation',
   scopes: ['data:read', 'data:write'],
   requiredAuthModes: ['ssa', '3lo'],

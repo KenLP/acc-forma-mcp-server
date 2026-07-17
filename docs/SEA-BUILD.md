@@ -42,7 +42,10 @@ re-upload the asset with `--clobber`.
 - The exe loads `.env` from its **current working directory** via dotenv. The
   orchestrator launches it with `cwd = vendor/forma-mcp/`, so credentials live
   in `vendor/forma-mcp/.env` and never touch the orchestrator process.
-- Default `FORMA_PERSISTENCE_MODE=memory` does not instantiate `better-sqlite3`.
-  The native-binding (sqlite) path is **untested under pkg** — verify before
-  enabling durable persistence in a packaged build.
+- **The executable supports `FORMA_PERSISTENCE_MODE=memory` only** (the default).
+  `better-sqlite3` is a native addon that cannot be loaded from a packaged
+  single-file binary, so the server now refuses to start with a clear message if
+  `sqlite` is set under pkg, instead of failing later with "Could not locate
+  bindings". Durable persistence requires running from a Node.js install
+  (`npx acc-forma-mcp-server` or `node dist/index.js`).
 - tsup CJS output is `index.cjs` (not `.js`); the pkg target points at it.

@@ -29,7 +29,7 @@ export {
   setDefaultApsRegion,
   type RequestOptions,
 } from './http/client.js';
-export { ApsApiError, ApsGraphQLError } from './http/errors.js';
+export { ApsApiError, ApsGraphQLError, ApsIndeterminateError } from './http/errors.js';
 
 // ---- Utils ----------------------------------------------------------------
 export { stripBPrefix, addBPrefix, normalizeProjectId } from './utils/project-id.js';

@@ -24,9 +24,7 @@ const inputSchema = z.object({
 export const addCommentTool: MutationToolDef<typeof inputSchema> = {
   name: 'issues_add_comment',
   title: 'Add Comment to Issue',
-  description:
-    'Adds a comment to an existing ACC issue.\n\n' +
-    'WORKFLOW: Call with dry_run=true first to preview, then dry_run=false + approval_token to execute.',
+  description: 'Adds a comment to an existing ACC issue.',
   kind: 'mutation',
   scopes: ['data:read', 'data:write'],
   requiredAuthModes: ['ssa', '3lo'],

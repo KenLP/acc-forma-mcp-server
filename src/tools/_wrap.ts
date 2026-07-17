@@ -8,7 +8,7 @@ import { buildDryRunPreview } from '../safety/dry-run.js';
 import { verifyAndConsumeToken, ApprovalError, hashPayload, fingerprintToken } from '../safety/approval.js';
 import { appendAuditEntry, AuditPersistenceError } from '../safety/audit-log.js';
 import { checkIdempotency, storeIdempotencyResult, IdempotencyError } from '../safety/idempotency.js';
-import { ApsApiError } from '../http/errors.js';
+import { ApsApiError, ApsIndeterminateError } from '../http/errors.js';
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
 
@@ -274,7 +274,8 @@ function handleError(
     | 'denied_allowlist'
     | 'denied_rate_limit'
     | 'denied_business_rule'
-    | 'failed_api';
+    | 'failed_api'
+    | 'outcome_unknown';
 
   let stage: Stage = 'failed_api';
   let message: string;
@@ -310,6 +311,11 @@ function handleError(
     message = err.message;
   } else if (err instanceof IdempotencyError) {
     stage = 'failed_api';
+    message = err.message;
+  } else if (err instanceof ApsIndeterminateError) {
+    // The request never got a response, so we cannot claim it failed — record that the
+    // outcome is unknown rather than logging it as a clean failure.
+    stage = 'outcome_unknown';
     message = err.message;
   } else {
     message = err instanceof Error ? err.message : String(err);

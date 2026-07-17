@@ -54,8 +54,11 @@ const envSchema = z.object({
     .default('true'),
   FORMA_AUDIT_RETENTION_DAYS: z
     .string()
+    .default('90')
     .transform(Number)
-    .default('90'),
+    .refine((n) => Number.isInteger(n) && n > 0, {
+      message: 'FORMA_AUDIT_RETENTION_DAYS must be a positive whole number of days',
+    }),
 
   // Persistence backend for approval tokens, rate counters, and idempotency records
   FORMA_PERSISTENCE_MODE: z.enum(['memory', 'sqlite']).default('memory'),
@@ -72,8 +75,12 @@ const envSchema = z.object({
   // Approval token
   FORMA_APPROVAL_TOKEN_TTL: z
     .string()
+    .default('300')
     .transform(Number)
-    .default('300'),
+    .refine((n) => Number.isInteger(n) && n > 0, {
+      message:
+        'FORMA_APPROVAL_TOKEN_TTL must be a positive whole number of seconds — a non-numeric value would leave approval tokens that never expire',
+    }),
 
   // Logging
   LOG_LEVEL: z

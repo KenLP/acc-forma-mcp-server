@@ -101,8 +101,15 @@ MIN_SEVERITY=MEDIUM npx tsx prototypes/change-alert/index.mts  # lower the alert
 CREATE_ISSUES=1 PREV=3 CUR=4 npx tsx prototypes/change-alert/index.mts  # create draft issue + pin
 ```
 
-Uses the repo `.env` (SSA creds). Config (project ids, watched model) is at the top of
-`index.mts`.
+Uses the repo `.env` for SSA credentials. The project is supplied by env vars — the
+prototype ships with no project baked in:
+
+| Var | Required | Meaning |
+|---|---|---|
+| `ALERT_AECDM_PROJECT_ID` | yes | AEC Data Model project id (`urn:adsk.workspace:prod.project:…`), from `aecdm_list_projects` |
+| `ALERT_DM_PROJECT_ID` | yes | Data Management project id **without** the `b.` prefix — used for the diff and for creating issues |
+| `ALERT_WATCH_MODEL` | yes | File name of the model to watch, exactly as listed by `aecdm_list_element_groups` |
+| `ALERT_GLOBAL_OFFSET` | no (default `0,0,0`) | The model's viewer `globalOffset` as `x,y,z`. Read it once from any existing pin (`issues_get` → `viewerState.globalOffset`); without it the pin lands in global coordinates. |
 
 ## Not yet (design questions for productionizing)
 

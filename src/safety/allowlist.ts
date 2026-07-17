@@ -2,10 +2,11 @@ import { env } from '../config/env.js';
 import { normalizeProjectId } from '../utils/project-id.js';
 
 export class AllowlistError extends Error {
-  constructor(kind: 'hub' | 'project', id: string) {
+  constructor(kind: 'hub' | 'project', id: string, customMessage?: string) {
     super(
-      `${kind} "${id}" is not in the FORMA_ALLOWED_${kind.toUpperCase()}S allow-list. ` +
-        `Add it to the env var or set FORMA_ALLOWED_${kind.toUpperCase()}S=* to permit all (not recommended for production).`,
+      customMessage ??
+        `${kind} "${id}" is not in the FORMA_ALLOWED_${kind.toUpperCase()}S allow-list. ` +
+          `Add it to the env var or set FORMA_ALLOWED_${kind.toUpperCase()}S=* to permit all (not recommended for production).`,
     );
     this.name = 'AllowlistError';
   }
@@ -39,4 +40,21 @@ export function checkProjectAllowed(projectId: string): void {
   if (!allowedProjects.has(withPrefix) && !allowedProjects.has(bare)) {
     throw new AllowlistError('project', projectId);
   }
+}
+
+/**
+ * Guard for tools that act on a resource id which cannot be mapped back to a project
+ * (e.g. a Model Derivative URN). When an allow-list is configured we cannot prove the
+ * resource is inside it, so the only honest answer is to refuse — otherwise the tool
+ * would silently bypass the allow-list the manifest promises.
+ */
+export function checkUnscopedToolAllowed(toolName: string, resourceKind: string): void {
+  if (allowedProjects.has('*')) return;
+  throw new AllowlistError(
+    'project',
+    toolName,
+    `Tool "${toolName}" acts on a ${resourceKind} that cannot be mapped to a project, so it ` +
+      `cannot be checked against FORMA_ALLOWED_PROJECTS. While the allow-list is active this ` +
+      `tool is refused. Set FORMA_ALLOWED_PROJECTS=* to allow it, or use a project-scoped tool.`,
+  );
 }

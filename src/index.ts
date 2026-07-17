@@ -57,6 +57,17 @@ async function main(): Promise<void> {
   pruneOldAuditFiles();
 
   if (env.FORMA_PERSISTENCE_MODE === 'sqlite') {
+    // better-sqlite3 is a native addon. A packaged single-file executable cannot load it,
+    // so fail here with the reason rather than deep inside the first store call with an
+    // opaque "Could not locate bindings" error.
+    if ((process as { pkg?: unknown }).pkg !== undefined) {
+      throw new Error(
+        'FORMA_PERSISTENCE_MODE=sqlite is not supported in the packaged executable — ' +
+          'better-sqlite3 is a native addon that cannot be bundled into it. ' +
+          'Use FORMA_PERSISTENCE_MODE=memory (the default) with the executable, or run the ' +
+          'server from a Node.js install (npx / node dist/index.js) if you need durable state.',
+      );
+    }
     cleanupExpiredRows();
     logger.info(
       { db_path: env.FORMA_DB_PATH },

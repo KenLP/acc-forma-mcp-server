@@ -8,7 +8,7 @@ import { logger } from './logger.js';
 export function buildServer(ctx: ToolContext): McpServer {
   const server = new McpServer({
     name: 'acc-forma-mcp-server',
-    version: '0.1.0',
+    version: '0.1.1',
   });
 
   let registered = 0;

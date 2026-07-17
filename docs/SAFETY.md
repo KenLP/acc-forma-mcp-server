@@ -38,11 +38,19 @@ Daily JSONL files at `FORMA_AUDIT_DIR/audit-YYYY-MM-DD.jsonl`. One JSON object p
   "project_id": "b.abc-123",
   "input_redacted": { "title": "Leak at Level 3", "issue_subtype_id": "..." },
   "output_summary": { "created_id": "issue-uuid", "http_status": 201 },
-  "approval_token": "appr_01JXW...",
+  "approval_token": "9f2a1c4e7b3d5a80",
   "prev_hash": "sha256:abc...",
   "this_hash": "sha256:def..."
 }
 ```
+
+The live approval token is never written to the audit log. On the `executed` stage, the
+`approval_token` field above holds only a 16-character SHA-256 **fingerprint**
+(`fingerprintToken()` in `src/safety/approval.ts`, applied in `src/tools/_wrap.ts` before the
+entry is written) — never the live token. The `preview` stage records the same fingerprint
+under `output_summary.approval_token_fp`, so the two entries can be linked without either one
+exposing a usable token. The JSONL is readable on disk and a live token stays valid for its
+whole TTL, so writing it would let anyone who can read the log replay the mutation.
 
 ### Tamper detection
 

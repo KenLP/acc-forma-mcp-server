@@ -21,7 +21,14 @@ export type AuditStage =
   | 'denied_allowlist'
   | 'denied_rate_limit'
   | 'denied_business_rule'
-  | 'failed_api';
+  | 'failed_api'
+  /**
+   * A mutation request never got a response (timeout / socket error), so whether APS
+   * applied it is unknown. Distinct from `failed_api`, which means the call definitively
+   * failed — an audit log that cannot tell the two apart is misleading precisely when it
+   * matters most.
+   */
+  | 'outcome_unknown';
 
 export interface AuditEntry {
   ts: string;
@@ -66,7 +73,9 @@ function todayLogFile(): string {
 
 function ensureDir(): void {
   if (!existsSync(env.FORMA_AUDIT_DIR)) {
-    mkdirSync(env.FORMA_AUDIT_DIR, { recursive: true });
+    // 0o700 / 0o600: the audit log and state.db hold project data and must not be
+    // world-readable. POSIX only — on Windows the file inherits the directory ACL.
+    mkdirSync(env.FORMA_AUDIT_DIR, { recursive: true, mode: 0o700 });
   }
 }
 
@@ -109,7 +118,7 @@ export function appendAuditEntry(params: {
     const { prev_hash: _ph, ...restForHash } = partial; void _ph;
     const thisHash = computeHash(lastHash, restForHash);
     const entry: AuditEntry = { ...partial, this_hash: thisHash };
-    appendFileSync(todayLogFile(), JSON.stringify(entry) + '\n', 'utf-8');
+    appendFileSync(todayLogFile(), JSON.stringify(entry) + '\n', { encoding: 'utf-8', mode: 0o600 });
     lastHash = thisHash;
   } catch (err) {
     logger.error({ err }, 'Failed to write audit log entry');

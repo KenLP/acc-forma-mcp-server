@@ -75,7 +75,14 @@ export async function createVersionDiff(
   const resp = await apsRequest<{ diffs: RawDiffRecord[] }>(
     auth,
     `/construction/index/v2/projects/${pid}/diffs:batch-status`,
-    { baseUrl: APS_BASE, method: 'POST', body: { diffs: [{ prevVersionUrn, curVersionUrn }] } },
+    {
+      baseUrl: APS_BASE,
+      method: 'POST',
+      body: { diffs: [{ prevVersionUrn, curVersionUrn }] },
+      // Idempotent per version pair — a repeated call returns the same cached diffId, so
+      // retrying a 5xx here cannot create a duplicate.
+      retryOn5xx: true,
+    },
   );
   const rec = resp.diffs?.[0];
   if (!rec) throw new Error('Model Properties diff returned an empty response.');

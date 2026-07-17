@@ -53,24 +53,33 @@ jobs:
     environment: integration
     env:
       INTEGRATION: 'true'
+      INTEGRATION_HUB_ID: ${{ secrets.INTEGRATION_HUB_ID }}
+      INTEGRATION_PROJECT_ID: ${{ secrets.INTEGRATION_PROJECT_ID }}
       APS_AUTH_MODE: ssa
       APS_CLIENT_ID: ${{ secrets.APS_CLIENT_ID }}
       APS_CLIENT_SECRET: ${{ secrets.APS_CLIENT_SECRET }}
       SSA_ID: ${{ secrets.SSA_ID }}
       SSA_KEY_ID: ${{ secrets.SSA_KEY_ID }}
       SSA_KEY_PATH: /tmp/ssa-private.pem
-      FORMA_READONLY: 'true'
+      # Not read-only: the smoke tests must exercise the real preview path. Nothing is
+      # written — every mutation test runs with dry_run=true, which returns a preview and
+      # an approval token without calling APS. FORMA_READONLY=true would short-circuit
+      # those tests into a refusal that looks like a pass.
+      FORMA_READONLY: 'false'
+      # Explicit default: the smoke tests rely on the dry_run/approval_token flow, which
+      # only applies in preview_required mode.
+      FORMA_MUTATION_MODE: preview_required
       LOG_LEVEL: debug
 
     steps:
       - name: Check for APS credentials
         id: creds
         run: |
-          if [ -n "${{ secrets.APS_CLIENT_ID }}" ] && [ -n "${{ secrets.SSA_ID }}" ]; then
+          if [ -n "${{ secrets.APS_CLIENT_ID }}" ] && [ -n "${{ secrets.SSA_ID }}" ] && [ -n "${{ secrets.INTEGRATION_HUB_ID }}" ]; then
             echo 'configured=true' >> "$GITHUB_OUTPUT"
           else
             echo 'configured=false' >> "$GITHUB_OUTPUT"
-            echo '::notice::APS credentials are not configured in the `integration` environment — skipping live integration tests.'
+            echo '::notice::APS credentials and/or INTEGRATION_HUB_ID are not configured in the `integration` environment — skipping live integration tests.'
           fi
 
       - uses: actions/checkout@v4
