@@ -1,6 +1,22 @@
-import { describe, it, expect } from 'vitest';
-import { toolRegistry } from '../../../src/tools/_registry.js';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import type { AnyToolDef } from '../../../src/tools/_types.js';
+
+// The registry pulls in tools that import safety/allowlist.js, which imports config/env.js
+// — and env.js THROWS at import time when APS creds are absent. A static import here passes
+// on a dev box with a .env and fails in CI, so mock env first and import the registry after.
+let toolRegistry: AnyToolDef[];
+
+beforeAll(async () => {
+  vi.resetModules();
+  vi.doMock('../../../src/config/env.js', () => ({
+    env: {
+      FORMA_ALLOWED_HUBS: '*',
+      FORMA_ALLOWED_PROJECTS: '*',
+      FORMA_RATE_CONFIG_PATH: undefined,
+    },
+  }));
+  ({ toolRegistry } = await import('../../../src/tools/_registry.js'));
+});
 
 /**
  * Registry-wide invariants for the allow-list scope declaration.
