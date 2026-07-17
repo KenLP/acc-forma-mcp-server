@@ -47,6 +47,7 @@ function makeMinimalTool(
     description: 'Test',
     kind: 'mutation',
     scopes: ['data:write'],
+    scope: { kind: 'dm' },
     inputSchema: schema,
     getProjectId: (input: Input) => input.project_id,
     buildPreview: vi.fn().mockResolvedValue({

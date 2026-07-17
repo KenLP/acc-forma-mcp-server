@@ -23,6 +23,10 @@ export const aecdmListProjectsTool: ReadToolDef<typeof inputSchema> = {
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],
+  // The hub_id input is an AECDM-native hub id, which cannot be checked against the
+  // DM-format FORMA_ALLOWED_HUBS. The results do carry dataManagementProjectId, but
+  // filtering the output would not undo having listed a hub outside the allow-list.
+  scope: { kind: 'unmappable', resource: 'AECDM-native hub id' },
   inputSchema,
 
   execute: async (input, ctx) => {

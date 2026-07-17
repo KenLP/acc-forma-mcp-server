@@ -16,15 +16,17 @@ export const getIssueUserMeTool: ReadToolDef<typeof inputSchema> = {
   name: 'issues_get_user_me',
   title: 'Get Current User Issues Permissions',
   description:
-    "Returns the current authenticated identity's profile and permission flags " +
-    'for the ACC Issues module in a specific project, including whether the ' +
-    'identity can create or update issues, whether comments are allowed, and the ' +
-    'identity name/email visible in issue activity feeds. Auth: SSA or 3LO ' +
-    'required (2LO not supported for Issues API).',
+    "Returns the calling identity's own permission flags for the ACC Issues module in one " +
+    'project — whether it may create or update issues and whether commenting is allowed — ' +
+    'together with the profile ACC shows for it in issue activity. Reports on the ' +
+    'authenticated service account itself, not on other members. The Issues API accepts ' +
+    'SSA or 3LO auth only.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],
+  scope: { kind: 'dm' },
   inputSchema,
+  getProjectId: (i) => i.project_id,
 
   execute: async (input, ctx): Promise<import('../_types.js').McpToolResult> => {
     const profile = await getIssueUserMe(ctx.auth, input.project_id);

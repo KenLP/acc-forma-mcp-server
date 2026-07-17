@@ -68,6 +68,7 @@ export const aecdmQueryElementPositionsTool: ReadToolDef<typeof inputSchema> = {
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],
+  scope: { kind: 'unmappable', resource: 'AECDM element group id' },
   inputSchema,
 
   execute: async (input, ctx) => {

@@ -81,6 +81,7 @@ export const createReviewTool: MutationToolDef<typeof inputSchema> = {
   kind: 'mutation',
   scopes: ['data:read', 'data:write'],
   requiredAuthModes: ['ssa', '3lo'],
+  scope: { kind: 'dm' },
   inputSchema,
 
   getHubId: (input) => input.hub_id,

@@ -1,6 +1,11 @@
 import { z } from 'zod';
-import type { ReadToolDef, MutationToolDef, McpToolResult, ToolContext } from './_types.js';
-import { checkHubAllowed, checkProjectAllowed, AllowlistError } from '../safety/allowlist.js';
+import type { ReadToolDef, MutationToolDef, McpToolResult, ToolContext, ToolScope } from './_types.js';
+import {
+  checkHubAllowed,
+  checkProjectAllowed,
+  checkUnmappableToolAllowed,
+  AllowlistError,
+} from '../safety/allowlist.js';
 import { checkNotReadonly, ReadonlyModeError } from '../safety/readonly-mode.js';
 import { checkRateLimit, RateGovernanceError } from '../safety/rate-governance.js';
 import { runBusinessRules, BusinessRuleError } from '../safety/business-rules.js';
@@ -78,6 +83,38 @@ function checkAuthMode(
   };
 }
 
+// ---- Allow-list enforcement ------------------------------------------------
+
+/**
+ * Apply the hub/project allow-list according to the tool's declared scope.
+ *
+ * Driven by `tool.scope`, never by input field names: only the tool itself knows whether
+ * its `project_id` holds a DM id (checkable) or an AECDM-native one (a different id space,
+ * where a DM allow-list means nothing).
+ */
+function enforceScope<T extends z.ZodTypeAny>(
+  tool: { name: string; scope: ToolScope; getHubId?: (i: z.infer<T>) => string | undefined; getProjectId?: (i: z.infer<T>) => string | undefined },
+  input: z.infer<T>,
+): void {
+  switch (tool.scope.kind) {
+    case 'dm': {
+      const hubId = tool.getHubId?.(input);
+      const projectId = tool.getProjectId?.(input);
+      if (hubId) checkHubAllowed(hubId);
+      if (projectId) checkProjectAllowed(projectId);
+      return;
+    }
+    case 'unmappable':
+      checkUnmappableToolAllowed(tool.name, tool.scope.resource);
+      return;
+    // 'discovery' filters its own output inside execute(); 'no-resource' touches no
+    // ACC hub or project. Neither has an input id to check here.
+    case 'discovery':
+    case 'no-resource':
+      return;
+  }
+}
+
 // ---- Wrapped read tool -----------------------------------------------------
 
 export function wrapReadTool<T extends z.ZodTypeAny>(
@@ -85,16 +122,14 @@ export function wrapReadTool<T extends z.ZodTypeAny>(
   ctx: ToolContext,
 ): (input: z.infer<T>) => Promise<McpToolResult> {
   return async (input: z.infer<T>) => {
-    const projectId = (input as Record<string, unknown>)['project_id'] as string | undefined;
-    const hubId = (input as Record<string, unknown>)['hub_id'] as string | undefined;
+    const projectId = tool.getProjectId?.(input);
 
     try {
       // Auth mode gate — fail fast before any API call
       const authCheck = checkAuthMode(tool.name, tool.requiredAuthModes, ctx.env.APS_AUTH_MODE);
       if (authCheck) return authCheck;
 
-      if (hubId) checkHubAllowed(hubId);
-      if (projectId) checkProjectAllowed(projectId);
+      enforceScope(tool, input);
 
       const result = await tool.execute(input, effectiveCtx(tool, ctx));
 
@@ -152,10 +187,8 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
       const authCheck = checkAuthMode(tool.name, tool.requiredAuthModes, ctx.env.APS_AUTH_MODE);
       if (authCheck) return authCheck;
 
-      // 1. Allow-list
-      const hubId = tool.getHubId?.(input);
-      if (hubId) checkHubAllowed(hubId);
-      if (projectId) checkProjectAllowed(projectId);
+      // 1. Allow-list, per the tool's declared scope
+      enforceScope(tool, input);
 
       // 2. Readonly mode
       checkNotReadonly(tool.name);

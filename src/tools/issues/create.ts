@@ -267,6 +267,7 @@ export const createIssueTool: MutationToolDef<typeof inputSchema> = {
   kind: 'mutation',
   scopes: ['data:read', 'data:write'],
   requiredAuthModes: ['ssa', '3lo'],
+  scope: { kind: 'dm' },
   inputSchema,
 
   getProjectId: (input) => input.project_id,

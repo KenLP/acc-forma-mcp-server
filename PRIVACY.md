@@ -1,6 +1,6 @@
 # Privacy Policy — acc-forma-mcp-server
 
-**Last updated:** 2026-07-16
+**Last updated:** 2026-07-17
 **Applies to:** `acc-forma-mcp-server` (all versions)
 **Publisher contact:** ken.lephuc@gmail.com
 
@@ -116,7 +116,8 @@ Network destinations, in full:
 | `*.amazonaws.com` | Autodesk-issued pre-signed S3 URLs (short-lived, ~60 s) returned by the Model Coordination clash API, used to download clash-result files | **download only** — nothing is uploaded |
 
 Both destinations are Autodesk's own: the `*.amazonaws.com` URLs are pre-signed links that
-Autodesk itself issues and hosts, not a separate vendor we chose. So the only party that
+Autodesk itself issues, pointing at Autodesk's own storage hosted on AWS — not a separate
+vendor we chose. So the only party that
 receives your data is Autodesk, under the Autodesk Privacy Statement linked above — a level
 of protection at least equivalent to this policy, since the data is already theirs and the
 software adds no onward sharing of its own.

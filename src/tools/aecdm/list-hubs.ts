@@ -13,6 +13,9 @@ export const aecdmListHubsTool: ReadToolDef<typeof inputSchema> = {
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],
+  // AECDM hub ids live in their own id space and carry no Data Management hub id, so
+  // there is nothing here to match against FORMA_ALLOWED_HUBS.
+  scope: { kind: 'unmappable', resource: 'AECDM-native hub id' },
   inputSchema,
 
   execute: async (_input, ctx) => {

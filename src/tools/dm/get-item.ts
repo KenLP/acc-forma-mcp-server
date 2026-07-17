@@ -17,13 +17,16 @@ export const getItemTool: ReadToolDef<typeof inputSchema> = {
   name: 'dm_get_item',
   title: 'Get Item Details',
   description:
-    'Gets full metadata for a single item (file/document) in Forma Data Management. ' +
-    'Returns the item name, type, and tip (latest) version ID. ' +
-    'Use dm_list_versions to see all historical versions.',
+    'Returns full metadata for a single item (file/document) in Forma Data Management: ' +
+    'item name, type, and tip (latest) version ID. Covers the tip version only — the full ' +
+    'version history is available from dm_list_versions.',
   kind: 'read',
   preferredAuth: '2lo',
+  scope: { kind: 'dm' },
   scopes: ['data:read'],
   inputSchema,
+
+  getProjectId: (i) => i.project_id,
 
   execute: async (input, ctx) => {
     const item = await getItem(ctx.auth, input.project_id, input.item_id);

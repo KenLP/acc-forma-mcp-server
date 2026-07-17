@@ -10,7 +10,7 @@ interface RateConfig {
   };
 }
 
-const DEFAULT_RATE_CONFIG: RateConfig = {
+export const DEFAULT_RATE_CONFIG: RateConfig = {
   'issues_create': { per_project_per_hour: 50 },
   'issues_update': { per_project_per_hour: 100 },
   'issues_add_comment': { per_project_per_hour: 100 },

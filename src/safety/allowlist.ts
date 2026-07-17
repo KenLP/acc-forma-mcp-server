@@ -26,35 +26,46 @@ function parseList(envValue: string): Set<string> {
 const allowedHubs = parseList(env.FORMA_ALLOWED_HUBS);
 const allowedProjects = parseList(env.FORMA_ALLOWED_PROJECTS);
 
-export function checkHubAllowed(hubId: string): void {
-  if (allowedHubs.has('*')) return;
+export function isHubAllowed(hubId: string): boolean {
+  if (allowedHubs.has('*')) return true;
   const { withPrefix, bare } = normalizeProjectId(hubId);
-  if (!allowedHubs.has(withPrefix) && !allowedHubs.has(bare)) {
-    throw new AllowlistError('hub', hubId);
-  }
+  return allowedHubs.has(withPrefix) || allowedHubs.has(bare);
+}
+
+export function isProjectAllowed(projectId: string): boolean {
+  if (allowedProjects.has('*')) return true;
+  const { withPrefix, bare } = normalizeProjectId(projectId);
+  return allowedProjects.has(withPrefix) || allowedProjects.has(bare);
+}
+
+export function checkHubAllowed(hubId: string): void {
+  if (!isHubAllowed(hubId)) throw new AllowlistError('hub', hubId);
 }
 
 export function checkProjectAllowed(projectId: string): void {
-  if (allowedProjects.has('*')) return;
-  const { withPrefix, bare } = normalizeProjectId(projectId);
-  if (!allowedProjects.has(withPrefix) && !allowedProjects.has(bare)) {
-    throw new AllowlistError('project', projectId);
-  }
+  if (!isProjectAllowed(projectId)) throw new AllowlistError('project', projectId);
+}
+
+/** True when either allow-list narrows the server to a subset of hubs/projects. */
+export function isAllowlistActive(): boolean {
+  return !(allowedHubs.has('*') && allowedProjects.has('*'));
 }
 
 /**
- * Guard for tools that act on a resource id which cannot be mapped back to a project
- * (e.g. a Model Derivative URN). When an allow-list is configured we cannot prove the
- * resource is inside it, so the only honest answer is to refuse — otherwise the tool
- * would silently bypass the allow-list the manifest promises.
+ * Guard for tools whose input id cannot be mapped back to a DM hub/project — an
+ * AECDM-native id, or a Model Derivative URN (whose endpoints are not project-scoped, so
+ * the URN alone reaches any model the credential can see). While an allow-list is active
+ * we cannot prove the resource is inside it, so the only honest answer is to refuse:
+ * proceeding would silently bypass the control the manifest promises.
  */
-export function checkUnscopedToolAllowed(toolName: string, resourceKind: string): void {
-  if (allowedHubs.has('*') && allowedProjects.has('*')) return;
+export function checkUnmappableToolAllowed(toolName: string, resource: string): void {
+  if (!isAllowlistActive()) return;
   throw new AllowlistError(
     'project',
     toolName,
-    `Tool "${toolName}" acts on a ${resourceKind} that cannot be mapped to a hub or project, so it ` +
-      `cannot be checked against FORMA_ALLOWED_HUBS / FORMA_ALLOWED_PROJECTS. While either allow-list ` +
-      `is active this tool is refused. Set both to * to allow it, or use a project-scoped tool.`,
+    `Tool "${toolName}" acts on a ${resource}, which cannot be mapped to a Data Management hub or ` +
+      `project id and therefore cannot be checked against FORMA_ALLOWED_HUBS / FORMA_ALLOWED_PROJECTS. ` +
+      `While either allow-list is active this tool is refused rather than allowed through unchecked. ` +
+      `Set both allow-lists to * to enable it, or use a project-scoped tool instead.`,
   );
 }

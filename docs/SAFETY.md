@@ -95,8 +95,16 @@ Override default limits by setting `FORMA_RATE_CONFIG_PATH` to a JSON file:
 
 Default limits (built-in):
 - `issues_create`: 50/project/hour
+- `issues_update`: 100/project/hour
+- `issues_add_comment`: 100/project/hour
+- `issues_pin_element`: 50/project/hour
 - `reviews_create`: 20/project/hour
 - `reviews_transition`: 50/project/hour
+
+`md_trigger_translation` is deliberately absent: it takes a URN, not a project id, so there is
+no project to bucket a rate counter on.
+
+Source of truth: `DEFAULT_RATE_CONFIG` in `src/safety/rate-governance.ts`.
 
 ## Known Limitations / Production Notes
 

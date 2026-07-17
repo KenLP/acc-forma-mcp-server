@@ -50,12 +50,15 @@ export const metaListChangelogTool: ReadToolDef<typeof inputSchema> = {
   name: 'meta_list_changelog',
   title: 'List Audit Changelog',
   description:
-    'Lists recent audit log entries from the MCP server changelog. ' +
-    'Each entry records a tool call: its inputs, outputs, stage (preview/executed/denied), ' +
-    'and hash-chain position for tamper detection. ' +
-    'Use meta_verify_audit_chain to check integrity.',
+    "Lists recent entries from this server's local audit log. Each entry records one tool " +
+    'call: its redacted inputs, an output summary, the stage it reached ' +
+    '(preview/executed/denied/outcome_unknown), and its position in the SHA-256 hash chain. ' +
+    'Reads the local JSONL file only — no Autodesk API is called, and the chain itself is ' +
+    'verified by meta_verify_audit_chain.',
   kind: 'read',
   scopes: [],
+  // Reads the local audit JSONL — no ACC hub or project is touched.
+  scope: { kind: 'no-resource' },
   inputSchema,
 
   execute: async (input, ctx) => {

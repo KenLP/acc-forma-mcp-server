@@ -282,6 +282,19 @@ FORMA_ALLOWED_HUBS=hub-id-1
 
 The server rejects any tool call referencing a project/hub outside this list — independent of SSA permissions.
 
+Each tool declares how it binds to the allow-list (`scope` in its definition), and `_wrap.ts` enforces that declaration centrally:
+
+| Tool group | Behaviour while an allow-list is active |
+|---|---|
+| Takes a DM hub/project id (Issues, Reviews, DM, Admin, `mc_*`, `mp_diff_versions`) | id is checked against the list; a call outside it is refused |
+| `dm_list_hubs`, `dm_list_projects`, `admin_list_projects` | results are filtered down to allow-listed entries |
+| `meta_*` | unaffected — reads the local audit log, touches no ACC resource |
+| All `aecdm_*`, `md_*`, `docs_get_viewables`, `issues_pin_element` | **refused** |
+
+That last row is the honest consequence of a real limitation, not an oversight. Those tools are addressed by an AEC Data Model-native id or a Model Derivative URN, and neither of those endpoints is project-scoped — the id alone reaches any model the credential can see, and it cannot be mapped back to a DM hub/project to compare against the list. Rather than let them through unchecked (which would make the allow-list a claim the server does not keep), they are refused while either list is narrowed. `FORMA_ALLOWED_HUBS=*` **and** `FORMA_ALLOWED_PROJECTS=*` — the default — leaves every tool enabled.
+
+Note that `mp_diff_versions` also takes version URNs but is *not* in that row: every Model Properties call is addressed under `/construction/index/v2/projects/{project_id}/`, so checking its `project_id` genuinely bounds what it can read.
+
 ### 4. Read-only mode
 
 ```env

@@ -22,8 +22,12 @@ export const adminGetProjectTool: ReadToolDef<typeof inputSchema> = {
     'Requires Account Admin role on the hub.',
   kind: 'read',
   preferredAuth: '2lo',
+  scope: { kind: 'dm' },
   scopes: ['account:read'],
   inputSchema,
+
+  getHubId: (i) => i.hub_id,
+  getProjectId: (i) => i.project_id,
 
   execute: async (input, ctx) => {
     const project = await adminGetProject(ctx.auth, input.hub_id, input.project_id);

@@ -2,7 +2,6 @@ import { z } from 'zod';
 import type { ReadToolDef } from '../_types.js';
 import { getMdManifest } from '../../apis/model-derivative.js';
 import type { MdDerivativeChild } from '../../apis/model-derivative.js';
-import { checkUnscopedToolAllowed } from '../../safety/allowlist.js';
 
 const inputSchema = z.object({
   urn: z
@@ -27,10 +26,12 @@ export const mdGetManifestTool: ReadToolDef<typeof inputSchema> = {
   kind: 'read',
   scopes: ['data:read'],
   preferredAuth: '2lo',
+  // /modelderivative/v2/designdata/{urn} is not project-scoped: the URN alone reaches any
+  // model the credential can see, so there is nothing to check the allow-list against.
+  scope: { kind: 'unmappable', resource: 'Model Derivative URN' },
   inputSchema,
 
   execute: async (input, ctx) => {
-    checkUnscopedToolAllowed('md_get_manifest', 'Model Derivative URN');
     const auth = ctx.auth2lo ?? ctx.auth;
     const manifest = await getMdManifest(auth, input.urn);
 

@@ -24,7 +24,10 @@ export const listReviewsTool: ReadToolDef<typeof inputSchema> = {
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],
+  scope: { kind: 'dm' },
   inputSchema,
+  getHubId: (i) => i.hub_id,
+  getProjectId: (i) => i.project_id,
 
   execute: async (input, ctx) => {
     const { results, pagination } = await listReviews(ctx.auth, input.hub_id, input.project_id, {

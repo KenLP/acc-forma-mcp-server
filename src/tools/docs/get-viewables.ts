@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import type { ReadToolDef } from '../_types.js';
 import { getMdManifest, extractDocsViewables } from '../../apis/model-derivative.js';
-import { checkUnscopedToolAllowed } from '../../safety/allowlist.js';
 
 const inputSchema = z.object({
   urn: z
@@ -11,14 +10,6 @@ const inputSchema = z.object({
       'Document version URN from Data Management (dm_list_versions / dm_get_item tipVersionId). ' +
         'Accepts raw URN (starts with "urn:adsk.") or base64url-encoded form. ' +
         'This is a DM version URN — NOT an AECDM elementGroupId.',
-    ),
-  project_id: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      'Optional ACC project ID (with or without b. prefix). Supplied only so the call is ' +
-        'subject to the project allow-list; the viewable lookup itself uses the URN.',
     ),
 });
 
@@ -38,15 +29,14 @@ export const docsGetViewablesTool: ReadToolDef<typeof inputSchema> = {
   kind: 'read',
   scopes: ['data:read'],
   preferredAuth: '2lo',
+  // The lookup goes to the Model Derivative manifest, which is addressed by URN alone and
+  // is not project-scoped. This tool used to take an optional project_id purely so the
+  // allow-list would fire — but nothing tied that project to the URN, so a caller could
+  // name an allowed project and read a document from any other one. Refuse instead.
+  scope: { kind: 'unmappable', resource: 'document version URN' },
   inputSchema,
 
   execute: async (input, ctx) => {
-    // wrapReadTool already checked the allow-list when project_id was supplied (it derives
-    // hub/project scoping from getProjectId/getHubId on the tool def). project_id is optional
-    // here, so a caller that omits it would otherwise reach the URN-only lookup unchecked.
-    if (input.project_id === undefined) {
-      checkUnscopedToolAllowed('docs_get_viewables', 'document version URN');
-    }
     const auth = ctx.auth2lo ?? ctx.auth;
     const manifest = await getMdManifest(auth, input.urn);
     const viewables = extractDocsViewables(manifest);

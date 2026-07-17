@@ -48,6 +48,7 @@ function makeMinimalTool(): MutationToolDef<typeof schema> {
     description: 'Minimal mutation tool for testing hub allow-list.',
     kind: 'mutation',
     scopes: ['data:write'],
+    scope: { kind: 'dm' },
     inputSchema: schema,
     getHubId: (input: Input) => input.hub_id,
     getProjectId: (input: Input) => input.project_id,

@@ -20,8 +20,11 @@ export const adminListCompaniesTool: ReadToolDef<typeof inputSchema> = {
     'Requires Account Admin role.',
   kind: 'read',
   preferredAuth: '2lo',
+  scope: { kind: 'dm' },
   scopes: ['account:read'],
   inputSchema,
+
+  getHubId: (i) => i.hub_id,
 
   execute: async (input, ctx) => {
     const { results, pagination } = await adminListCompanies(ctx.auth, input.hub_id, {

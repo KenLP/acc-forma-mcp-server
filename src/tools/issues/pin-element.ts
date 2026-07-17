@@ -402,6 +402,12 @@ export const pinElementTool: MutationToolDef<typeof inputSchema> = {
   kind: 'mutation',
   scopes: ['data:read', 'data:write'],
   requiredAuthModes: ['ssa', '3lo'],
+  // The issue is written to project_id, but to build the pushpin this tool first reads an
+  // AECDM element group and a Model Derivative URN — neither of which can be tied back to
+  // that project. Checking project_id alone would let an allowed project be named while
+  // model data was read from a project outside the allow-list, so refuse instead.
+  // getProjectId still applies: rate governance and the audit entry need the target project.
+  scope: { kind: 'unmappable', resource: 'AECDM element group id + Model Derivative URN' },
   inputSchema,
 
   getProjectId: (input) => input.project_id,

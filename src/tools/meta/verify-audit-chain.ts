@@ -49,6 +49,8 @@ export const metaVerifyAuditChainTool: ReadToolDef<typeof inputSchema> = {
     'Returns the first invalid entry index if tampering is detected.',
   kind: 'read',
   scopes: [],
+  // Reads the local audit JSONL — no ACC hub or project is touched.
+  scope: { kind: 'no-resource' },
   inputSchema,
 
   execute: async (input, ctx) => {

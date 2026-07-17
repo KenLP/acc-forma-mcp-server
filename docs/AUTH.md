@@ -1,6 +1,6 @@
 # Authentication Setup
 
-`acc-forma-mcp-server` supports three auth modes. **SSA is the recommended mode** for unattended (AI-driven) access.
+`acc-forma-mcp-server` supports two working auth modes: SSA and 2-legged OAuth (2LO). A third mode, 3-legged OAuth, is not yet implemented (see Mode 3 below). **SSA is the recommended mode** for unattended (AI-driven) access.
 
 ## Mode 1: SSA (Secure Service Account) — Recommended
 
@@ -35,7 +35,7 @@ SSA is a bot-like identity that can be invited to Forma projects, scoped via APS
 
 ## Mode 2: 2-legged (client_credentials)
 
-Only usable for Account Admin reads, Webhooks, and OSS bucket operations. **Does NOT work** for Issues, RFIs, Reviews, Submittals, or other project-level write APIs.
+Used automatically (when available) by tools that declare `preferredAuth: '2lo'`: Data Management reads (`dm_list_hubs`, `dm_list_projects`, `dm_list_top_folders`, `dm_list_folder_contents`, `dm_get_item`, `dm_list_versions`), Account Admin reads (`admin_list_companies`, `admin_list_projects`, `admin_get_project`, `admin_list_users`), Model Derivative (`md_get_manifest`, `md_get_properties`, `md_trigger_translation`), and `docs_get_viewables`. **Does NOT work** for Issues, Reviews, AEC Data Model, or Model Coordination — those need SSA (or 3LO).
 
 ```env
 APS_AUTH_MODE=2lo
@@ -45,7 +45,7 @@ APS_CLIENT_SECRET=...
 
 ## Mode 3: 3-legged OAuth (PKCE)
 
-Planned for Phase 3. Will open a browser for user login, store encrypted refresh tokens at `~/.acc-forma-mcp/tokens.json`.
+Planned for Phase 3 — not yet implemented. Setting `APS_AUTH_MODE=3lo` today fails at startup with: `3-legged OAuth (APS_AUTH_MODE=3lo) is planned for Phase 3 and not yet implemented. Use APS_AUTH_MODE=ssa.` Once implemented, it will open a browser for user login and store encrypted refresh tokens at `~/.acc-forma-mcp/tokens.json`.
 
 ## Auth troubleshooting
 

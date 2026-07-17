@@ -17,12 +17,15 @@ export const getIssueTool: ReadToolDef<typeof inputSchema> = {
   name: 'issues_get',
   title: 'Get Issue Details',
   description:
-    'Gets full details of a single issue, including description, location, root cause, ' +
-    'due date, and timestamps. Use issues_list first to find issue IDs.',
+    'Returns full details of a single ACC issue: description, location, root cause, due ' +
+    'date, timestamps, and the permittedStatuses / permittedAttributes that indicate which ' +
+    'transitions and edits the current identity may make. Issue IDs come from issues_list.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],
+  scope: { kind: 'dm' },
   inputSchema,
+  getProjectId: (i) => i.project_id,
 
   execute: async (input, ctx) => {
     const issue = await getIssue(ctx.auth, input.project_id, input.issue_id);

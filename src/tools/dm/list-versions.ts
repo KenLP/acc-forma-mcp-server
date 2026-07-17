@@ -22,8 +22,11 @@ export const listVersionsTool: ReadToolDef<typeof inputSchema> = {
     'Useful for tracking document history and identifying which version is current.',
   kind: 'read',
   preferredAuth: '2lo',
+  scope: { kind: 'dm' },
   scopes: ['data:read'],
   inputSchema,
+
+  getProjectId: (i) => i.project_id,
 
   execute: async (input, ctx) => {
     const versions = await listItemVersions(ctx.auth, input.project_id, input.item_id);

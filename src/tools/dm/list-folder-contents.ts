@@ -19,13 +19,17 @@ export const listFolderContentsTool: ReadToolDef<typeof inputSchema> = {
   name: 'dm_list_folder_contents',
   title: 'List Folder Contents',
   description:
-    'Lists the contents of a folder in Forma Data Management. ' +
-    'Returns sub-folders and items (files/documents). ' +
-    'For items, use dm_get_item to fetch full metadata and dm_list_versions for version history.',
+    'Lists the contents of a folder in Forma Data Management: sub-folders and items ' +
+    '(files/documents), with the id and name of each. Returns one folder level, not a ' +
+    'recursive tree; full item metadata comes from dm_get_item and version history from ' +
+    'dm_list_versions.',
   kind: 'read',
   preferredAuth: '2lo',
+  scope: { kind: 'dm' },
   scopes: ['data:read'],
   inputSchema,
+
+  getProjectId: (i) => i.project_id,
 
   execute: async (input, ctx) => {
     const items = await listFolderContents(ctx.auth, input.project_id, input.folder_id);

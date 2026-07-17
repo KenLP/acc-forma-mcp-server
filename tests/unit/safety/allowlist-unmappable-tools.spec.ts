@@ -1,14 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 
-describe('checkUnscopedToolAllowed', () => {
+describe('checkUnmappableToolAllowed', () => {
   it('does not throw when FORMA_ALLOWED_PROJECTS=* (unrestricted)', async () => {
     vi.resetModules();
     vi.doMock('../../../src/config/env.js', () => ({
       env: { FORMA_ALLOWED_HUBS: '*', FORMA_ALLOWED_PROJECTS: '*' },
     }));
-    const { checkUnscopedToolAllowed } = await import('../../../src/safety/allowlist.js');
+    const { checkUnmappableToolAllowed } = await import('../../../src/safety/allowlist.js');
     expect(() =>
-      checkUnscopedToolAllowed('md_trigger_translation', 'Model Derivative URN'),
+      checkUnmappableToolAllowed('md_trigger_translation', 'Model Derivative URN'),
     ).not.toThrow();
   });
 
@@ -17,15 +17,15 @@ describe('checkUnscopedToolAllowed', () => {
     vi.doMock('../../../src/config/env.js', () => ({
       env: { FORMA_ALLOWED_HUBS: '*', FORMA_ALLOWED_PROJECTS: 'b.abc-123' },
     }));
-    const { checkUnscopedToolAllowed, AllowlistError } = await import(
+    const { checkUnmappableToolAllowed, AllowlistError } = await import(
       '../../../src/safety/allowlist.js'
     );
-    expect(() => checkUnscopedToolAllowed('md_trigger_translation', 'Model Derivative URN')).toThrow(
+    expect(() => checkUnmappableToolAllowed('md_trigger_translation', 'Model Derivative URN')).toThrow(
       AllowlistError,
     );
     try {
-      checkUnscopedToolAllowed('md_trigger_translation', 'Model Derivative URN');
-      expect.unreachable('expected checkUnscopedToolAllowed to throw');
+      checkUnmappableToolAllowed('md_trigger_translation', 'Model Derivative URN');
+      expect.unreachable('expected checkUnmappableToolAllowed to throw');
     } catch (err) {
       expect(err).toBeInstanceOf(AllowlistError);
       expect((err as Error).message).toContain('md_trigger_translation');
@@ -38,11 +38,11 @@ describe('checkUnscopedToolAllowed', () => {
     vi.doMock('../../../src/config/env.js', () => ({
       env: { FORMA_ALLOWED_HUBS: '*', FORMA_ALLOWED_PROJECTS: 'b.abc,b.def' },
     }));
-    const { checkUnscopedToolAllowed, AllowlistError } = await import(
+    const { checkUnmappableToolAllowed, AllowlistError } = await import(
       '../../../src/safety/allowlist.js'
     );
     expect(() =>
-      checkUnscopedToolAllowed('md_trigger_translation', 'Model Derivative URN'),
+      checkUnmappableToolAllowed('md_trigger_translation', 'Model Derivative URN'),
     ).toThrow(AllowlistError);
   });
 
@@ -51,11 +51,11 @@ describe('checkUnscopedToolAllowed', () => {
     vi.doMock('../../../src/config/env.js', () => ({
       env: { FORMA_ALLOWED_HUBS: 'b.hub-1', FORMA_ALLOWED_PROJECTS: '*' },
     }));
-    const { checkUnscopedToolAllowed, AllowlistError } = await import(
+    const { checkUnmappableToolAllowed, AllowlistError } = await import(
       '../../../src/safety/allowlist.js'
     );
     expect(() =>
-      checkUnscopedToolAllowed('md_get_manifest', 'Model Derivative URN'),
+      checkUnmappableToolAllowed('md_get_manifest', 'Model Derivative URN'),
     ).toThrow(AllowlistError);
   });
 
@@ -64,9 +64,9 @@ describe('checkUnscopedToolAllowed', () => {
     vi.doMock('../../../src/config/env.js', () => ({
       env: { FORMA_ALLOWED_HUBS: '*', FORMA_ALLOWED_PROJECTS: '*' },
     }));
-    const { checkUnscopedToolAllowed } = await import('../../../src/safety/allowlist.js');
+    const { checkUnmappableToolAllowed } = await import('../../../src/safety/allowlist.js');
     expect(() =>
-      checkUnscopedToolAllowed('md_get_manifest', 'Model Derivative URN'),
+      checkUnmappableToolAllowed('md_get_manifest', 'Model Derivative URN'),
     ).not.toThrow();
   });
 
@@ -75,10 +75,10 @@ describe('checkUnscopedToolAllowed', () => {
     vi.doMock('../../../src/config/env.js', () => ({
       env: { FORMA_ALLOWED_HUBS: 'b.hub-1', FORMA_ALLOWED_PROJECTS: '*' },
     }));
-    const { checkUnscopedToolAllowed } = await import('../../../src/safety/allowlist.js');
+    const { checkUnmappableToolAllowed } = await import('../../../src/safety/allowlist.js');
     try {
-      checkUnscopedToolAllowed('md_get_manifest', 'Model Derivative URN');
-      expect.unreachable('expected checkUnscopedToolAllowed to throw');
+      checkUnmappableToolAllowed('md_get_manifest', 'Model Derivative URN');
+      expect.unreachable('expected checkUnmappableToolAllowed to throw');
     } catch (err) {
       expect((err as Error).message).toContain('FORMA_ALLOWED_HUBS');
       expect((err as Error).message).toContain('FORMA_ALLOWED_PROJECTS');

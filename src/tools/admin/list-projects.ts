@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ReadToolDef } from '../_types.js';
 import { adminListProjects } from '../../apis/admin.js';
+import { isProjectAllowed } from '../../safety/allowlist.js';
 
 const inputSchema = z.object({
   hub_id: z
@@ -19,14 +20,16 @@ export const adminListProjectsTool: ReadToolDef<typeof inputSchema> = {
   name: 'admin_list_projects',
   title: 'List Forma Projects (Admin)',
   description:
-    'Lists all projects in a Forma hub using the Account Admin API. ' +
-    'Returns richer metadata than dm_list_projects (status, type, dates, address). ' +
-    'Requires the service account to have Account Admin role.\n\n' +
-    'Use dm_list_hubs first to obtain hub_id.',
+    'Lists the projects in a Forma hub via the Account Admin API, with richer metadata ' +
+    'than dm_list_projects: status, type, dates, and address. Takes a hub id, which ' +
+    'dm_list_hubs returns. Requires the service account to hold the Account Admin role.',
   kind: 'read',
   preferredAuth: '2lo',
+  scope: { kind: 'dm' },
   scopes: ['account:read'],
   inputSchema,
+
+  getHubId: (i) => i.hub_id,
 
   execute: async (input, ctx) => {
     const { results, pagination } = await adminListProjects(ctx.auth, input.hub_id, {
@@ -35,14 +38,19 @@ export const adminListProjectsTool: ReadToolDef<typeof inputSchema> = {
       ...(input.status ? { status: input.status } : {}),
     });
 
-    if (results.length === 0) {
+    // Account Admin API returns every project in the hub regardless of the allow-list;
+    // filter the page before it reaches the caller. totalResults/pagination still reflect
+    // the unfiltered page fetched from APS, so a filtered page can be smaller than `limit`.
+    const projects = results.filter((p) => isProjectAllowed(p.id));
+
+    if (projects.length === 0) {
       return {
         content: [{ type: 'text', text: 'No projects found for this hub.' }],
         structuredContent: { projects: [], pagination },
       };
     }
 
-    const lines = results.map(
+    const lines = projects.map(
       (p) =>
         `• ${p.name}  (ID: ${p.id})  [status: ${p.status}${p.type ? ', type: ' + p.type : ''}]`,
     );
@@ -51,12 +59,10 @@ export const adminListProjectsTool: ReadToolDef<typeof inputSchema> = {
       content: [
         {
           type: 'text',
-          text:
-            `Found ${pagination.totalResults} project(s) (showing ${results.length}):\n\n` +
-            lines.join('\n'),
+          text: `Found ${projects.length} project(s):\n\n` + lines.join('\n'),
         },
       ],
-      structuredContent: { projects: results, pagination },
+      structuredContent: { projects, pagination },
     };
   },
 };

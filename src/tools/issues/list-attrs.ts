@@ -25,7 +25,9 @@ export const listIssueAttrsTool: ReadToolDef<typeof inputSchema> = {
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],
+  scope: { kind: 'dm' },
   inputSchema,
+  getProjectId: (i) => i.project_id,
 
   execute: async (input, ctx) => {
     const attrs = await listIssueAttrs(ctx.auth, input.project_id);

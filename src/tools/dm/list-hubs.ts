@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ReadToolDef } from '../_types.js';
 import { listHubs } from '../../apis/data-management.js';
+import { isHubAllowed } from '../../safety/allowlist.js';
 
 const inputSchema = z.object({});
 
@@ -14,11 +15,14 @@ export const listHubsTool: ReadToolDef<typeof inputSchema> = {
     'Use hub IDs with dm_list_projects, admin_list_projects, and other tools.',
   kind: 'read',
   preferredAuth: '2lo',
+  scope: { kind: 'discovery' },
   scopes: ['data:read'],
   inputSchema,
 
   execute: async (_input, ctx) => {
-    const hubs = await listHubs(ctx.auth);
+    // No hub_id input to check against the allow-list up front, so filter the credential's
+    // full hub list down to the allowed set here instead of returning everything it can see.
+    const hubs = (await listHubs(ctx.auth)).filter((h) => isHubAllowed(h.id));
 
     if (hubs.length === 0) {
       return {
@@ -27,7 +31,7 @@ export const listHubsTool: ReadToolDef<typeof inputSchema> = {
             type: 'text',
             text:
               'No hubs found. Ensure the service account (SSA) has been invited to at least one ' +
-              'Autodesk Forma hub. See docs/AUTH.md for setup steps.',
+              'Autodesk Forma hub, and that FORMA_ALLOWED_HUBS includes it. See docs/AUTH.md for setup steps.',
           },
         ],
         structuredContent: { hubs: [] },

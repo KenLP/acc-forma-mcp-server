@@ -20,6 +20,11 @@ export const aecdmListElementGroupsTool: ReadToolDef<typeof inputSchema> = {
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],
+  // NOTE: the project_id input holds an AECDM project id, NOT a DM `b.<guid>` — the two
+  // are different id spaces (aecdm_list_projects returns both side by side). The old
+  // name-based allow-list check matched this field and compared an AECDM id against DM
+  // ids, which protected nothing and rejected valid calls.
+  scope: { kind: 'unmappable', resource: 'AECDM-native project id' },
   inputSchema,
 
   execute: async (input, ctx) => {

@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import type { ReadToolDef } from '../_types.js';
 import { getMdProperties, aggregateMdProperties } from '../../apis/model-derivative.js';
-import { checkUnscopedToolAllowed } from '../../safety/allowlist.js';
 
 const inputSchema = z.object({
   urn: z
@@ -103,10 +102,10 @@ export const mdGetPropertiesTool: ReadToolDef<typeof inputSchema> = {
   kind: 'read',
   scopes: ['data:read'],
   preferredAuth: '2lo',
+  scope: { kind: 'unmappable', resource: 'Model Derivative URN' },
   inputSchema,
 
   execute: async (input, ctx) => {
-    checkUnscopedToolAllowed('md_get_properties', 'Model Derivative URN');
     const auth = ctx.auth2lo ?? ctx.auth;
 
     // ── Server-side group + sum (whole-category take-off, no display cap) ──────

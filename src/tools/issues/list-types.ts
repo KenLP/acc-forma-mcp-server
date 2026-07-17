@@ -20,7 +20,9 @@ export const listIssueTypesTool: ReadToolDef<typeof inputSchema> = {
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],
+  scope: { kind: 'dm' },
   inputSchema,
+  getProjectId: (i) => i.project_id,
 
   execute: async (input, ctx) => {
     const types = await listIssueTypes(ctx.auth, input.project_id);

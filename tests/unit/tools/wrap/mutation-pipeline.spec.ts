@@ -51,6 +51,7 @@ function makeTool(executeMock: ReturnType<typeof vi.fn>): MutationToolDef<typeof
     description: 'Test mutation tool for the wrapMutationTool pipeline',
     kind: 'mutation',
     scopes: ['data:write'],
+    scope: { kind: 'dm' },
     inputSchema: schema,
     getProjectId: (input: Input) => input.project_id,
     buildPreview: vi.fn().mockImplementation((input: Input) =>

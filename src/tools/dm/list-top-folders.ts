@@ -19,8 +19,12 @@ export const listTopFoldersTool: ReadToolDef<typeof inputSchema> = {
     'Use the returned folder IDs with dm_list_folder_contents to drill down.',
   kind: 'read',
   preferredAuth: '2lo',
+  scope: { kind: 'dm' },
   scopes: ['data:read'],
   inputSchema,
+
+  getHubId: (i) => i.hub_id,
+  getProjectId: (i) => i.project_id,
 
   execute: async (input, ctx) => {
     const folders = await listTopFolders(ctx.auth, input.hub_id, input.project_id);

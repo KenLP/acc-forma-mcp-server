@@ -86,6 +86,11 @@ export const mpDiffVersionsTool: ReadToolDef<typeof inputSchema> = {
   // claiming a mode we have not run is the kind of declaration/behaviour gap this server
   // is built to avoid.
   requiredAuthModes: ['ssa', '3lo'],
+  // Unlike the md_* tools, every Model Properties call is addressed under
+  // /construction/index/v2/projects/{project_id}/ — the version URNs are resolved inside
+  // that project, so checking project_id genuinely bounds what this tool can read.
+  scope: { kind: 'dm' },
+  getProjectId: (i) => i.project_id,
   inputSchema,
 
   execute: async (input, ctx) => {
