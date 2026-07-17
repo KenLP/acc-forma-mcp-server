@@ -24,13 +24,11 @@ export const mdTriggerTranslationTool: MutationToolDef<typeof inputSchema> = {
   name: 'md_trigger_translation',
   title: 'Trigger Model Derivative Translation',
   description:
-    '**Model Derivative API (mutation)** — submits a translation job to produce SVF2 output ' +
-    'for a model version. SVF2 is required before `md_get_properties` or `md_get_manifest` ' +
-    'can return geometry/view data.\n\n' +
-    'Translation typically takes 30 seconds – 5 minutes depending on model size. ' +
-    'Poll `md_get_manifest` to check status.\n\n' +
-    '**API boundary:** this is a Model Derivative mutation, NOT an AECDM or ACC Issues/Reviews operation. ' +
-    'It does not modify BIM data — it only generates derivative files for viewing/extraction.',
+    'Model Derivative API mutation — submits a translation job to produce SVF2 ' +
+    'output for a model version, required before `md_get_properties` or ' +
+    '`md_get_manifest` can return geometry/view data. Translation typically takes ' +
+    '30 seconds to 5 minutes depending on model size. Does not modify BIM data — ' +
+    'it only generates derivative files for viewing and extraction.',
   kind: 'mutation',
   scopes: ['data:read', 'data:write'],
   preferredAuth: '2lo',

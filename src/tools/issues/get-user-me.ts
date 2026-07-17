@@ -16,14 +16,11 @@ export const getIssueUserMeTool: ReadToolDef<typeof inputSchema> = {
   name: 'issues_get_user_me',
   title: 'Get Current User Issues Permissions',
   description:
-    "Returns the current authenticated identity's profile and permission flags for the " +
-    'ACC Issues module in a specific project.\n\n' +
-    'Use this tool to check:\n' +
-    '  • Whether the current SSA / user can create or update issues\n' +
-    '  • Whether comments are allowed\n' +
-    '  • The identity name and email visible in issue activity feeds\n\n' +
-    'Useful as a pre-flight check before running issues_create or issues_update.\n\n' +
-    'Auth: SSA or 3LO required (2LO not supported for Issues API).',
+    "Returns the current authenticated identity's profile and permission flags " +
+    'for the ACC Issues module in a specific project, including whether the ' +
+    'identity can create or update issues, whether comments are allowed, and the ' +
+    'identity name/email visible in issue activity feeds. Auth: SSA or 3LO ' +
+    'required (2LO not supported for Issues API).',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],

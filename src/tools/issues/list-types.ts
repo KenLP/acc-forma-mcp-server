@@ -13,11 +13,10 @@ export const listIssueTypesTool: ReadToolDef<typeof inputSchema> = {
   name: 'issues_list_types',
   title: 'List Issue Types and Subtypes',
   description:
-    'Lists all issue types and their subtypes for a project. ' +
-    'IMPORTANT: issues_create requires an issue_subtype_id, not an issue_type_id. ' +
-    'Call this tool first to discover valid subtype IDs before creating an issue. ' +
-    'Each subtype includes an isActive flag; only active subtypes can be used in issues_create. ' +
-    'Inactive subtypes are tagged [INACTIVE] in the text rendering.',
+    'Lists all issue types and their subtypes for a project. issues_create takes ' +
+    'an issue_subtype_id, not an issue_type_id. Each subtype includes an ' +
+    'isActive flag; only active subtypes can be used in issues_create. Inactive ' +
+    'subtypes are tagged [INACTIVE] in the text rendering.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],

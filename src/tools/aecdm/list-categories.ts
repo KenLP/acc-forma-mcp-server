@@ -16,13 +16,12 @@ export const aecdmListCategoriesTool: ReadToolDef<typeof inputSchema> = {
   name: 'aecdm_list_categories',
   title: 'List BIM Element Categories',
   description:
-    'Lists BIM categories present in an element group with approximate counts. ' +
-    'Probes ~60 well-known Revit categories (Architectural / Structural / MEP / Furniture) ' +
-    'in parallel using the verified-working filter syntax, and returns those with elements found. ' +
-    'Counts are capped at 100 per category — for exact totals, use aecdm_aggregate_by_parameter. ' +
-    'Use the returned category names with aecdm_query_elements.\n\n' +
-    'If empty: the model file may have been uploaded before AEC Data Model was enabled on the hub. ' +
-    'Re-publish the Revit file to trigger indexing.',
+    'Lists BIM categories present in an element group with approximate counts, ' +
+    'by probing about 60 well-known Revit categories (Architectural, Structural, ' +
+    'MEP, Furniture) in parallel and returning those with elements found. Counts ' +
+    'are capped at 100 per category. An empty result means the model file was ' +
+    'likely uploaded before AEC Data Model was enabled on the hub; re-publishing ' +
+    'the Revit file triggers indexing.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],

@@ -56,21 +56,15 @@ export const aecdmQueryElementPositionsTool: ReadToolDef<typeof inputSchema> = {
   name: 'aecdm_query_element_positions',
   title: 'Query BIM Element Positions',
   description:
-    'Returns BIM elements with their origin position (x, y, z) **in metres** (AECDM native unit) ' +
-    'plus each element\'s `external_id` (Revit UniqueId). ' +
-    'Position is decoded from the element\'s first geometry piece transform.\n\n' +
-    'Primary use case: populate ACC Issue pushpins — `linked_documents[].details.position`.\n\n' +
-    '⚠️ **Pushpin coordinates are NOT the raw position.** The ACC viewer for an imperial Revit ' +
-    'model is in feet, with a per-model `globalOffset`. Convert before pinning:\n' +
-    '  `viewer_pos = position_metres × 3.280839895 − globalOffset`\n' +
-    'Get `globalOffset` once from any existing pin (`issues_get` → `viewerState.globalOffset`); ' +
-    'get the 3D viewable GUID from `md_get_manifest`; use `external_id` as the pin anchor ' +
-    '(and resolve the SVF `objectId`/dbId by matching it in `md_get_properties`). ' +
-    'ACC 3D pins use `type: "TwoDVectorPushpin"` with `is3D: true`.\n\n' +
-    'Optional `reference_bbox` (in metres) filters to elements inside the box (point-in-box test).\n\n' +
-    'NOTE: AECDM `geometryDataByElements` is **Public Beta**. Returns an *origin point*, not an ' +
-    'AABB. Only point-placed elements (fittings, fixtures, columns, doors) have geometry; linear ' +
-    '(pipes, ducts) and planar (walls, floors) elements return `position: null`.',
+    'Returns BIM elements with origin position (x, y, z) in metres, decoded from the ' +
+    'element\'s first geometry piece transform, plus each element\'s `external_id` ' +
+    '(Revit UniqueId). Positions are in AECDM/global coordinates, not ACC viewer ' +
+    'coordinates — a per-model globalOffset and a unit conversion (×3.280839895 for ' +
+    'imperial) apply before use as a pushpin position. Optional `reference_bbox` ' +
+    '(metres) filters to elements inside the box. `geometryDataByElements` is Public ' +
+    'Beta; only point-placed elements (fittings, fixtures, columns, doors) return ' +
+    'geometry — linear (pipes, ducts) and planar (walls, floors) elements return ' +
+    '`position: null`.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],

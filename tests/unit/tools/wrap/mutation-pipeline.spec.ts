@@ -178,7 +178,7 @@ describe('wrapMutationTool — mutation pipeline (Task 8)', () => {
     const exec = vi
       .fn()
       .mockRejectedValue(
-        new ApsIndeterminateError('POST', 'https://developer.api.autodesk.com/x', new Error('aborted')),
+        new ApsIndeterminateError('POST', 'https://developer.api.autodesk.com/x', 'aborted'),
       );
     const handler = await loadWrapped(makeEnv(), exec);
 
@@ -187,7 +187,7 @@ describe('wrapMutationTool — mutation pipeline (Task 8)', () => {
     const res = await handler({ ...BASE, dry_run: false, approval_token: token });
 
     expect(res.isError).toBe(true);
-    expect(res.content[0]?.text).toMatch(/may or may not have been applied/i);
+    expect(res.content[0]?.text).toMatch(/may or may not have applied/i);
 
     const executeEntry = (auditEntries as Array<{ stage?: string }>).find(
       (e) => e.stage === 'outcome_unknown',

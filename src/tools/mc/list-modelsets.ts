@@ -15,15 +15,13 @@ export const mcListModelSetsTool: ReadToolDef<typeof inputSchema> = {
   name: 'mc_list_modelsets',
   title: 'List Model Coordination Modelsets',
   description:
-    '**Model Coordination API** — lists the coordination modelsets (coordination spaces) in a project.\n\n' +
-    'A modelset is a folder of models that ACC continuously clash-tests against each other. ' +
-    'Use the returned `modelSetId` with `mc_list_clashes` to pull clash results.\n\n' +
-    '⚠️ **Prerequisites:**\n' +
-    '  • Model Coordination must be activated on the project and a coordination space set up.\n' +
-    '  • The authenticated SSA must have **Model Coordination product access** ' +
-    '(Member or Administrator) — without it the API returns 404 "no access". Grant it in ' +
-    'ACC Project Admin → Members.\n\n' +
-    'Auth: SSA or 3LO (2LO not accepted).',
+    'Model Coordination API — lists the coordination modelsets (coordination ' +
+    'spaces) in a project. A modelset is a folder of models that ACC continuously ' +
+    'clash-tests against each other; `modelSetId` identifies one for clash ' +
+    'queries. Requires Model Coordination activated on the project and the ' +
+    'authenticated SSA to have Model Coordination product access (Member or ' +
+    'Administrator) — without it the API returns 404. Auth: SSA or 3LO (2LO not ' +
+    'accepted).',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],

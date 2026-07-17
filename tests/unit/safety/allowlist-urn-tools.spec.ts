@@ -45,4 +45,43 @@ describe('checkUnscopedToolAllowed', () => {
       checkUnscopedToolAllowed('md_trigger_translation', 'Model Derivative URN'),
     ).toThrow(AllowlistError);
   });
+
+  it('throws when only FORMA_ALLOWED_HUBS is restricted, even with FORMA_ALLOWED_PROJECTS=* (the bypass this guard closes)', async () => {
+    vi.resetModules();
+    vi.doMock('../../../src/config/env.js', () => ({
+      env: { FORMA_ALLOWED_HUBS: 'b.hub-1', FORMA_ALLOWED_PROJECTS: '*' },
+    }));
+    const { checkUnscopedToolAllowed, AllowlistError } = await import(
+      '../../../src/safety/allowlist.js'
+    );
+    expect(() =>
+      checkUnscopedToolAllowed('md_get_manifest', 'Model Derivative URN'),
+    ).toThrow(AllowlistError);
+  });
+
+  it('does not throw when both FORMA_ALLOWED_HUBS and FORMA_ALLOWED_PROJECTS are *', async () => {
+    vi.resetModules();
+    vi.doMock('../../../src/config/env.js', () => ({
+      env: { FORMA_ALLOWED_HUBS: '*', FORMA_ALLOWED_PROJECTS: '*' },
+    }));
+    const { checkUnscopedToolAllowed } = await import('../../../src/safety/allowlist.js');
+    expect(() =>
+      checkUnscopedToolAllowed('md_get_manifest', 'Model Derivative URN'),
+    ).not.toThrow();
+  });
+
+  it('error message mentions both FORMA_ALLOWED_HUBS and FORMA_ALLOWED_PROJECTS', async () => {
+    vi.resetModules();
+    vi.doMock('../../../src/config/env.js', () => ({
+      env: { FORMA_ALLOWED_HUBS: 'b.hub-1', FORMA_ALLOWED_PROJECTS: '*' },
+    }));
+    const { checkUnscopedToolAllowed } = await import('../../../src/safety/allowlist.js');
+    try {
+      checkUnscopedToolAllowed('md_get_manifest', 'Model Derivative URN');
+      expect.unreachable('expected checkUnscopedToolAllowed to throw');
+    } catch (err) {
+      expect((err as Error).message).toContain('FORMA_ALLOWED_HUBS');
+      expect((err as Error).message).toContain('FORMA_ALLOWED_PROJECTS');
+    }
+  });
 });

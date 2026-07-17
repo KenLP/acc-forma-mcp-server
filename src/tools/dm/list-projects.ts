@@ -13,9 +13,10 @@ export const listProjectsTool: ReadToolDef<typeof inputSchema> = {
   name: 'dm_list_projects',
   title: 'List Projects in Hub',
   description:
-    'Lists all projects in a Forma hub via the Data Management API. ' +
-    'Returns project IDs and names. For richer metadata (status, type, address) use admin_list_projects instead. ' +
-    'Project IDs from this tool can be used with dm_list_top_folders, issues_*, reviews_*, and aecdm_* tools.',
+    'Lists all projects in a Forma hub via the Data Management API. Returns ' +
+    'project IDs and names; richer metadata (status, type, address) is available ' +
+    'from admin_list_projects. Project IDs from this tool are compatible with ' +
+    'dm_list_top_folders, issues_*, reviews_*, and aecdm_* tools.',
   kind: 'read',
   preferredAuth: '2lo',
   scopes: ['data:read'],

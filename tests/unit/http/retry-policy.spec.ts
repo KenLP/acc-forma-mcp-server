@@ -5,11 +5,16 @@ import type { AuthProvider } from '../../../src/auth/index.js';
 
 // Finding #3: retrying a 5xx on a non-idempotent mutation (POST/PATCH/etc.) can duplicate
 // the change if APS actually applied it before failing. These tests pin the resulting policy:
-//   - GET: always safe to retry on 5xx/network-failure (nothing was mutated).
+//   - GET: always safe to retry on 5xx/network-failure (nothing was mutated) -> ApsApiError
+//     once retries are exhausted (a GET failure is definite, never "unknown").
 //   - non-GET + 5xx: NOT retried unless the caller opts in via retryOn5xx (documented-idempotent
-//     endpoints only, e.g. Model Properties diffs:batch-status).
+//     endpoints only, e.g. Model Properties diffs:batch-status) -> ApsIndeterminateError, because
+//     APS may have applied the change before answering 5xx.
+//   - non-GET + retryOn5xx:true + 5xx: retried, then ApsApiError once exhausted (caller already
+//     confirmed the endpoint is idempotent, so no "may duplicate" warning is needed).
 //   - non-GET + network failure (no response at all): outcome is unknown -> ApsIndeterminateError,
 //     never retried blind.
+//   - non-GET + 4xx: ApsApiError, never retried (the request was definitively rejected).
 //   - 429 and 401: always retried regardless of method (the request was rejected up front, never
 //     applied).
 
@@ -46,18 +51,31 @@ describe('apsRequest retry policy', () => {
     expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
   });
 
-  it('POST + 5xx: does NOT retry (exactly one call), throws ApsApiError', async () => {
+  it('POST + 5xx: does NOT retry (exactly one call), throws ApsIndeterminateError (outcome unknown, not a definite failure)', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(503));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(
-      apsRequest(makeAuth(), '/foo', { method: 'POST', body: { a: 1 } }),
-    ).rejects.toBeInstanceOf(ApsApiError);
+    const err = await apsRequest(makeAuth(), '/foo', { method: 'POST', body: { a: 1 } }).catch(
+      (e: unknown) => e,
+    );
 
+    expect(err).toBeInstanceOf(ApsIndeterminateError);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('POST + retryOn5xx:true + 5xx: DOES retry (more than one call)', async () => {
+  it('GET + 5xx: retries then throws ApsApiError (GET never mutates, so a definite failure)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(503));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const promise = apsRequest(makeAuth(), '/foo', { method: 'GET' });
+    const assertion = expect(promise).rejects.toBeInstanceOf(ApsApiError);
+    await vi.runAllTimersAsync();
+    await assertion;
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('POST + retryOn5xx:true + 5xx: DOES retry, throws ApsApiError (caller confirmed idempotent, no duplicate-mutation warning needed)', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(503));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -73,6 +91,18 @@ describe('apsRequest retry policy', () => {
     expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
   });
 
+  it('POST + 4xx: throws ApsApiError, exactly one call (client error is definite, never retried)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(400));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const err = await apsRequest(makeAuth(), '/foo', { method: 'POST', body: { a: 1 } }).catch(
+      (e: unknown) => e,
+    );
+
+    expect(err).toBeInstanceOf(ApsApiError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('POST + network failure: throws ApsIndeterminateError, exactly one call, message mentions outcome/verify', async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error('The operation was aborted'));
     vi.stubGlobal('fetch', fetchMock);
@@ -83,8 +113,22 @@ describe('apsRequest retry policy', () => {
     }).catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(ApsIndeterminateError);
-    expect((err as ApsIndeterminateError).message).toMatch(/outcome|verify/i);
+    expect((err as ApsIndeterminateError).message).toMatch(/may or may not/i);
+    expect((err as ApsIndeterminateError).status).toBeUndefined();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('POST + 5xx: ApsIndeterminateError message mentions "may or may not" and carries the status', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(503));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const err = await apsRequest(makeAuth(), '/foo', { method: 'POST', body: { a: 1 } }).catch(
+      (e: unknown) => e,
+    );
+
+    expect(err).toBeInstanceOf(ApsIndeterminateError);
+    expect((err as ApsIndeterminateError).message).toMatch(/may or may not/i);
+    expect((err as ApsIndeterminateError).status).toBe(503);
   });
 
   it('GET + network failure: retries then throws the original error (not ApsIndeterminateError)', async () => {

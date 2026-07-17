@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ReadToolDef } from '../_types.js';
 import { getMdProperties, aggregateMdProperties } from '../../apis/model-derivative.js';
+import { checkUnscopedToolAllowed } from '../../safety/allowlist.js';
 
 const inputSchema = z.object({
   urn: z
@@ -91,42 +92,21 @@ export const mdGetPropertiesTool: ReadToolDef<typeof inputSchema> = {
   name: 'md_get_properties',
   title: 'Get Model Derivative Element Properties',
   description:
-    '**Model Derivative API** — fetches element properties for a translated model, ' +
-    'with **field projection** (`fields`) over the FULL Revit parameter set.\n\n' +
-    '⭐ **Use this (not AECDM) for level grouping, area/quantity take-off, and any analysis ' +
-    'needing Revit constraints/parameters.** MD/SVF2 exposes the complete parameter set — ' +
-    '`Level`, `Base Constraint`, `Top Constraint`, `Area`, `Volume`, `Phase`, materials — that ' +
-    '**AECDM omits** (AECDM drops the Level/Constraint association, so it cannot group Floors/Walls ' +
-    'by storey).\n\n' +
-    '⭐⭐ **For whole-building take-offs, use `group_by` — it sums server-side across EVERY element** ' +
-    '(no max_results cap, no 30-row display limit). Example "total floor & wall area per level":\n' +
-    '  • `md_get_properties(urn, category_filter="Floors", group_by="Level")`\n' +
-    '  • `md_get_properties(urn, category_filter="Walls", group_by="Base Constraint")`\n' +
-    'returns one compact row per level (count + ΣArea) for the entire building — no manual summing.\n' +
-    'Use `fields` (per-element projection) only when you need each element\'s raw values; it is capped ' +
-    'at max_results and renders ~30 rows, so do NOT sum a whole building from it — use `group_by`.\n\n' +
-    'Other use cases: inspect parameters, map objectIds↔names↔categories, IFC data.\n' +
-    'The model must have a successful SVF2 translation — check with `md_get_manifest` first.\n\n' +
-    '**AECDM vs MD — when to use which:**\n' +
-    '  • **MD (this tool)** — full Revit parameters via `fields`; level/area/constraint grouping; URN input.\n' +
-    '  • **AECDM (`aecdm_*`)** — fast category enumeration + a curated property subset + element ' +
-    'origin points (for pushpins); takes `element_group_id`. Does NOT expose Level/Constraint.\n\n' +
-    '⚠️ **Bbox availability:** bounding boxes are read from `__internal__.__boundingBox__` in SVF2. ' +
-    'This field was available in the legacy SVF1 (Forge) format but is **not populated** in any ' +
-    'current SVF2 translation, regardless of model type (MEP, Architecture, or Structural). ' +
-    '`structuredContent.withBbox` will be 0 for all real ACC/Forma models. ' +
-    'For element bounding boxes, use the **Model Properties API** (requires 3LO auth — Phase 3).\n\n' +
-    '⚠️ **Category filter:** when the Revit SVF2 export omits category fields (common for MEP), ' +
-    'filtering falls back to substring-matching the element *name* ' +
-    '(e.g. "Pipe" matches "Pipe: 3/4 in [12345]"). ' +
-    'Bounding boxes are in the model\'s own coordinate system — Revit Shared Coordinates ' +
-    'required for meaningful cross-file comparison.',
+    'Model Derivative API — fetches element properties from a translated (SVF2) model, ' +
+    'with optional field projection (`fields`) over the full Revit parameter set ' +
+    '(Level, Base Constraint, Area, Volume, Phase, materials) that the AEC Data Model ' +
+    'does not expose. `group_by` aggregates every element in a category server-side ' +
+    'with no row cap; `fields` is per-element and capped at max_results. Bounding boxes ' +
+    'are not populated in SVF2 (an SVF1-era field); the Model Properties API covers bbox ' +
+    'queries. Category filtering falls back to substring name-matching when SVF2 omits ' +
+    'category fields (common for MEP).',
   kind: 'read',
   scopes: ['data:read'],
   preferredAuth: '2lo',
   inputSchema,
 
   execute: async (input, ctx) => {
+    checkUnscopedToolAllowed('md_get_properties', 'Model Derivative URN');
     const auth = ctx.auth2lo ?? ctx.auth;
 
     // ── Server-side group + sum (whole-category take-off, no display cap) ──────

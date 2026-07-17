@@ -200,7 +200,7 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 | `md_get_properties` | Fetch Revit element properties (names, parameters, category) from an SVF2-translated model. Supports category and objectId filters. |
 | `md_trigger_translation` ✍️ | Submit a new SVF2 translation job for a model version. Poll with `md_get_manifest`. |
 
-> **Note:** bounding boxes are NOT available from the MD Properties API for any SVF2 model — this is an APS platform limitation. For element bboxes, the Model Properties API (`/construction/index/v2/`) is the correct path (requires 3LO auth — Phase 3).
+> **Note:** bounding boxes are NOT available from the MD Properties API for any SVF2 model — this is an APS platform limitation. For element bboxes, the Model Properties API (`/construction/index/v2/`) is the correct path; it works with SSA (see `mp_diff_versions`, whose diff payload carries real `bboxMin`/`bboxMax`). A general single-version bbox query is not wrapped yet.
 
 ### Model Coordination — Clash Detection (2)
 
@@ -213,7 +213,7 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 
 | Tool | Purpose |
 |---|---|
-| `mp_diff_versions` | Diff two versions of the **same** model (the backend of ACC's *Compare Versions*): returns whole-model `added/removed/modified` stats plus a rollup of changed elements **by Revit category** and by change type (`Transform` vs `Geometry` vs property-only). Works with **SSA** (no 3LO). Async — returns a resumable `diff_id` if still processing. Use the per-category counts to drive **cross-discipline change alerts** (e.g. Architecture `Rooms` changed → flag Structural to re-check loads; `Ducts`/`Mechanical Equipment` changed → flag MEP). |
+| `mp_diff_versions` | Diff two versions of the **same** model (the backend of ACC's *Compare Versions*): returns whole-model `added/removed/modified` stats plus a rollup of changed elements **by Revit category** and by change type (`Transform` vs `Geometry` vs property-only). Works with **SSA** (no 3LO). Async — returns a resumable `diff_id` if still processing. The per-category rollup is what makes cross-discipline change alerting possible: an Architectural model whose `Rooms` changed is a signal for Structural, `Ducts`/`Mechanical Equipment` for MEP. See [prototypes/change-alert](prototypes/change-alert). |
 
 ### ACC Docs — Viewables (1)
 

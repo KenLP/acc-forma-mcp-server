@@ -61,20 +61,23 @@ export class ApsGraphQLError extends ApsApiError {
 }
 
 /**
- * A non-GET request failed without a response (timeout, socket error), so it is unknown
- * whether APS applied the change. Callers must verify state before retrying — a blind
- * retry can duplicate the mutation.
+ * A non-GET request did not complete cleanly, so whether APS applied the change is unknown:
+ * either no response arrived (timeout/socket error), or the server answered 5xx — which it
+ * may have done *after* applying the change. Callers must verify state before retrying; a
+ * blind retry can duplicate the mutation.
  */
 export class ApsIndeterminateError extends Error {
   constructor(
     public readonly method: string,
     public readonly url: string,
-    public readonly cause: unknown,
+    public readonly reason: string,
+    /** Present when the server did answer (5xx); absent for a network failure. */
+    public readonly status?: number,
   ) {
     super(
-      `${method} ${url} failed without a response (${cause instanceof Error ? cause.message : String(cause)}). ` +
-        `The request may or may not have been applied by Autodesk — verify the current state before retrying, ` +
-        `as retrying could duplicate the change.`,
+      `${method} ${url} did not complete cleanly (${reason}). Autodesk may or may not have ` +
+        `applied this change — verify the current state before retrying, as retrying could ` +
+        `duplicate it.`,
     );
     this.name = 'ApsIndeterminateError';
   }

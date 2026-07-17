@@ -31,16 +31,10 @@ export const getElementPropertiesTool: ReadToolDef<typeof inputSchema> = {
   name: 'aecdm_get_element_properties',
   title: 'Get AEC Element Properties',
   description:
-    'Retrieves all properties of a specific BIM element. ' +
-    'Returns all parameters and values — equivalent to the Properties panel in Revit.\n\n' +
-    'Note: aecdm_query_elements already returns full properties for every element it lists, ' +
-    'so you usually do not need this tool separately. Use this only when you have an element_id ' +
-    'from a previous session and need to re-fetch its properties.\n\n' +
-    'You must pass the same `category` used to find the element (e.g. "Structural Columns") ' +
-    'because the AECDM API requires a filter on every element query.\n\n' +
-    'Example use cases:\n' +
-    '  • Re-fetch properties of a saved element ID\n' +
-    '  • Verify a specific element exists in the current model version',
+    'Retrieves all properties of a specific BIM element by `element_id`, ' +
+    'equivalent to the Properties panel in Revit. Requires the same `category` ' +
+    'used to originally find the element, since the AECDM API requires a category ' +
+    'filter on every element query.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],

@@ -34,13 +34,11 @@ export const aecdmAggregateByParameterTool: ReadToolDef<typeof inputSchema> = {
   name: 'aecdm_aggregate_by_parameter',
   title: 'Aggregate BIM Elements by Parameter',
   description:
-    'Counts BIM elements grouped by a **value** parameter within a category. ' +
-    'Example: category="Walls", group_by_property="Type Name" → how many walls of each type. ' +
-    'Good for type/material/family take-offs.\n\n' +
-    '⛔ **NOT for grouping by storey/level.** AECDM omits Revit reference parameters ' +
-    '(Level, Base Constraint, Top Constraint, Host), so grouping by them returns nothing useful. ' +
-    'For "elements/area per level", use `md_get_properties(category_filter=..., fields=["Level"|"Base Constraint","Area"])` ' +
-    'and group/sum in your reasoning — see that tool. This tool will redirect you there if you try.',
+    'Counts BIM elements grouped by a value parameter within a category (e.g. ' +
+    'category="Walls", group_by_property="Type Name" returns a count per wall ' +
+    'type). Suited to type/material/family take-offs. AECDM omits Revit reference ' +
+    'parameters (Level, Base Constraint, Top Constraint, Host), so grouping by ' +
+    'them returns no useful data.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],

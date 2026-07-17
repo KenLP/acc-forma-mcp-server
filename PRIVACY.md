@@ -115,6 +115,12 @@ Network destinations, in full:
 | `developer.api.autodesk.com` | APS REST/GraphQL API calls and OAuth token requests | request + response |
 | `*.amazonaws.com` | Autodesk-issued pre-signed S3 URLs (short-lived, ~60 s) returned by the Model Coordination clash API, used to download clash-result files | **download only** — nothing is uploaded |
 
+Both destinations are Autodesk's own: the `*.amazonaws.com` URLs are pre-signed links that
+Autodesk itself issues and hosts, not a separate vendor we chose. So the only party that
+receives your data is Autodesk, under the Autodesk Privacy Statement linked above — a level
+of protection at least equivalent to this policy, since the data is already theirs and the
+software adds no onward sharing of its own.
+
 There are **no other network destinations**. No analytics provider, no advertising network,
 no third-party SDK, no logging service, and no publisher-operated endpoint. The publisher
 operates no server and receives nothing.

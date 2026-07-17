@@ -49,12 +49,12 @@ export function checkProjectAllowed(projectId: string): void {
  * would silently bypass the allow-list the manifest promises.
  */
 export function checkUnscopedToolAllowed(toolName: string, resourceKind: string): void {
-  if (allowedProjects.has('*')) return;
+  if (allowedHubs.has('*') && allowedProjects.has('*')) return;
   throw new AllowlistError(
     'project',
     toolName,
-    `Tool "${toolName}" acts on a ${resourceKind} that cannot be mapped to a project, so it ` +
-      `cannot be checked against FORMA_ALLOWED_PROJECTS. While the allow-list is active this ` +
-      `tool is refused. Set FORMA_ALLOWED_PROJECTS=* to allow it, or use a project-scoped tool.`,
+    `Tool "${toolName}" acts on a ${resourceKind} that cannot be mapped to a hub or project, so it ` +
+      `cannot be checked against FORMA_ALLOWED_HUBS / FORMA_ALLOWED_PROJECTS. While either allow-list ` +
+      `is active this tool is refused. Set both to * to allow it, or use a project-scoped tool.`,
   );
 }

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ReadToolDef } from '../_types.js';
 import { getMdManifest } from '../../apis/model-derivative.js';
 import type { MdDerivativeChild } from '../../apis/model-derivative.js';
+import { checkUnscopedToolAllowed } from '../../safety/allowlist.js';
 
 const inputSchema = z.object({
   urn: z
@@ -18,23 +19,18 @@ export const mdGetManifestTool: ReadToolDef<typeof inputSchema> = {
   name: 'md_get_manifest',
   title: 'Get Model Derivative Manifest',
   description:
-    '**Model Derivative API** — returns the translation status and available views for a model version.\n\n' +
-    'Use this tool to:\n' +
-    '  • Check if a model has been translated to SVF2 (required before md_get_properties)\n' +
-    '  • List available 3D/2D view GUIDs to pass to md_get_properties\n' +
-    '  • Diagnose translation failures\n\n' +
-    'Input: a DM version URN from `dm_list_versions`.\n\n' +
-    '**API boundary — do NOT confuse with AECDM:**\n' +
-    '  • This tool uses **Model Derivative API** (file-based, URN input).\n' +
-    '  • For BIM semantic queries — elements by category, parameter values, element counts — ' +
-    'use `aecdm_*` tools instead.\n' +
-    '  • For element properties and Revit parameters, use `md_get_properties`.',
+    'Model Derivative API — returns the translation status and available views ' +
+    '(3D/2D view GUIDs) for a model version, and diagnostic detail for translation ' +
+    'failures. Takes a DM version URN. File/URN-based, distinct from the AEC Data ' +
+    "Model's semantic BIM queries (elements by category, parameter values, " +
+    'element counts).',
   kind: 'read',
   scopes: ['data:read'],
   preferredAuth: '2lo',
   inputSchema,
 
   execute: async (input, ctx) => {
+    checkUnscopedToolAllowed('md_get_manifest', 'Model Derivative URN');
     const auth = ctx.auth2lo ?? ctx.auth;
     const manifest = await getMdManifest(auth, input.urn);
 

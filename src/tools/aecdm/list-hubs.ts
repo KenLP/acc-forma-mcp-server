@@ -8,9 +8,8 @@ export const aecdmListHubsTool: ReadToolDef<typeof inputSchema> = {
   name: 'aecdm_list_hubs',
   title: 'List AEC Data Model Hubs',
   description:
-    'Lists all AECDM (AEC Data Model) hubs accessible to this account. ' +
-    'AECDM hub IDs are different from DM hub IDs — use these IDs with aecdm_list_projects. ' +
-    'Call this first to discover your AECDM hub ID before querying projects or BIM elements.',
+    'Lists all AECDM (AEC Data Model) hubs accessible to this account. AECDM hub ' +
+    'IDs are distinct from DM hub IDs and are used with aecdm_list_projects.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],

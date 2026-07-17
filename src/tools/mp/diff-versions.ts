@@ -70,21 +70,22 @@ export const mpDiffVersionsTool: ReadToolDef<typeof inputSchema> = {
   name: 'mp_diff_versions',
   title: 'Diff Two Model Versions (Model Properties API)',
   description:
-    '**Model Properties API (index v2) — version diff.** The backend of ACC\'s "Compare Versions": ' +
-    'given two versions of the SAME file lineage, it computes server-side which design elements were ' +
-    '**added / removed / modified**, whether each change is a **Transform** (moved/rotated) or a ' +
-    '**Geometry** change, and rolls the changes up **by Revit category** — the routing signal for ' +
-    'cross-discipline change alerts.\n\n' +
-    'Example use — change propagation: diff the Architectural model v_n-1 → v_n; if the rollup shows ' +
-    '`Rooms` modified, flag the Structural team to re-check load take-offs; if `Mechanical Equipment` / ' +
-    '`Ducts` changed, flag MEP to revisit the system layout.\n\n' +
-    'Requirement: element IDs must be stable between the two versions (consecutive Revit/DWG/NWC/IFC ' +
-    'versions of one file). Auth: works with SSA (no 3LO needed).\n\n' +
-    'The diff is asynchronous. If it is still PROCESSING when `wait_seconds` elapses, the tool returns ' +
-    'a `diff_id` — call again with that `diff_id` to resume polling (the computation continues server-side).',
+    'Model Properties API (index v2) version diff — the backend of ACC\'s Compare ' +
+    'Versions. Given two versions of the same file lineage, computes server-side ' +
+    'which design elements were added, removed, or modified, whether each change is ' +
+    'a Transform (moved/rotated) or a Geometry change, and rolls the changes up by ' +
+    'Revit category. Element IDs must be stable between the two versions ' +
+    '(consecutive Revit/DWG/NWC/IFC versions of one file). Works with SSA auth ' +
+    '(no 3LO needed). The diff computation is asynchronous; if still processing ' +
+    'when `wait_seconds` elapses, the response includes a `diff_id` identifying the ' +
+    'in-progress computation.',
   kind: 'read',
   scopes: ['data:read'],
-  requiredAuthModes: ['ssa', '2lo', '3lo'],
+  // SSA is proven against the live API; 3LO is the mode Autodesk's own Model Properties
+  // docs describe. 2LO is deliberately absent — it has never been exercised here, and
+  // claiming a mode we have not run is the kind of declaration/behaviour gap this server
+  // is built to avoid.
+  requiredAuthModes: ['ssa', '3lo'],
   inputSchema,
 
   execute: async (input, ctx) => {

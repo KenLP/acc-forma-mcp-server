@@ -24,20 +24,13 @@ export const aecdmQueryElementsTool: ReadToolDef<typeof inputSchema> = {
   name: 'aecdm_query_elements',
   title: 'Query BIM Elements by Category',
   description:
-    '**AEC Data Model (GraphQL)** — queries BIM elements by category, returning element IDs, ' +
-    'names, and semantic properties (parameters).\n\n' +
-    'Input: `element_group_id` from `aecdm_list_element_groups` — NOT a DM version URN.\n\n' +
-    '**API boundary — do NOT confuse with Model Derivative:**\n' +
-    '  • This tool uses **AECDM GraphQL** (semantic/parameter data, live BIM data).\n' +
-    '  • For element bounding boxes (AABBs) or geometry extents, use `md_get_properties` instead.\n' +
-    '  • For **level/storey, Base Constraint, Top Constraint, Host** — and therefore any ' +
-    'per-level grouping or area take-off — use `md_get_properties` (with `fields=[...]`). ' +
-    'AECDM omits these reference parameters; it only returns offsets like "Base Offset" / ' +
-    '"Elevation at Bottom", never the level name, so you CANNOT group by storey from this tool.\n\n' +
-    'Possible categories: Walls, Windows, Floors, Doors, Furniture, Ceilings, Electrical Equipment. ' +
-    'Use aecdm_list_categories to discover all available categories. ' +
-    'Use aecdm_aggregate_by_parameter to count elements grouped by a *value* property ' +
-    '(Type Name, Material) — NOT by level.',
+    'AEC Data Model GraphQL query — returns BIM elements by category with IDs, names, ' +
+    'and semantic properties (parameters). Takes an `element_group_id` (not a DM ' +
+    'version URN). Does not expose bounding boxes, geometry extents, or the Level, ' +
+    'Base Constraint, Top Constraint, and Host reference parameters — only offset ' +
+    'scalars such as Base Offset and Elevation at Bottom are returned, so elements ' +
+    'cannot be grouped by storey from this data. Example categories: Walls, Windows, ' +
+    'Floors, Doors, Furniture, Ceilings, Electrical Equipment.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],

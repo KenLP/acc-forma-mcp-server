@@ -16,14 +16,12 @@ export const listIssueAttrsTool: ReadToolDef<typeof inputSchema> = {
   name: 'issues_list_attrs',
   title: 'List Issue Custom Attribute Definitions',
   description:
-    'Returns the custom attribute (field) definitions configured for the ACC Issues module ' +
-    'in a project.\n\n' +
-    'Use this tool to:\n' +
-    '  • Discover which custom fields exist (e.g. "Contractor", "Risk Level", "Zone")\n' +
-    '  • Get the `attributeDefinitionId` UUID required by `issues_create` and `issues_update` ' +
-    "when populating `customAttributes`\n" +
-    '  • Understand the data type and allowed values for each field\n\n' +
-    'Auth: SSA or 3LO required (2LO not supported for Issues API).',
+    'Returns the custom attribute (field) definitions configured for the ACC ' +
+    'Issues module in a project — custom field names (e.g. "Contractor", "Risk ' +
+    'Level", "Zone"), each `attributeDefinitionId` UUID required by ' +
+    '`issues_create` and `issues_update` to populate `customAttributes`, and the ' +
+    'data type and allowed values for each field. Auth: SSA or 3LO required (2LO ' +
+    'not supported for Issues API).',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],

@@ -43,19 +43,15 @@ export const mcListClashesTool: ReadToolDef<typeof inputSchema> = {
   name: 'mc_list_clashes',
   title: 'List Model Coordination Clashes',
   description:
-    '**Model Coordination API** — returns clash-detection results for a modelset.\n\n' +
-    'ACC clash-tests a modelset automatically whenever its models change. This tool resolves the ' +
-    'latest (or a given) version\'s clash test, downloads the result files, and joins them into ' +
-    'clash pairs — each with the two clashing elements, their source models, and the penetration depth.\n\n' +
-    'Each clash side carries:\n' +
-    '  • `documentUrn` — the model the element belongs to (file version URN)\n' +
-    '  • `viewableName` — the 3D view (e.g. "3D Plumbing")\n' +
-    '  • `objectId` / `lmvId` — element identity (lmvId is the viewer dbId, usable for pinning)\n\n' +
-    '`distance` is **negative for hard clashes** (the magnitude is the overlap depth in model units); ' +
-    'results are sorted worst-first.\n\n' +
-    'To turn a clash into a pinned issue, map a side\'s `lmvId` (or look up its externalId via ' +
-    'md_get_properties) and use `issues_pin_element`.\n\n' +
-    'Auth: SSA or 3LO. The SSA needs Model Coordination product access (see mc_list_modelsets).',
+    'Model Coordination API — returns clash-detection results for a modelset. ACC ' +
+    'clash-tests a modelset automatically when its models change; this tool ' +
+    'resolves the latest (or given) version\'s clash test and joins the result ' +
+    'files into clash pairs, each with the two clashing elements, source models, ' +
+    'and penetration depth. Each side carries `documentUrn` (source model ' +
+    'version), `viewableName` (3D view), and `objectId`/`lmvId` (lmvId is the ' +
+    'viewer dbId). `distance` is negative for hard clashes (magnitude equals ' +
+    'overlap depth); results are sorted worst-first. Requires SSA or 3LO auth; ' +
+    'SSA needs Model Coordination product access on the project.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],

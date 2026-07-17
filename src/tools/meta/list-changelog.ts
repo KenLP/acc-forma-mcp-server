@@ -18,7 +18,7 @@ const inputSchema = z.object({
     .optional()
     .describe('Optional tool name prefix filter (e.g., "issues", "reviews_create").'),
   stage_filter: z
-    .enum(['preview', 'executed', 'denied_readonly', 'denied_allowlist', 'denied_rate_limit', 'denied_business_rule', 'failed_api'])
+    .enum(['preview', 'executed', 'denied_readonly', 'denied_allowlist', 'denied_rate_limit', 'denied_business_rule', 'failed_api', 'outcome_unknown'])
     .optional()
     .describe('Optional filter by audit stage.'),
   date: z

@@ -75,6 +75,12 @@ cat ~/.acc-forma-mcp/audit/audit-$(date +%F).jsonl | jq .
 | `denied_rate_limit` | Local per-tool hourly quota exceeded |
 | `denied_business_rule` | Tool-specific validation failed (e.g. invalid subtype ID, past due_date) |
 | `failed_api` | APS API call failed or approval token error |
+| `outcome_unknown` | A mutation request did not complete cleanly — see below |
+
+`outcome_unknown` — a mutation request did not complete cleanly: either no response arrived
+(timeout/socket error) or Autodesk answered 5xx, which it may have done after applying the
+change. Distinct from `failed_api`, which means the call definitively did not take effect.
+Treat these entries as "verify before retrying".
 
 ## Rate Governance Config
 

@@ -391,16 +391,14 @@ export const pinElementTool: MutationToolDef<typeof inputSchema> = {
   name: 'issues_pin_element',
   title: 'Create ACC Issue with 3D Element Pin',
   description:
-    'Creates an ACC issue and automatically places a 3D pushpin on a specific BIM element ' +
-    'by resolving the viewable GUID, element objectId, and viewer position in one call — ' +
-    'combining what would otherwise require separately calling md_get_manifest, ' +
-    'aecdm_query_element_positions, md_get_properties, and issues_create with a manually ' +
-    'computed coordinate transform.\n\n' +
-    'ELEMENT TYPES: Only point-placed elements (Doors, Pipe Fittings, Columns, Plumbing Fixtures) ' +
-    'have a geometry origin in AECDM. Linear (Pipes, Beams) and planar (Walls, Floors) elements ' +
-    'have no position and cannot be auto-pinned.\n\n' +
-    'GLOBALOFFSET: Auto-detected from existing pins on the model if omitted; ' +
-    'can be provided explicitly for highest accuracy.',
+    'Creates an ACC issue and places a 3D pushpin on a specific BIM element in one ' +
+    'call, resolving the viewable GUID, element objectId, and viewer position ' +
+    'server-side, including the geometry-to-viewer coordinate transform. Only ' +
+    'point-placed elements (Doors, Pipe Fittings, Columns, Plumbing Fixtures) have ' +
+    'a geometry origin and can be pinned; linear (Pipes, Beams) and planar (Walls, ' +
+    'Floors) elements have no position. globalOffset is auto-detected from ' +
+    'existing pins on the model if omitted, or can be provided explicitly for ' +
+    'highest accuracy.',
   kind: 'mutation',
   scopes: ['data:read', 'data:write'],
   requiredAuthModes: ['ssa', '3lo'],

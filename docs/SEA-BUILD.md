@@ -20,8 +20,12 @@ Pipeline: `src/index.ts` → `tsup --config tsup.sea.config.ts` (CJS,
 `noExternal: [/.*/]` inlines all JS deps; `better-sqlite3` stays external) →
 `dist-cjs/index.cjs` (~2.3 MB) → `pkg` → `forma-mcp.exe` (~43 MB).
 
-`package.json` `pkg.assets` embeds `better-sqlite3/build/Release/*.node` so the
-native binding ships inside the exe.
+`package.json` `pkg.assets` lists `better-sqlite3/build/Release/*.node`, so the
+`.node` file is carried inside the exe — but **a packaged binary still cannot
+load it**: `better-sqlite3` resolves its binding through the filesystem, and the
+pkg snapshot is not a real one. Embedding the asset is therefore not enough to
+make SQLite work here; see "Runtime notes" below. The exe is memory-persistence
+only, and refuses to start if `FORMA_PERSISTENCE_MODE=sqlite` is set.
 
 ## Distribute
 

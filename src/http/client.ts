@@ -65,7 +65,11 @@ export async function apsRequest<T>(
       // was mutated. For any other method, whether APS applied the change is unknown; retrying
       // blind could duplicate it, so surface that explicitly instead of retrying.
       if (method !== 'GET') {
-        throw new ApsIndeterminateError(method, url, err);
+        throw new ApsIndeterminateError(
+          method,
+          url,
+          err instanceof Error ? err.message : String(err),
+        );
       }
       if (attempt < MAX_RETRIES) {
         logger.warn({ path, attempt, err }, 'APS request failed without a response; retrying (GET)');
@@ -104,6 +108,13 @@ export async function apsRequest<T>(
       await sleep(backoffMs * (0.5 + Math.random() * 0.5));
       backoffMs = Math.min(backoffMs * 2, 30_000);
       continue;
+    }
+
+    // A 5xx on a request we did not retry means the server answered, but it may have applied
+    // the change before failing. That is not the same as a clean failure — say so, so the
+    // caller (and the audit log) do not record it as "definitely not applied".
+    if (resp.status >= 500 && method !== 'GET' && !retryOn5xx) {
+      throw new ApsIndeterminateError(method, url, `Autodesk returned ${resp.status}`, resp.status);
     }
 
     if (!resp.ok) {

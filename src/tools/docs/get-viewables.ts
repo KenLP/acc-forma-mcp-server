@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ReadToolDef } from '../_types.js';
 import { getMdManifest, extractDocsViewables } from '../../apis/model-derivative.js';
+import { checkUnscopedToolAllowed } from '../../safety/allowlist.js';
 
 const inputSchema = z.object({
   urn: z
@@ -25,23 +26,27 @@ export const docsGetViewablesTool: ReadToolDef<typeof inputSchema> = {
   name: 'docs_get_viewables',
   title: 'Get ACC Docs Viewables (for 2D PDF pushpins)',
   description:
-    '**Resolves the ACC Docs-native viewable id(s) for a document** so you can place a 2D PDF ' +
-    'pushpin (`issues_create` with `type=TwoDRasterPushpin`).\n\n' +
-    'A `TwoDRasterPushpin` keys on `details.viewable.viewableId` — an ACC Docs-native id such as ' +
-    '"Layout1" (a DWG layout) or a PDF page id. This is the manifest `viewableID` field, which is ' +
-    'DISTINCT from the SVF2 `guid` that `md_get_manifest` returns. **The markups service rejects ' +
-    'SVF2 GUIDs for raster PDF pins** — use the `viewableId` from this tool instead.\n\n' +
-    'Returns, for each 2D viewable: `viewableId` (pass to TwoDRasterPushpin), `name` (page/sheet ' +
-    'label), the SVF2 `guid`, and `role`. 3D viewables are returned too (for vector/3D pins).\n\n' +
-    'If the document has no viewables yet, it has not been processed by ACC Docs / Model Derivative ' +
-    'and is NOT markup-capable — see the returned guidance (translate it, or run it through the ACC ' +
-    'Sheets API).',
+    'Resolves ACC Docs-native viewable IDs for a document, required to place a 2D ' +
+    'PDF pushpin (TwoDRasterPushpin). A TwoDRasterPushpin keys on ' +
+    '`details.viewable.viewableId` — a Docs-native id such as "Layout1" (a DWG ' +
+    'layout) or a PDF page id — distinct from the SVF2 `guid` returned by ' +
+    '`md_get_manifest`; the markups service rejects SVF2 GUIDs for raster pins. ' +
+    'Returns, for each 2D viewable, `viewableId`, `name` (page/sheet label), the ' +
+    'SVF2 `guid`, and `role`; 3D viewables are returned too. A document with no ' +
+    'viewables has not been processed by ACC Docs / Model Derivative and is not ' +
+    'markup-capable.',
   kind: 'read',
   scopes: ['data:read'],
   preferredAuth: '2lo',
   inputSchema,
 
   execute: async (input, ctx) => {
+    // wrapReadTool already checked the allow-list when project_id was supplied (it derives
+    // hub/project scoping from getProjectId/getHubId on the tool def). project_id is optional
+    // here, so a caller that omits it would otherwise reach the URN-only lookup unchecked.
+    if (input.project_id === undefined) {
+      checkUnscopedToolAllowed('docs_get_viewables', 'document version URN');
+    }
     const auth = ctx.auth2lo ?? ctx.auth;
     const manifest = await getMdManifest(auth, input.urn);
     const viewables = extractDocsViewables(manifest);
