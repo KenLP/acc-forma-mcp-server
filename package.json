@@ -1,6 +1,6 @@
 {
   "name": "acc-forma-mcp-server",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Safety-first MCP server for Autodesk Forma (ACC). Every write is dry-runnable, audit-logged, and scope-guarded.",
   "type": "module",
   "license": "MIT",

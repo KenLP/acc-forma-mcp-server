@@ -6,4 +6,4 @@
  * `tests/unit/version-sync.spec.ts` fails if this drifts from package.json or
  * mcp-manifest.json, which is what stops the three from silently disagreeing.
  */
-export const SERVER_VERSION = '0.1.3';
+export const SERVER_VERSION = '0.1.4';

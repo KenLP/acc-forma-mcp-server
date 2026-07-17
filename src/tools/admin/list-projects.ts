@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { ReadToolDef } from '../_types.js';
 import { adminListProjects } from '../../apis/admin.js';
-import { isProjectAllowed, isAllowlistActive } from '../../safety/allowlist.js';
+import { isProjectAllowed, isProjectAllowlistActive } from '../../safety/allowlist.js';
 
 const inputSchema = z.object({
   hub_id: z
@@ -32,35 +32,55 @@ export const adminListProjectsTool: ReadToolDef<typeof inputSchema> = {
   getHubId: (i) => i.hub_id,
 
   execute: async (input, ctx) => {
-    const { results, pagination } = await adminListProjects(ctx.auth, input.hub_id, {
+    const { results, pagination: rawPagination } = await adminListProjects(ctx.auth, input.hub_id, {
       limit: input.limit,
       offset: input.offset,
       ...(input.status ? { status: input.status } : {}),
     });
 
     // Account Admin API returns every project in the hub regardless of the allow-list;
-    // filter this page before it reaches the caller. `pagination.totalResults` as returned
-    // by APS is the count across ALL pages of the UNFILTERED set — it is NOT this page's
-    // size, and it is NOT recoverable by substituting `projects.length` (that's only this
-    // page's filtered count, not a cross-page total; page 1 could show 0 while allowed
+    // filter this page before it reaches the caller. `rawPagination.totalResults` as
+    // returned by APS is the count across ALL pages of the UNFILTERED set — it is NOT this
+    // page's size, and it is NOT recoverable by substituting `projects.length` (that's only
+    // this page's filtered count, not a cross-page total; page 1 could show 0 while allowed
     // projects exist on page 2). So:
-    //   - allow-list inactive (nothing filtered): nothing to hide, pass APS's pagination
-    //     (including the real totalResults) through unchanged.
-    //   - allow-list active: the true allowed-total is unknowable without scanning every
-    //     APS page, and the APS totalResults would leak how many projects exist outside the
-    //     allow-list either way (correct or "fixed"). Omit totalResults entirely rather than
-    //     report a number that's wrong in either direction. Do NOT "fix" this back to
-    //     projects.length — see the regression that guards against exactly that in
+    //   - project allow-list inactive (nothing filtered by isProjectAllowed): nothing to
+    //     hide, pass APS's totalResults through unchanged. This must key off the PROJECT
+    //     allow-list specifically, not isAllowlistActive() — a narrowed FORMA_ALLOWED_HUBS
+    //     with FORMA_ALLOWED_PROJECTS='*' filters nothing here and must not degrade the
+    //     response.
+    //   - project allow-list active: the true allowed-total is unknowable without scanning
+    //     every APS page, and the APS totalResults would leak how many projects exist
+    //     outside the allow-list either way (correct or "fixed"). Omit totalResults entirely
+    //     rather than report a number that's wrong in either direction. Do NOT "fix" this
+    //     back to projects.length — see the regression that guards against exactly that in
     //     tests/unit/tools/admin/list-projects.spec.ts.
     const projects = results.filter((p) => isProjectAllowed(p.id));
-    const filteredPagination = isAllowlistActive()
-      ? { limit: pagination.limit, offset: pagination.offset }
-      : pagination;
+
+    // Continuation contract, computed from the RAW (unfiltered) APS page — limit/offset
+    // address APS's result set, not the filtered one, so a caller must be able to page
+    // through the whole hub even when an entire page's allowed set is empty (allowed
+    // projects can sit on a later page than the one that filtered to zero rows).
+    // AdminPagination.totalResults is a required field on every adminListProjects response
+    // (defaulted to 0 only if APS omits the pagination block entirely), so it is always
+    // available here and `offset + results.length < totalResults` is exact — no need for
+    // the `results.length === limit` fallback in that degenerate case.
+    const hasMore = rawPagination.offset + results.length < rawPagination.totalResults;
+    const nextOffset = hasMore ? rawPagination.offset + results.length : null;
+
+    // NOTE: hasMore/nextOffset do reveal that more rows exist in the hub beyond this page,
+    // even when every one of those rows is filtered out by the allow-list. That is a far
+    // weaker signal than an exact unfiltered total (it says "more exist", not "how many"),
+    // and without it the tool cannot be paginated at all once an allow-list is active. This
+    // is a deliberate trade, not an oversight.
+    const pagination = isProjectAllowlistActive()
+      ? { limit: rawPagination.limit, offset: rawPagination.offset, hasMore, nextOffset }
+      : { ...rawPagination, hasMore, nextOffset };
 
     if (projects.length === 0) {
       return {
         content: [{ type: 'text', text: 'No projects found on this page.' }],
-        structuredContent: { projects: [], pagination: filteredPagination },
+        structuredContent: { projects: [], pagination },
       };
     }
 
@@ -76,7 +96,7 @@ export const adminListProjectsTool: ReadToolDef<typeof inputSchema> = {
           text: `Found ${projects.length} project(s) on this page:\n\n` + lines.join('\n'),
         },
       ],
-      structuredContent: { projects, pagination: filteredPagination },
+      structuredContent: { projects, pagination },
     };
   },
 };

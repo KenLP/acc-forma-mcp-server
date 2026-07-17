@@ -333,7 +333,7 @@ Key variables:
 |---|---|---|
 | `APS_CLIENT_ID` | — | Required |
 | `APS_CLIENT_SECRET` | — | Required |
-| `APS_AUTH_MODE` | `ssa` | `ssa`, `2lo`, or `3lo` (3lo: Phase 3) |
+| `APS_AUTH_MODE` | `ssa` | `ssa` or `2lo`. `3lo` is not implemented — setting it throws at startup |
 | `APS_REGION` | `US` | `US`, `EMEA`, or `AUS` |
 | `SSA_ID` | — | Required for SSA mode |
 | `SSA_KEY_ID` | — | Required for SSA mode |

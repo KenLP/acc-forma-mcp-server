@@ -52,7 +52,13 @@ describe('admin_list_projects — allow-list count leak', () => {
 
     const structured = result.structuredContent as {
       projects: Array<{ id: string }>;
-      pagination: { limit: number; offset: number; totalResults?: number };
+      pagination: {
+        limit: number;
+        offset: number;
+        totalResults?: number;
+        hasMore: boolean;
+        nextOffset: number | null;
+      };
     };
 
     // Only the allowed project should be returned...
@@ -65,6 +71,9 @@ describe('admin_list_projects — allow-list count leak', () => {
     expect('totalResults' in structured.pagination).toBe(false);
     expect(structured.pagination.limit).toBe(50);
     expect(structured.pagination.offset).toBe(0);
+    // Raw page (3 rows) at offset 0 exhausts the raw totalResults (3) — no more pages.
+    expect(structured.pagination.hasMore).toBe(false);
+    expect(structured.pagination.nextOffset).toBeNull();
   });
 
   it('omits totalResults (does not fall back to 0) when every row on the page is filtered out', async () => {
@@ -91,11 +100,14 @@ describe('admin_list_projects — allow-list count leak', () => {
 
     const structured = result.structuredContent as {
       projects: unknown[];
-      pagination: { totalResults?: number };
+      pagination: { totalResults?: number; hasMore: boolean; nextOffset: number | null };
     };
     expect(structured.projects).toHaveLength(0);
     expect(structured.pagination.totalResults).toBeUndefined();
     expect('totalResults' in structured.pagination).toBe(false);
+    // Raw page (1 row) at offset 0 exhausts the raw totalResults (1) — no more pages.
+    expect(structured.pagination.hasMore).toBe(false);
+    expect(structured.pagination.nextOffset).toBeNull();
   });
 
   it('passes the real totalResults through unchanged when the allow-list is wildcard (regression guard)', async () => {
@@ -128,7 +140,13 @@ describe('admin_list_projects — allow-list count leak', () => {
 
     const structured = result.structuredContent as {
       projects: unknown[];
-      pagination: { limit: number; offset: number; totalResults: number };
+      pagination: {
+        limit: number;
+        offset: number;
+        totalResults: number;
+        hasMore: boolean;
+        nextOffset: number | null;
+      };
     };
 
     // Nothing is filtered when the allow-list is wildcard, so the real cross-page total
@@ -137,6 +155,9 @@ describe('admin_list_projects — allow-list count leak', () => {
     // time must see 300, not this page's size (50) and not 0.
     expect(structured.projects).toHaveLength(50);
     expect(structured.pagination.totalResults).toBe(300);
+    // 50 raw rows at offset 0, 300 total → more pages remain, next raw offset is 50.
+    expect(structured.pagination.hasMore).toBe(true);
+    expect(structured.pagination.nextOffset).toBe(50);
   });
 
   it('omits totalResults on a page with zero allowed rows even though later pages hold allowed projects', async () => {
@@ -170,7 +191,7 @@ describe('admin_list_projects — allow-list count leak', () => {
 
     const structured = result.structuredContent as {
       projects: unknown[];
-      pagination: { totalResults?: number };
+      pagination: { totalResults?: number; hasMore: boolean; nextOffset: number | null };
     };
 
     // This page has zero allowed projects, but that must NOT be reported as a total of
@@ -180,6 +201,12 @@ describe('admin_list_projects — allow-list count leak', () => {
     expect(structured.pagination.totalResults).toBeUndefined();
     expect('totalResults' in structured.pagination).toBe(false);
     expect(result.content[0]?.text).not.toMatch(/300/);
+    // Defect B: even though this page filtered to zero allowed rows, hasMore/nextOffset
+    // must still let the client reach page 2, where the allowed project lives. nextOffset
+    // is derived from the RAW page size (2 rows), not the filtered count (0) — offset 0 +
+    // 2 raw rows = 2.
+    expect(structured.pagination.hasMore).toBe(true);
+    expect(structured.pagination.nextOffset).toBe(2);
   });
 
   it('never exposes the unfiltered total in text or structuredContent when the allow-list allows only some rows', async () => {
@@ -216,5 +243,162 @@ describe('admin_list_projects — allow-list count leak', () => {
     expect(result.content[0]?.text).not.toContain('147');
     // Only the allowed project should appear in the rendered text.
     expect(result.content[0]?.text).not.toContain(BLOCKED_PROJECT);
+  });
+
+  it('reports the real totalResults when only the HUB allow-list is narrowed (guards Defect A: wrong predicate)', async () => {
+    // FORMA_ALLOWED_HUBS is narrowed but FORMA_ALLOWED_PROJECTS is '*' — this tool only
+    // ever filters by isProjectAllowed, so nothing on this page is actually removed. Using
+    // isAllowlistActive() (true here, since the HUB list is narrowed) would wrongly strip
+    // totalResults anyway. isProjectAllowlistActive() must be false here, so totalResults
+    // passes through unchanged.
+    vi.doMock('../../../../src/config/env.js', () => ({
+      env: {
+        FORMA_ALLOWED_HUBS: 'b.hub-x',
+        FORMA_ALLOWED_PROJECTS: '*',
+      },
+    }));
+    const pageOfResults = [
+      { id: 'proj-a', name: 'Project A', status: 'active' },
+      { id: 'proj-b', name: 'Project B', status: 'active' },
+    ];
+    vi.doMock('../../../../src/apis/admin.js', () => ({
+      adminListProjects: vi.fn().mockResolvedValue({
+        results: pageOfResults,
+        pagination: { limit: 50, offset: 0, totalResults: 2 },
+      }),
+    }));
+
+    const { adminListProjectsTool } = await import('../../../../src/tools/admin/list-projects.js');
+    const ctx = makeCtx();
+
+    const result = await adminListProjectsTool.execute(
+      { hub_id: 'hub-x', limit: 50, offset: 0 },
+      ctx,
+    );
+
+    const structured = result.structuredContent as {
+      projects: unknown[];
+      pagination: { totalResults?: number; hasMore: boolean; nextOffset: number | null };
+    };
+
+    expect(structured.projects).toHaveLength(2);
+    expect(structured.pagination.totalResults).toBe(2);
+    expect(structured.pagination.hasMore).toBe(false);
+    expect(structured.pagination.nextOffset).toBeNull();
+  });
+
+  it('lets a client reach page 2 when page 1 is a full raw page with zero allowed rows (guards Defect B)', async () => {
+    vi.doMock('../../../../src/config/env.js', () => ({
+      env: {
+        FORMA_ALLOWED_HUBS: '*',
+        // The one allowed project lives beyond this full page-1 response.
+        FORMA_ALLOWED_PROJECTS: ALLOWED_PROJECT,
+      },
+    }));
+    const limit = 50;
+    const fullBlockedPage = Array.from({ length: limit }, (_, i) => ({
+      id: `blocked-${i}`,
+      name: `Blocked ${i}`,
+      status: 'active',
+    }));
+    vi.doMock('../../../../src/apis/admin.js', () => ({
+      adminListProjects: vi.fn().mockResolvedValue({
+        results: fullBlockedPage,
+        pagination: { limit, offset: 0, totalResults: 120 },
+      }),
+    }));
+
+    const { adminListProjectsTool } = await import('../../../../src/tools/admin/list-projects.js');
+    const ctx = makeCtx();
+
+    const result = await adminListProjectsTool.execute({ hub_id: 'hub-1', limit, offset: 0 }, ctx);
+
+    const structured = result.structuredContent as {
+      projects: unknown[];
+      pagination: { totalResults?: number; hasMore: boolean; nextOffset: number | null };
+    };
+
+    expect(structured.projects).toHaveLength(0);
+    expect(structured.pagination.totalResults).toBeUndefined();
+    // hasMore/nextOffset are the ONLY signal a client has to keep paginating past an
+    // all-filtered page — without them this page would look indistinguishable from "no
+    // more results" and the client would stop before reaching the allowed project.
+    expect(structured.pagination.hasMore).toBe(true);
+    expect(structured.pagination.nextOffset).toBe(limit);
+  });
+
+  it('derives nextOffset from the raw page size, not the filtered count, when filtering removes some but not all rows', async () => {
+    vi.doMock('../../../../src/config/env.js', () => ({
+      env: {
+        FORMA_ALLOWED_HUBS: '*',
+        FORMA_ALLOWED_PROJECTS: ALLOWED_PROJECT,
+      },
+    }));
+    vi.doMock('../../../../src/apis/admin.js', () => ({
+      adminListProjects: vi.fn().mockResolvedValue({
+        results: [
+          { id: ALLOWED_PROJECT, name: 'Allowed Project', status: 'active' },
+          { id: 'blocked-1', name: 'Blocked 1', status: 'active' },
+          { id: 'blocked-2', name: 'Blocked 2', status: 'active' },
+          { id: 'blocked-3', name: 'Blocked 3', status: 'active' },
+        ],
+        // Raw page is 4 rows starting at offset 10; 50 total rows exist across the hub.
+        pagination: { limit: 4, offset: 10, totalResults: 50 },
+      }),
+    }));
+
+    const { adminListProjectsTool } = await import('../../../../src/tools/admin/list-projects.js');
+    const ctx = makeCtx();
+
+    const result = await adminListProjectsTool.execute(
+      { hub_id: 'hub-1', limit: 4, offset: 10 },
+      ctx,
+    );
+
+    const structured = result.structuredContent as {
+      projects: Array<{ id: string }>;
+      pagination: { hasMore: boolean; nextOffset: number | null };
+    };
+
+    // Filtering left only 1 of the 4 raw rows. If nextOffset were (wrongly) derived from
+    // the filtered count it would be 10 + 1 = 11, which would re-read 3 already-seen raw
+    // rows on the next call. The raw page has 4 rows, so the correct next raw offset is
+    // 10 + 4 = 14.
+    expect(structured.projects).toHaveLength(1);
+    expect(structured.pagination.hasMore).toBe(true);
+    expect(structured.pagination.nextOffset).toBe(14);
+  });
+
+  it('reports hasMore false and nextOffset null on the last page', async () => {
+    vi.doMock('../../../../src/config/env.js', () => ({
+      env: {
+        FORMA_ALLOWED_HUBS: '*',
+        FORMA_ALLOWED_PROJECTS: ALLOWED_PROJECT,
+      },
+    }));
+    vi.doMock('../../../../src/apis/admin.js', () => ({
+      adminListProjects: vi.fn().mockResolvedValue({
+        results: [{ id: ALLOWED_PROJECT, name: 'Allowed Project', status: 'active' }],
+        // Raw page is the tail end of a 101-row hub: offset 100 + 1 row === totalResults.
+        pagination: { limit: 50, offset: 100, totalResults: 101 },
+      }),
+    }));
+
+    const { adminListProjectsTool } = await import('../../../../src/tools/admin/list-projects.js');
+    const ctx = makeCtx();
+
+    const result = await adminListProjectsTool.execute(
+      { hub_id: 'hub-1', limit: 50, offset: 100 },
+      ctx,
+    );
+
+    const structured = result.structuredContent as {
+      projects: unknown[];
+      pagination: { hasMore: boolean; nextOffset: number | null };
+    };
+
+    expect(structured.projects).toHaveLength(1);
+    expect(structured.pagination.hasMore).toBe(false);
+    expect(structured.pagination.nextOffset).toBeNull();
   });
 });

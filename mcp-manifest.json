@@ -4,7 +4,7 @@
   "mcp_spec_version": "2025-11-25",
   "server": {
     "name": "acc-forma-mcp-server",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "transport": "stdio",
     "repository": "https://github.com/KenLP/acc-forma-mcp-server",
     "license": "MIT",
@@ -94,7 +94,7 @@
   "auth": {
     "type": "SSA (Secure Service Account)",
     "modes_supported": ["ssa", "2lo"],
-    "notes": "SSA is a bot identity scoped per-project via Hub Admin > Custom Integrations; it is required for user-context APIs (Issues, Reviews, AEC Data Model, Model Coordination) and is the default for everything else. 2LO (app-only client-credentials) is the preferred mode for Account Admin, Data Management, Model Derivative, and Docs viewables read tools, with SSA as fallback. Credentials are supplied by the customer via environment variables; the server ships with no credentials. End-user OAuth (3LO) is not implemented in this release; it is planned for a later phase."
+    "notes": "SSA is a bot identity scoped per-project via Hub Admin > Custom Integrations; it is required for user-context APIs (Issues, Reviews, AEC Data Model, Model Coordination) and is the default for everything else. When APS_AUTH_MODE=ssa the server also mints a 2LO (app-only client-credentials) token, and the Account Admin, Data Management, Model Derivative and Docs viewables read tools use that one, because 2LO sees every project in the hub while SSA sees only the projects it is assigned to. The choice is made per tool at startup and is not a failover: a failed 2LO request is not retried under SSA. When APS_AUTH_MODE=2lo, no SSA token is minted and the tools requiring SSA are disabled. Credentials are supplied by the customer via environment variables; the server ships with no credentials. End-user OAuth (3LO) is not implemented in this release; it is planned for a later phase."
   },
   "security_controls": [
     "Two-step mutation flow (default FORMA_MUTATION_MODE=preview_required): a dry-run preview plus a payload-bound, single-use approval token are required before any mutating tool executes",

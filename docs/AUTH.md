@@ -35,7 +35,7 @@ SSA is a bot-like identity that can be invited to Forma projects, scoped via APS
 
 ## Mode 2: 2-legged (client_credentials)
 
-Used automatically (when available) by tools that declare `preferredAuth: '2lo'`: Data Management reads (`dm_list_hubs`, `dm_list_projects`, `dm_list_top_folders`, `dm_list_folder_contents`, `dm_get_item`, `dm_list_versions`), Account Admin reads (`admin_list_companies`, `admin_list_projects`, `admin_get_project`, `admin_list_users`), Model Derivative (`md_get_manifest`, `md_get_properties`, `md_trigger_translation`), and `docs_get_viewables`. **Does NOT work** for Issues, Reviews, AEC Data Model, or Model Coordination — those need SSA (or 3LO).
+In `APS_AUTH_MODE=ssa` the server mints a 2LO token as well as the SSA one, and tools that declare `preferredAuth: '2lo'` use the 2LO token — 2LO sees every project in the hub, whereas SSA sees only the projects it has been assigned to. **This is a per-tool choice made at startup, not a failover:** a 2LO request that fails is not retried under SSA. The tools that use it: Data Management reads (`dm_list_hubs`, `dm_list_projects`, `dm_list_top_folders`, `dm_list_folder_contents`, `dm_get_item`, `dm_list_versions`), Account Admin reads (`admin_list_companies`, `admin_list_projects`, `admin_get_project`, `admin_list_users`), Model Derivative (`md_get_manifest`, `md_get_properties`, `md_trigger_translation`), and `docs_get_viewables`. **Does NOT work** for Issues, Reviews, AEC Data Model, or Model Coordination — those need SSA (or 3LO).
 
 ```env
 APS_AUTH_MODE=2lo

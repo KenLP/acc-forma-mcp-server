@@ -52,6 +52,17 @@ export function isAllowlistActive(): boolean {
 }
 
 /**
+ * True when the PROJECT allow-list specifically narrows the server to a subset of
+ * projects. Narrower than isAllowlistActive(): a tool that only ever filters by
+ * isProjectAllowed (e.g. admin_list_projects) must not degrade its response just because
+ * FORMA_ALLOWED_HUBS is narrowed while FORMA_ALLOWED_PROJECTS is still '*' — nothing it
+ * does is actually filtered in that case.
+ */
+export function isProjectAllowlistActive(): boolean {
+  return !allowedProjects.has('*');
+}
+
+/**
  * Guard for tools whose input id cannot be mapped back to a DM hub/project — an
  * AECDM-native id, or a Model Derivative URN (whose endpoints are not project-scoped, so
  * the URN alone reaches any model the credential can see). While an allow-list is active
