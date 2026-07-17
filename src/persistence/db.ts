@@ -3,6 +3,7 @@ import { mkdirSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
+import { hourBucket } from '../utils/hour-bucket.js';
 
 let _db: Database.Database | null = null;
 
@@ -65,11 +66,6 @@ function migrateSchema(db: Database.Database): void {
 // Mirrors hourBucket() in src/safety/rate-governance.ts (`${year}-${month}-${day}-${hour}`,
 // UTC, 0-based month) — not imported directly to avoid a persistence -> safety -> persistence
 // import cycle (rate-governance.ts already imports persistence/rate-store.ts).
-function currentHourBucket(): string {
-  const d = new Date();
-  return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}-${d.getUTCHours()}`;
-}
-
 /** Delete expired rows from token + idempotency tables. Called once at startup. */
 export function cleanupExpiredRows(): void {
   const db = getDb();
@@ -81,7 +77,7 @@ export function cleanupExpiredRows(): void {
   // earlier bucket is dead weight that would otherwise accumulate forever.
   const rate = db
     .prepare('DELETE FROM rate_counters WHERE hour_bucket != ?')
-    .run(currentHourBucket());
+    .run(hourBucket());
   const total = (ap.changes ?? 0) + (id.changes ?? 0) + (rate.changes ?? 0);
   if (total > 0) {
     logger.debug(
@@ -91,7 +87,8 @@ export function cleanupExpiredRows(): void {
   }
 }
 
-/** For testing only */
+/** For testing only. Closes the handle first — leaving it open keeps the file locked. */
 export function _resetDb(): void {
+  _db?.close();
   _db = null;
 }

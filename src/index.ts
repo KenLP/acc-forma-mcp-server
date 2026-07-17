@@ -3,6 +3,7 @@ import { env } from './config/env.js';
 import { SsaAuthProvider } from './auth/ssa.js';
 import { TwoLeggedAuthProvider } from './auth/two-legged.js';
 import type { AuthProvider } from './auth/index.js';
+import { SERVER_VERSION } from './version.js';
 import { setDefaultApsRegion } from './http/client.js';
 import { buildServer } from './server.js';
 import { logger } from './logger.js';
@@ -16,7 +17,7 @@ async function main(): Promise<void> {
 
   logger.info(
     {
-      version: '0.1.0',
+      version: SERVER_VERSION,
       auth_mode: env.APS_AUTH_MODE,
       region: env.APS_REGION,
       mutation_mode: env.FORMA_MUTATION_MODE,

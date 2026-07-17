@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
 import { getRateStore } from '../persistence/rate-store.js';
+import { hourBucket } from '../utils/hour-bucket.js';
 
 interface RateConfig {
   [toolName: string]: {
@@ -36,11 +37,6 @@ export class RateGovernanceError extends Error {
     );
     this.name = 'RateGovernanceError';
   }
-}
-
-function hourBucket(): string {
-  const d = new Date();
-  return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}-${d.getUTCHours()}`;
 }
 
 export function checkRateLimit(toolName: string, projectId: string): void {

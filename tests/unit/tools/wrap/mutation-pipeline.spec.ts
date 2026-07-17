@@ -170,4 +170,32 @@ describe('wrapMutationTool — mutation pipeline (Task 8)', () => {
     expect(res.isError).toBe(true);
     expect(res.content[0]?.text).toContain('different operation');
   });
+
+  it('a mutation whose request never got a response is audited as outcome_unknown, not failed_api', async () => {
+    // A timeout mid-mutation means APS may or may not have applied the change. Recording
+    // that as a plain failure would tell the reader the opposite of the truth.
+    const { ApsIndeterminateError } = await import('../../../../src/http/errors.js');
+    const exec = vi
+      .fn()
+      .mockRejectedValue(
+        new ApsIndeterminateError('POST', 'https://developer.api.autodesk.com/x', new Error('aborted')),
+      );
+    const handler = await loadWrapped(makeEnv(), exec);
+
+    const prev = await handler({ ...BASE, dry_run: true });
+    const token = (prev.structuredContent as Record<string, unknown>)['approval_token'] as string;
+    const res = await handler({ ...BASE, dry_run: false, approval_token: token });
+
+    expect(res.isError).toBe(true);
+    expect(res.content[0]?.text).toMatch(/may or may not have been applied/i);
+
+    const executeEntry = (auditEntries as Array<{ stage?: string }>).find(
+      (e) => e.stage === 'outcome_unknown',
+    );
+    expect(executeEntry, 'an outcome_unknown audit entry must exist').toBeDefined();
+    expect(
+      (auditEntries as Array<{ stage?: string }>).some((e) => e.stage === 'failed_api'),
+      'must not also be recorded as a clean failure',
+    ).toBe(false);
+  });
 });

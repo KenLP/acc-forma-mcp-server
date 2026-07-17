@@ -1,3 +1,4 @@
+import { SERVER_VERSION } from './version.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { toolRegistry } from './tools/_registry.js';
@@ -8,7 +9,7 @@ import { logger } from './logger.js';
 export function buildServer(ctx: ToolContext): McpServer {
   const server = new McpServer({
     name: 'acc-forma-mcp-server',
-    version: '0.1.1',
+    version: SERVER_VERSION,
   });
 
   let registered = 0;
