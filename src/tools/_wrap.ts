@@ -127,7 +127,17 @@ export function wrapReadTool<T extends z.ZodTypeAny>(
     try {
       // Auth mode gate — fail fast before any API call
       const authCheck = checkAuthMode(tool.name, tool.requiredAuthModes, ctx.env.APS_AUTH_MODE);
-      if (authCheck) return authCheck;
+      if (authCheck) {
+        appendAuditEntry({
+          tool: tool.name,
+          kind: 'read',
+          stage: 'denied_auth_mode',
+          ...(projectId !== undefined ? { projectId } : {}),
+          inputRedacted: input,
+          outputSummary: { reason: authCheck.content[0]?.text },
+        });
+        return authCheck;
+      }
 
       enforceScope(tool, input);
 
@@ -185,7 +195,17 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
     try {
       // 0. Auth mode gate
       const authCheck = checkAuthMode(tool.name, tool.requiredAuthModes, ctx.env.APS_AUTH_MODE);
-      if (authCheck) return authCheck;
+      if (authCheck) {
+        appendAuditEntry({
+          tool: tool.name,
+          kind: 'mutation',
+          stage: 'denied_auth_mode',
+          ...(projectId !== undefined ? { projectId } : {}),
+          inputRedacted: input,
+          outputSummary: { reason: authCheck.content[0]?.text },
+        });
+        return authCheck;
+      }
 
       // 1. Allow-list, per the tool's declared scope
       enforceScope(tool, input);
@@ -245,6 +265,14 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
         const cached = checkIdempotency(idempotency_key, tool.name, payloadHash);
         if (cached) {
           logger.info({ toolName: tool.name, idempotency_key }, 'idempotency: returning cached result');
+          appendAuditEntry({
+            tool: tool.name,
+            kind: 'mutation',
+            stage: 'idempotent_replay',
+            ...(projectId !== undefined ? { projectId } : {}),
+            inputRedacted: input,
+            outputSummary: { note: 'cached result returned; the APS call did NOT re-execute', idempotency_key },
+          });
           return cached;
         }
       }
@@ -252,7 +280,7 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
       // 7. Approval token check (only in preview_required mode)
       if (requirePreview) {
         if (!approval_token) {
-          return {
+          const missingTokenResult: McpToolResult = {
             isError: true,
             content: [
               {
@@ -264,6 +292,15 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
               },
             ],
           };
+          appendAuditEntry({
+            tool: tool.name,
+            kind: 'mutation',
+            stage: 'denied_missing_approval',
+            ...(projectId !== undefined ? { projectId } : {}),
+            inputRedacted: input,
+            outputSummary: { error: missingTokenResult.content[0]?.text },
+          });
+          return missingTokenResult;
         }
         verifyAndConsumeToken(approval_token, tool.name, preview.executePayload);
       }
@@ -307,6 +344,8 @@ function handleError(
     | 'denied_allowlist'
     | 'denied_rate_limit'
     | 'denied_business_rule'
+    | 'denied_approval'
+    | 'denied_idempotency'
     | 'failed_api'
     | 'outcome_unknown';
 
@@ -340,10 +379,10 @@ function handleError(
     stage = 'failed_api';
     message = err.toMcpText();
   } else if (err instanceof ApprovalError) {
-    stage = 'failed_api';
+    stage = 'denied_approval';
     message = err.message;
   } else if (err instanceof IdempotencyError) {
-    stage = 'failed_api';
+    stage = 'denied_idempotency';
     message = err.message;
   } else if (err instanceof ApsIndeterminateError) {
     // The request never got a response, so we cannot claim it failed — record that the

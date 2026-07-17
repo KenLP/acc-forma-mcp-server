@@ -14,10 +14,12 @@ export const listProjectsTool: ReadToolDef<typeof inputSchema> = {
   name: 'dm_list_projects',
   title: 'List Projects in Hub',
   description:
-    'Lists all projects in a Forma hub via the Data Management API. Returns ' +
-    'project IDs and names; richer metadata (status, type, address) is available ' +
-    'from admin_list_projects. Project IDs from this tool are compatible with ' +
-    'dm_list_top_folders, issues_*, reviews_*, and aecdm_* tools.',
+    'Lists the projects in a Forma hub via the Data Management API, returning project IDs ' +
+    'and names; richer metadata (status, type, address) is available from ' +
+    'admin_list_projects. These are Data Management project IDs (b.<guid>), accepted by ' +
+    'dm_*, issues_*, reviews_*, mc_* and mp_diff_versions. The aecdm_* tools do NOT take ' +
+    'them — AEC Data Model has its own project IDs, returned by aecdm_list_projects. When ' +
+    'a project allow-list is configured, only allow-listed projects are returned.',
   kind: 'read',
   preferredAuth: '2lo',
   scope: { kind: 'dm' },

@@ -18,9 +18,9 @@ export const listReviewsTool: ReadToolDef<typeof inputSchema> = {
   title: 'List Project Reviews',
   description:
     'Lists document/design reviews in an ACC project. ' +
-    'Returns review IDs, names, statuses, and due dates. ' +
-    'Use reviews_get for full details on a specific review. ' +
-    'Requires hub_id from dm_list_hubs to resolve the Reviews container ID.',
+    'Returns review IDs, names, statuses, and due dates. This is a summary view — full ' +
+    'detail for one review comes from reviews_get. Takes both hub_id and project_id, since ' +
+    'the Reviews container ID is resolved from the hub.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],

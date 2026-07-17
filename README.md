@@ -263,7 +263,14 @@ Tool: issues_create(dry_run=false, approval_token="appr_01JXW...")
 
 ### 2. Tamper-evident audit log
 
-All tool calls are appended to `~/.acc-forma-mcp/audit/audit-YYYY-MM-DD.jsonl` with SHA-256 hash chaining. Verify integrity at any time:
+Tool calls are appended to `~/.acc-forma-mcp/audit/audit-YYYY-MM-DD.jsonl` with SHA-256 hash chaining — every outcome, not just the successful ones: `preview`, `executed`, each `denied_*` reason, `idempotent_replay`, `failed_api`, and `outcome_unknown`.
+
+Two operator settings change what actually lands on disk:
+
+- `FORMA_AUDIT_INCLUDE_READS=false` drops read-tool entries (mutations are always attempted).
+- Audit writes are **fail-open** by default: if the file cannot be written, the error is logged and the call still proceeds. Set `FORMA_AUDIT_FAIL_CLOSED=true` to abort the call instead, so no action goes unrecorded.
+
+Verify integrity at any time:
 
 ```bash
 # Using the MCP tool

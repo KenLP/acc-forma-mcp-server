@@ -28,7 +28,17 @@ export type AuditStage =
    * failed — an audit log that cannot tell the two apart is misleading precisely when it
    * matters most.
    */
-  | 'outcome_unknown';
+  | 'outcome_unknown'
+  /** The tool requires an auth mode the server is not currently running in. */
+  | 'denied_auth_mode'
+  /** dry_run=false was called with no approval_token, in preview_required mode. */
+  | 'denied_missing_approval'
+  /** approval_token was present but invalid, expired, already consumed, or bound to a different payload. */
+  | 'denied_approval'
+  /** idempotency_key was reused for a different operation (different tool or payload). */
+  | 'denied_idempotency'
+  /** A cached result was returned for a repeated idempotency_key; the APS call did NOT re-execute. */
+  | 'idempotent_replay';
 
 export interface AuditEntry {
   ts: string;

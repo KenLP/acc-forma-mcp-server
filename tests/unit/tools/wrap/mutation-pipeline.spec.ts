@@ -44,7 +44,10 @@ type Input = z.infer<typeof schema>;
 
 // Tool name deliberately does NOT match any key in DEFAULT_RATE_CONFIG
 // (src/safety/rate-governance.ts) so rate governance never engages.
-function makeTool(executeMock: ReturnType<typeof vi.fn>): MutationToolDef<typeof schema> {
+function makeTool(
+  executeMock: ReturnType<typeof vi.fn>,
+  opts?: { requiredAuthModes?: MutationToolDef<typeof schema>['requiredAuthModes'] },
+): MutationToolDef<typeof schema> {
   return {
     name: 'test_mutation',
     title: 'Test Mutation',
@@ -52,6 +55,7 @@ function makeTool(executeMock: ReturnType<typeof vi.fn>): MutationToolDef<typeof
     kind: 'mutation',
     scopes: ['data:write'],
     scope: { kind: 'dm' },
+    ...(opts?.requiredAuthModes ? { requiredAuthModes: opts.requiredAuthModes } : {}),
     inputSchema: schema,
     getProjectId: (input: Input) => input.project_id,
     buildPreview: vi.fn().mockImplementation((input: Input) =>
@@ -93,6 +97,7 @@ describe('wrapMutationTool — mutation pipeline (Task 8)', () => {
   async function loadWrapped(
     env: Env,
     executeMock: ReturnType<typeof vi.fn>,
+    opts?: { requiredAuthModes?: MutationToolDef<typeof schema>['requiredAuthModes'] },
   ): Promise<(input: Record<string, unknown>) => Promise<import('../../../../src/tools/_types.js').McpToolResult>> {
     vi.doMock('../../../../src/config/env.js', () => ({ env }));
     vi.doMock('../../../../src/safety/audit-log.js', () => ({
@@ -103,7 +108,7 @@ describe('wrapMutationTool — mutation pipeline (Task 8)', () => {
     }));
 
     const { wrapMutationTool } = await import('../../../../src/tools/_wrap.js');
-    return wrapMutationTool(makeTool(executeMock), makeCtx(env)) as unknown as (
+    return wrapMutationTool(makeTool(executeMock, opts), makeCtx(env)) as unknown as (
       input: Record<string, unknown>,
     ) => Promise<import('../../../../src/tools/_types.js').McpToolResult>;
   }
@@ -123,7 +128,21 @@ describe('wrapMutationTool — mutation pipeline (Task 8)', () => {
     expect(auditJson).toContain('approval_token_fp'); // fingerprint is
   });
 
-  it('execute without an approval_token is rejected before tool.execute() runs', async () => {
+  it('an auth-mode denial is audited as denied_auth_mode and tool.execute never runs', async () => {
+    const exec = vi.fn();
+    // makeEnv() sets APS_AUTH_MODE: 'ssa'; requiring '3lo' guarantees a mismatch.
+    const handler = await loadWrapped(makeEnv(), exec, { requiredAuthModes: ['3lo'] });
+
+    const res = await handler({ ...BASE, dry_run: true });
+
+    expect(res.isError).toBe(true);
+    expect(exec).not.toHaveBeenCalled();
+
+    const entry = (auditEntries as Array<{ stage?: string }>).find((e) => e.stage === 'denied_auth_mode');
+    expect(entry, 'a denied_auth_mode audit entry must exist').toBeDefined();
+  });
+
+  it('execute without an approval_token is rejected before tool.execute() runs, audited as denied_missing_approval', async () => {
     const exec = vi.fn();
     const handler = await loadWrapped(makeEnv(), exec);
 
@@ -132,6 +151,32 @@ describe('wrapMutationTool — mutation pipeline (Task 8)', () => {
     expect(res.isError).toBe(true);
     expect(res.content[0]?.text).toContain('approval_token is required');
     expect(exec).not.toHaveBeenCalled();
+
+    const entry = (auditEntries as Array<{ stage?: string }>).find(
+      (e) => e.stage === 'denied_missing_approval',
+    );
+    expect(entry, 'a denied_missing_approval audit entry must exist').toBeDefined();
+  });
+
+  it('a consumed/invalid approval_token is audited as denied_approval, not failed_api', async () => {
+    const exec = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+    const handler = await loadWrapped(makeEnv(), exec);
+
+    const preview = await handler({ ...BASE, dry_run: true });
+    const token = (preview.structuredContent as Record<string, unknown>)['approval_token'] as string;
+
+    await handler({ ...BASE, dry_run: false, approval_token: token });
+    // Token is single-use — this second call must be rejected as a bad approval.
+    const again = await handler({ ...BASE, dry_run: false, approval_token: token });
+
+    expect(again.isError).toBe(true);
+
+    const deniedEntry = (auditEntries as Array<{ stage?: string }>).find((e) => e.stage === 'denied_approval');
+    expect(deniedEntry, 'a denied_approval audit entry must exist').toBeDefined();
+    expect(
+      (auditEntries as Array<{ stage?: string }>).some((e) => e.stage === 'failed_api'),
+      'must not be recorded as a plain API failure',
+    ).toBe(false);
   });
 
   it('preview -> execute with the issued token succeeds exactly once; the token is single-use', async () => {
@@ -150,7 +195,7 @@ describe('wrapMutationTool — mutation pipeline (Task 8)', () => {
     expect(again.isError).toBe(true);
   });
 
-  it('reusing an idempotency_key for a different payload is rejected', async () => {
+  it('reusing an idempotency_key for a different payload is rejected, audited as denied_idempotency', async () => {
     const exec = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
     const handler = await loadWrapped(makeEnv(), exec);
 
@@ -170,6 +215,40 @@ describe('wrapMutationTool — mutation pipeline (Task 8)', () => {
 
     expect(res.isError).toBe(true);
     expect(res.content[0]?.text).toContain('different operation');
+
+    const deniedEntry = (auditEntries as Array<{ stage?: string }>).find(
+      (e) => e.stage === 'denied_idempotency',
+    );
+    expect(deniedEntry, 'a denied_idempotency audit entry must exist').toBeDefined();
+    expect(
+      (auditEntries as Array<{ stage?: string }>).some((e) => e.stage === 'failed_api'),
+      'must not be recorded as a plain API failure',
+    ).toBe(false);
+  });
+
+  it('a repeated idempotency_key with the SAME payload returns the cached result, audited as idempotent_replay, and tool.execute runs only once', async () => {
+    const exec = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+    const handler = await loadWrapped(makeEnv(), exec);
+
+    const p1 = await handler({ ...BASE, dry_run: true });
+    const t1 = (p1.structuredContent as Record<string, unknown>)['approval_token'] as string;
+    const first = await handler({ ...BASE, dry_run: false, approval_token: t1, idempotency_key: 'K1' });
+    expect(first.isError).toBeFalsy();
+    expect(exec).toHaveBeenCalledTimes(1);
+
+    // Re-preview to get a fresh, valid token for the SAME payload, then replay with the
+    // same idempotency_key — the cached result must come back without a second execute().
+    const p2 = await handler({ ...BASE, dry_run: true });
+    const t2 = (p2.structuredContent as Record<string, unknown>)['approval_token'] as string;
+    const second = await handler({ ...BASE, dry_run: false, approval_token: t2, idempotency_key: 'K1' });
+
+    expect(second.isError).toBeFalsy();
+    expect(exec).toHaveBeenCalledTimes(1); // no re-execution
+
+    const replayEntry = (auditEntries as Array<{ stage?: string }>).find(
+      (e) => e.stage === 'idempotent_replay',
+    );
+    expect(replayEntry, 'an idempotent_replay audit entry must exist').toBeDefined();
   });
 
   it('a mutation whose request never got a response is audited as outcome_unknown, not failed_api', async () => {

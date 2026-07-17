@@ -10,8 +10,9 @@ export const listRootCausesTool: ReadToolDef<typeof inputSchema> = {
   name: 'issues_list_root_causes',
   title: 'List Issue Root Cause Categories',
   description:
-    'Lists all root cause categories and their sub-causes for a project. ' +
-    'Use the returned IDs with issues_create (root_cause_id field).',
+    'Lists the root cause categories and their sub-causes configured for an ACC project. ' +
+    'The IDs returned are the values the root_cause_id field of issues_create and ' +
+    'issues_update accepts.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],

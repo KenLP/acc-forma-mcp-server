@@ -11,19 +11,19 @@
     "description": "MCP server exposing read and governed-write access to Autodesk Construction Cloud (ACC) and Autodesk Platform Services (APS) APIs — Data Management, Issues, Reviews, AEC Data Model, Model Derivative, Model Coordination, and Model Properties — for use by LLM agents in AEC/BIM QC and coordination workflows."
   },
   "tools": [
-    { "name": "admin_list_projects", "description": "List all projects under a hub, using account-admin (2LO) visibility.", "mutating": false },
-    { "name": "admin_get_project", "description": "Fetch a single project's metadata, scopes, and relationships.", "mutating": false },
-    { "name": "admin_list_users", "description": "List users on the account or project membership roster.", "mutating": false },
+    { "name": "admin_list_projects", "description": "List the projects under a hub with account-admin metadata (status, type, dates, address), optionally filtered by status.", "mutating": false },
+    { "name": "admin_get_project", "description": "Fetch a single project's account-admin metadata: status, type, job number, address, and start/end dates.", "mutating": false },
+    { "name": "admin_list_users", "description": "List the members of an account, returning user IDs, names, roles, and account profile fields. Account-level directory only.", "mutating": false },
     { "name": "admin_list_companies", "description": "List companies registered on the account.", "mutating": false },
 
     { "name": "dm_list_hubs", "description": "List ACC/BIM 360 hubs accessible to the authenticated app.", "mutating": false },
     { "name": "dm_list_projects", "description": "List projects within a given hub.", "mutating": false },
     { "name": "dm_list_top_folders", "description": "List the top-level folders of a project.", "mutating": false },
     { "name": "dm_list_folder_contents", "description": "List items — files and subfolders — inside a folder.", "mutating": false },
-    { "name": "dm_get_item", "description": "Get metadata for a single item (file or folder).", "mutating": false },
+    { "name": "dm_get_item", "description": "Get metadata for a single item (a file/document), including its tip version ID.", "mutating": false },
     { "name": "dm_list_versions", "description": "List all versions of a file with version numbers and timestamps.", "mutating": false },
 
-    { "name": "issues_list", "description": "List issues in a project, filterable by status, type, or assignee.", "mutating": false },
+    { "name": "issues_list", "description": "List issues in a project, filterable by status or assignee.", "mutating": false },
     { "name": "issues_get", "description": "Get full details for a single issue.", "mutating": false },
     { "name": "issues_create", "description": "Create a new issue, including subtype, location, due date, and assignment.", "mutating": true },
     { "name": "issues_pin_element", "description": "Create an issue with a 3D pushpin automatically placed on a specific BIM element.", "mutating": true },
@@ -61,7 +61,7 @@
 
     { "name": "docs_get_viewables", "description": "Resolve the ACC Docs-native viewable ID for a document version URN.", "mutating": false },
 
-    { "name": "meta_list_changelog", "description": "Read local audit-log entries, filterable by tool name, time range, or project.", "mutating": false },
+    { "name": "meta_list_changelog", "description": "Read local audit-log entries for one date, filterable by tool name and audit stage.", "mutating": false },
     { "name": "meta_verify_audit_chain", "description": "Verify that the local audit log's hash chain has not been tampered with.", "mutating": false }
   ],
   "resources": [],
@@ -102,6 +102,6 @@
     "Hub/project allow-list (FORMA_ALLOWED_HUBS, FORMA_ALLOWED_PROJECTS) restricting which resources the server may touch. Every tool declares how it binds to the allow-list, and the binding is enforced centrally: tools that take a Data Management hub/project id are checked against it; discovery tools (dm_list_hubs, dm_list_projects, admin_list_projects) additionally filter their own results down to allow-listed entries. Tools addressed by an id that cannot be mapped back to a DM hub/project — a Model Derivative URN, or an AEC Data Model-native id, neither of whose endpoints are project-scoped — are refused outright while an allow-list is active, rather than allowed through unchecked; this covers all AEC Data Model tools, md_get_manifest, md_get_properties, md_trigger_translation, docs_get_viewables, and issues_pin_element",
     "Read-only mode toggle to globally disable all mutating tools",
     "Per-tool, per-project hourly rate limits covering every project-scoped mutating tool (defaults built in; overridable via FORMA_RATE_CONFIG_PATH). md_trigger_translation is not rate-limited: it is addressed by URN and has no project id to bucket a counter on",
-    "SHA-256 hash-chained local audit log, independently verifiable via meta_verify_audit_chain. An entry is attempted for every tool call by default, at every outcome (preview, executed, denied, outcome_unknown); read calls can be excluded by the operator via FORMA_AUDIT_INCLUDE_READS=false. Audit writes are fail-open by default — a failed write is logged and the call proceeds — unless the operator sets FORMA_AUDIT_FAIL_CLOSED=true, which aborts the call instead. The log records only a SHA-256 fingerprint of an approval token, never the live token"
+    "SHA-256 hash-chained local audit log, independently verifiable via meta_verify_audit_chain. An entry is attempted for every tool call at whatever outcome it reaches: preview, executed, idempotent_replay, failed_api, outcome_unknown, or a specific denial reason (denied_readonly, denied_allowlist, denied_rate_limit, denied_business_rule, denied_auth_mode, denied_missing_approval, denied_approval, denied_idempotency). Two operator settings narrow this and are disclosed here: FORMA_AUDIT_INCLUDE_READS=false excludes read-tool calls (mutation calls are always attempted), and audit writes are fail-open by default — a write failure is logged and the call still proceeds — unless FORMA_AUDIT_FAIL_CLOSED=true is set, which aborts the call instead. The log records only a SHA-256 fingerprint of an approval token, never the live token"
   ]
 }

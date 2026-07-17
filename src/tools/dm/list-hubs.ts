@@ -9,10 +9,11 @@ export const listHubsTool: ReadToolDef<typeof inputSchema> = {
   name: 'dm_list_hubs',
   title: 'List Forma Hubs',
   description:
-    'Lists all Autodesk Forma (ACC) hubs the service account has access to. ' +
-    '"Hub" is the new name for "Account" (renamed 24 March 2026). ' +
-    'Returns hub IDs, names, and regions. ' +
-    'Use hub IDs with dm_list_projects, admin_list_projects, and other tools.',
+    'Lists the Autodesk Forma (ACC) hubs the service account has access to, returning the ' +
+    'hub ID, name, and region of each. "Hub" is the new name for "Account" (renamed ' +
+    '24 March 2026). Hub IDs are in Data Management form (b.<guid>) and are the hub_id ' +
+    'that dm_list_projects and admin_list_projects accept. When a hub allow-list is ' +
+    'configured, only allow-listed hubs are returned.',
   kind: 'read',
   preferredAuth: '2lo',
   scope: { kind: 'discovery' },

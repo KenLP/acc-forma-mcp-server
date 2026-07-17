@@ -15,10 +15,11 @@ export const adminListUsersTool: ReadToolDef<typeof inputSchema> = {
   name: 'admin_list_users',
   title: 'List Forma Account Users',
   description:
-    'Lists all users in a Forma hub (Account). ' +
-    'Returns Autodesk user IDs, emails, names, and roles. ' +
-    'User IDs returned here can be used with issues_create (assigned_to) and reviews_create (reviewerIds). ' +
-    'Requires Account Admin role.',
+    'Lists the members of a Forma hub (Account), returning each one\'s Autodesk user ID, ' +
+    'name, role, and account profile fields. Covers the account-level directory only — the ' +
+    'Account Admin API has no project-level roster endpoint. The user IDs are the values ' +
+    'the assigned_to field of issues_create and the reviewer_ids field of reviews_create ' +
+    'accept. Requires the service account to hold the Account Admin role.',
   kind: 'read',
   preferredAuth: '2lo',
   scope: { kind: 'dm' },

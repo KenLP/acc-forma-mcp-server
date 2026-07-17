@@ -39,14 +39,17 @@ export const adminListProjectsTool: ReadToolDef<typeof inputSchema> = {
     });
 
     // Account Admin API returns every project in the hub regardless of the allow-list;
-    // filter the page before it reaches the caller. totalResults/pagination still reflect
-    // the unfiltered page fetched from APS, so a filtered page can be smaller than `limit`.
+    // filter the page before it reaches the caller. `pagination.totalResults` as returned
+    // by APS counts the UNFILTERED set, which would leak how many projects exist outside
+    // the allow-list. Report the filtered count instead so nothing about the excluded
+    // projects is observable from the response.
     const projects = results.filter((p) => isProjectAllowed(p.id));
+    const filteredPagination = { ...pagination, totalResults: projects.length };
 
     if (projects.length === 0) {
       return {
         content: [{ type: 'text', text: 'No projects found for this hub.' }],
-        structuredContent: { projects: [], pagination },
+        structuredContent: { projects: [], pagination: filteredPagination },
       };
     }
 
@@ -62,7 +65,7 @@ export const adminListProjectsTool: ReadToolDef<typeof inputSchema> = {
           text: `Found ${projects.length} project(s):\n\n` + lines.join('\n'),
         },
       ],
-      structuredContent: { projects, pagination },
+      structuredContent: { projects, pagination: filteredPagination },
     };
   },
 };

@@ -33,10 +33,9 @@ export const listIssueCommentsTool: ReadToolDef<typeof inputSchema> = {
   name: 'issues_list_comments',
   title: 'List Issue Comments',
   description:
-    'Returns the comment thread for a specific ACC issue, ordered chronologically.\n\n' +
-    'Each comment includes its ID, body text, author (createdBy), and timestamps. ' +
-    'To add a new comment, use `issues_add_comment`.\n\n' +
-    'Auth: SSA or 3LO required (2LO not supported for Issues API).',
+    'Returns the comment thread for a specific ACC issue, ordered chronologically. Each ' +
+    'comment carries its ID, body text, author, and timestamps. Read-only — new comments ' +
+    'are posted by issues_add_comment. The Issues API accepts SSA or 3LO auth only.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],

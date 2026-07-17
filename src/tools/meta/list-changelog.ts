@@ -18,7 +18,21 @@ const inputSchema = z.object({
     .optional()
     .describe('Optional tool name prefix filter (e.g., "issues", "reviews_create").'),
   stage_filter: z
-    .enum(['preview', 'executed', 'denied_readonly', 'denied_allowlist', 'denied_rate_limit', 'denied_business_rule', 'failed_api', 'outcome_unknown'])
+    .enum([
+      'preview',
+      'executed',
+      'denied_readonly',
+      'denied_allowlist',
+      'denied_rate_limit',
+      'denied_business_rule',
+      'failed_api',
+      'outcome_unknown',
+      'denied_auth_mode',
+      'denied_missing_approval',
+      'denied_approval',
+      'denied_idempotency',
+      'idempotent_replay',
+    ])
     .optional()
     .describe('Optional filter by audit stage.'),
   date: z
@@ -50,11 +64,12 @@ export const metaListChangelogTool: ReadToolDef<typeof inputSchema> = {
   name: 'meta_list_changelog',
   title: 'List Audit Changelog',
   description:
-    "Lists recent entries from this server's local audit log. Each entry records one tool " +
-    'call: its redacted inputs, an output summary, the stage it reached ' +
-    '(preview/executed/denied/outcome_unknown), and its position in the SHA-256 hash chain. ' +
-    'Reads the local JSONL file only — no Autodesk API is called, and the chain itself is ' +
-    'verified by meta_verify_audit_chain.',
+    "Lists entries from this server's local audit log for a single date, newest first, " +
+    'optionally narrowed by tool name or by audit stage. Each entry records one tool call: ' +
+    'its redacted inputs, an output summary, the stage it reached (executed, preview, a ' +
+    'denial reason, idempotent_replay, failed_api, or outcome_unknown), and its position in ' +
+    'the SHA-256 hash chain. Reads the local JSONL file only — no Autodesk API is called, ' +
+    'and the chain itself is verified by meta_verify_audit_chain.',
   kind: 'read',
   scopes: [],
   // Reads the local audit JSONL — no ACC hub or project is touched.

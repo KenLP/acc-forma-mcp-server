@@ -16,7 +16,8 @@ export const listTopFoldersTool: ReadToolDef<typeof inputSchema> = {
   description:
     'Lists the root (top-level) folders of a project in Forma Data Management. ' +
     'These are the entry points to the project file tree (e.g., "Plans", "Project Files"). ' +
-    'Use the returned folder IDs with dm_list_folder_contents to drill down.',
+    'Returns the id and name of each root folder; dm_list_folder_contents takes those ids ' +
+    'and lists what is inside.',
   kind: 'read',
   preferredAuth: '2lo',
   scope: { kind: 'dm' },

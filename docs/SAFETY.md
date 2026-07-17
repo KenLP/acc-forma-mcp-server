@@ -8,18 +8,30 @@ Every mutation tool call passes through this pipeline in order:
 
 ```
 0. Auth mode check       (APS_AUTH_MODE must match tool's requiredAuthModes)
-1. Allow-list check      (FORMA_ALLOWED_HUBS / FORMA_ALLOWED_PROJECTS)
+   └─ mismatch      → audit "denied_auth_mode" + stop
+1. Allow-list check      (per the tool's declared scope — see "Allow-list scoping")
+   └─ refused       → audit "denied_allowlist" + stop
 2. Readonly mode check   (FORMA_READONLY / FORMA_MUTATION_MODE=readonly)
+   └─ refused       → audit "denied_readonly" + stop
 3. Rate governance       (per-tool per-project hourly limits)
+   └─ over limit    → audit "denied_rate_limit" + stop
 4. Business rules        (local validators — no APS call)
+   └─ violated      → audit "denied_business_rule" + stop
 5. Build preview         (resolve full APS request — may call APS for validation)
-   └─ If dry_run=true → audit "preview" + return DryRunPreview + approval_token (stop here)
-6. Approval token check  (only in preview_required mode)
-7. Execute APS call
-8. Audit log entry       (stage: "executed" on success, "denied_*" / "failed_api" on error)
+   └─ dry_run=true  → audit "preview" + return DryRunPreview + approval_token (stop here)
+6. Idempotency check     (only when idempotency_key is supplied)
+   └─ cache hit     → audit "idempotent_replay" + return the prior result (no APS call)
+   └─ key reused for another operation → audit "denied_idempotency" + stop
+7. Approval token check  (only in preview_required mode)
+   └─ no token      → audit "denied_missing_approval" + stop
+   └─ bad token     → audit "denied_approval" + stop
+8. Execute APS call
+9. Audit log entry       ("executed"; "failed_api" if APS returned an error;
+                          "outcome_unknown" if the request got no response at all)
 ```
 
-Each step that fails records a `stage` = `denied_*` or `failed_api` in the audit log.
+Every branch above records an entry — there is no path that returns without one. That is what
+lets the log answer "what did the agent actually do", including the times it was stopped.
 
 ## Audit Log
 
@@ -74,8 +86,13 @@ cat ~/.acc-forma-mcp/audit/audit-$(date +%F).jsonl | jq .
 | `denied_allowlist` | Project/hub not in allow-list |
 | `denied_rate_limit` | Local per-tool hourly quota exceeded |
 | `denied_business_rule` | Tool-specific validation failed (e.g. invalid subtype ID, past due_date) |
-| `failed_api` | APS API call failed or approval token error |
+| `failed_api` | APS API call failed |
 | `outcome_unknown` | A mutation request did not complete cleanly — see below |
+| `denied_auth_mode` | Tool requires an auth mode the server is not currently running in |
+| `denied_missing_approval` | dry_run=false called with no approval_token, in preview_required mode |
+| `denied_approval` | approval_token was present but invalid, expired, already consumed, or bound to a different payload |
+| `denied_idempotency` | idempotency_key reused for a different operation (different tool or payload) |
+| `idempotent_replay` | A cached result was returned for a repeated idempotency_key; the APS call did NOT re-execute |
 
 `outcome_unknown` — a mutation request did not complete cleanly: either no response arrived
 (timeout/socket error) or Autodesk answered 5xx, which it may have done after applying the

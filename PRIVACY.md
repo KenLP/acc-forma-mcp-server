@@ -48,8 +48,15 @@ whatever the tool you invoked is for.
 
 ### 1.3 The local audit log
 
-Every tool call is appended to a local audit log — a JSONL file on your own machine. This is
-a deliberate safety feature: it lets you prove what an AI agent did.
+Tool calls are appended to a local audit log — a JSONL file on your own machine. This is a
+deliberate safety feature: it lets you prove what an AI agent did.
+
+An entry is attempted for every tool call, at whatever outcome it reached — executed,
+previewed, denied, or indeterminate. Two settings change that: `FORMA_AUDIT_INCLUDE_READS=false`
+excludes read-tool calls (mutations are always attempted), and because audit writes are
+fail-open by default, a call still proceeds if the log cannot be written — set
+`FORMA_AUDIT_FAIL_CLOSED=true` to have the call fail instead. Nothing is transmitted anywhere
+either way; the file never leaves your machine.
 
 Each entry records:
 

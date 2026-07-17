@@ -23,9 +23,9 @@ export const listIssuesTool: ReadToolDef<typeof inputSchema> = {
   name: 'issues_list',
   title: 'List Project Issues',
   description:
-    'Lists issues in an ACC project. Supports filtering by status and assignee. ' +
-    'Returns issue IDs, titles, statuses, and assignments. ' +
-    'Use issues_get for full details on a specific issue.',
+    'Lists issues in an ACC project, returning the ID, title, status, and assignment of ' +
+    'each. Supports filtering by status and by assignee; there is no filter by issue type. ' +
+    'This is a summary view — full detail for one issue comes from issues_get.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],
