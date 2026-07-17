@@ -18,9 +18,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Version comes from package.json "packageManager". Setting `version` here too makes
+      # action-setup abort with "Multiple versions of pnpm specified".
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
@@ -89,10 +89,9 @@ jobs:
         if: steps.creds.outputs.configured == 'true'
         run: echo "${{ secrets.SSA_PRIVATE_KEY }}" > /tmp/ssa-private.pem
 
+      # Version comes from package.json "packageManager" — see the note in the build job.
       - uses: pnpm/action-setup@v4
         if: steps.creds.outputs.configured == 'true'
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         if: steps.creds.outputs.configured == 'true'
