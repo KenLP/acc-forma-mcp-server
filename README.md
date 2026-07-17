@@ -129,7 +129,7 @@ Then point your MCP client at the built file:
 
 ## Tools (43)
 
-All tools are grouped by domain. Read tools take no approval; write/mutation tools (marked ✍️) follow the [two-call dry-run protocol](#safety).
+All tools are grouped by domain. Read tools take no approval; write/mutation tools (marked ✍️) follow the [two-call dry-run protocol](#safety) in the default mutation mode.
 
 ### Account Admin (4)
 
