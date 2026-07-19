@@ -17,6 +17,10 @@ export const DEFAULT_RATE_CONFIG: RateConfig = {
   'issues_pin_element': { per_project_per_hour: 50 },
   'reviews_create': { per_project_per_hour: 20 },
   'reviews_transition': { per_project_per_hour: 50 },
+  // Applies to project-scoped (Issues) hooks only — a folder-scoped hook has no project id
+  // to bucket on. webhooks_delete has no entry at all: it is addressed by hook id alone,
+  // so there is never a project to count against. APS itself caps creation at 50/minute.
+  'webhooks_create': { per_project_per_hour: 20 },
 };
 
 function loadConfig(): RateConfig {

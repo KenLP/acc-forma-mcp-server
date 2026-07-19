@@ -21,6 +21,14 @@ const envSchema = z.object({
   // Safety: allow-lists
   FORMA_ALLOWED_HUBS: z.string().default('*'),
   FORMA_ALLOWED_PROJECTS: z.string().default('*'),
+  /**
+   * Hosts a webhook callback URL may point at. A webhook configures ongoing egress of
+   * project event data to a third party, so this narrows where that data may be sent.
+   * Comma-separated; a leading dot (".example.com") matches subdomains. `*` permits any
+   * publicly reachable host (loopback/private addresses are always refused — Autodesk
+   * cannot deliver to them).
+   */
+  FORMA_ALLOWED_CALLBACK_HOSTS: z.string().default('*'),
 
   // Safety: mutation mode
   FORMA_MUTATION_MODE: z

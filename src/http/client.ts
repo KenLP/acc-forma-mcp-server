@@ -33,12 +33,29 @@ export interface RequestOptions {
   retryOn5xx?: boolean;
 }
 
-/** Generic APS REST request with retry/backoff */
-export async function apsRequest<T>(
+/** A successful APS response with its status and headers kept intact. */
+export interface ApsResponse<T> {
+  status: number;
+  headers: Headers;
+  /**
+   * Parsed JSON body, or `undefined` when the response carried none — APS uses both
+   * `204 No Content` (e.g. Webhooks list with no hooks) and `201` with an empty body
+   * (Webhooks create, which returns the new id in the `Location` header instead).
+   */
+  data: T | undefined;
+}
+
+/**
+ * Generic APS REST request with retry/backoff, returning status and headers alongside the
+ * body. Use this when the response's metadata is load-bearing: the Webhooks API returns a
+ * created hook's id only in `Location`, and answers an empty hook list with 204. For the
+ * common case — a JSON body and nothing else — use `apsRequest`.
+ */
+export async function apsRequestDetailed<T>(
   auth: AuthProvider,
   path: string,
   options: RequestOptions = {},
-): Promise<T> {
+): Promise<ApsResponse<T>> {
   const { method = 'GET', params, body, region, baseUrl = APS_BASE_URL, retryOn5xx = false } =
     options;
   const url = buildUrl(baseUrl, path, params);
@@ -126,10 +143,27 @@ export async function apsRequest<T>(
       throw new ApsApiError(resp.status, method, url, responseBody);
     }
 
-    return (await resp.json()) as T;
+    // Read as text first: a 204, or a 201 whose id lives in the Location header, has no
+    // body at all, and resp.json() throws on empty input.
+    const text = await resp.text();
+    const data = text.trim() === '' ? undefined : (JSON.parse(text) as T);
+    return { status: resp.status, headers: resp.headers, data };
   }
 
   throw new Error(`APS request to ${path} failed after ${MAX_RETRIES} retries`);
+}
+
+/**
+ * APS REST request returning the parsed JSON body. Thin wrapper over
+ * `apsRequestDetailed` — one retry/backoff implementation serves both.
+ */
+export async function apsRequest<T>(
+  auth: AuthProvider,
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  const { data } = await apsRequestDetailed<T>(auth, path, options);
+  return data as T;
 }
 
 /** APS GraphQL request (AEC Data Model) */

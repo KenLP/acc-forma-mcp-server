@@ -127,7 +127,7 @@ Then point your MCP client at the built file:
 
 ## Available Tools
 
-## Tools (43)
+## Tools (46)
 
 All tools are grouped by domain. Read tools take no approval; write/mutation tools (marked ✍️) follow the [two-call dry-run protocol](#safety) in the default mutation mode.
 
@@ -221,6 +221,16 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 |---|---|
 | `docs_get_viewables` | Resolve the ACC Docs-native **`viewableId`** (e.g. `"Layout1"`) and page/sheet name(s) for a document version URN, so you can place a 2D PDF pushpin (`issues_create` with `type=TwoDRasterPushpin`). This is the manifest `viewableID` field — **distinct from the SVF2 `guid`** returned by `md_get_manifest`, which the markups service rejects for raster PDF pins. `markupCapable: false` means the document has no Docs-native viewable yet (e.g. a raw PDF uploaded via the DM API that ACC has not processed — re-publish through ACC Docs or the Sheets API). |
 
+### Webhooks — event subscriptions (3)
+
+| Tool | Purpose |
+|---|---|
+| `webhooks_list` | List the hooks this application has registered — hookId, event, delivery status, callback URL, scope. Only returns hooks created under the server's `APS_REGION`: hooks are region-partitioned, so one created elsewhere is absent rather than reported as an error. |
+| `webhooks_create` ✍️ | Subscribe to a Data Management event (`dm.version.added` and 15 others, scoped to a **folder URN**) or an ACC Issues event (`issue.created-1.0` and 4 others, scoped to a **project id**). **Configures ongoing egress** — Autodesk posts event payloads to your callback URL until the hook is deleted. Callback must be public https; see [FORMA_ALLOWED_CALLBACK_HOSTS](#3b-webhook-callback-allow-list). |
+| `webhooks_delete` ✍️ | Delete a hook, permanently stopping delivery. Needs both the `event` and the `hookId` — the endpoint is addressed by system+event, not by id alone. |
+
+> **Verifying a delivered callback:** Autodesk signs each POST with **HMAC-SHA1** (not SHA-256) over the **raw body**, hex, prefixed `sha1hash=`, in the `x-adsk-signature` header. `verifyWebhookSignature()` is exported from [`acc-forma-mcp-server/core`](#core-sdk-acc-forma-mcp-servercore) for consumers. Parsing the JSON and re-serialising it before hashing will never match. Your endpoint must answer 2xx within **6 seconds**; five consecutive failures deactivate the hook.
+
 ### Meta / Observability (2)
 
 | Tool | Purpose |
@@ -297,11 +307,23 @@ Each tool declares how it binds to the allow-list (`scope` in its definition), a
 | Takes a DM hub/project id (Issues, Reviews, DM, Admin, `mc_*`, `mp_diff_versions`) | id is checked against the list; a call outside it is refused |
 | `dm_list_hubs`, `dm_list_projects`, `admin_list_projects` | results are filtered down to allow-listed entries |
 | `meta_*` | unaffected — reads the local audit log, touches no ACC resource |
-| All `aecdm_*`, `md_*`, `docs_get_viewables`, `issues_pin_element` | **refused** |
+| All `aecdm_*`, `md_*`, `docs_get_viewables`, `issues_pin_element`, all `webhooks_*` | **refused** |
 
 That last row is the honest consequence of a real limitation, not an oversight. Those tools are addressed by an AEC Data Model-native id or a Model Derivative URN, and neither of those endpoints is project-scoped — the id alone reaches any model the credential can see, and it cannot be mapped back to a DM hub/project to compare against the list. Rather than let them through unchecked (which would make the allow-list a claim the server does not keep), they are refused while either list is narrowed. `FORMA_ALLOWED_HUBS=*` **and** `FORMA_ALLOWED_PROJECTS=*` — the default — leaves every tool enabled.
 
 Note that `mp_diff_versions` also takes version URNs but is *not* in that row: every Model Properties call is addressed under `/construction/index/v2/projects/{project_id}/`, so checking its `project_id` genuinely bounds what it can read.
+
+The `webhooks_*` tools are in that row for the same reason: a Data Management hook is scoped to a folder URN and a hook is deleted by its hook id, neither of which maps back to a DM project. (An Issues hook *is* project-scoped, but `scope` is one static declaration per tool, so the tool is bound by its weakest case.)
+
+### 3b. Webhook callback allow-list
+
+`webhooks_create` is the one mutation that configures **ongoing egress**: once the hook exists, Autodesk — not this server — posts project event data to the callback URL until the hook is deleted.
+
+```env
+FORMA_ALLOWED_CALLBACK_HOSTS=hooks.example.com,.n8n.acme.io
+```
+
+A callback URL must be `https` and publicly routable. Loopback, private and link-local addresses (including `169.254.169.254`) are refused unconditionally — Autodesk cannot deliver to them, so such a hook would look healthy and silently never fire. The dry-run preview names the receiving host, the class of data that will flow to it, and the fact that deleting the hook is the only way to stop it.
 
 ### 4. Read-only mode
 
@@ -342,6 +364,7 @@ Key variables:
 | `FORMA_MUTATION_MODE` | `preview_required` | See Safety section |
 | `FORMA_ALLOWED_HUBS` | `*` | Comma-separated hub IDs |
 | `FORMA_ALLOWED_PROJECTS` | `*` | Comma-separated project UUIDs |
+| `FORMA_ALLOWED_CALLBACK_HOSTS` | `*` | Hosts `webhooks_create` may send event data to. Leading dot matches subdomains |
 | `FORMA_APPROVAL_TOKEN_TTL` | `300` | Approval-token lifetime, in seconds. Also bounds idempotency records. |
 | `FORMA_RATE_CONFIG_PATH` | — | JSON file overriding the built-in per-tool hourly limits |
 | `FORMA_AUDIT_DIR` | `~/.acc-forma-mcp/audit` | JSONL audit log directory |

@@ -59,6 +59,11 @@ import { mpDiffVersionsTool } from './mp/diff-versions.js';
 // ---- ACC Docs (viewables for 2D PDF pushpins) -------------------------------
 import { docsGetViewablesTool } from './docs/get-viewables.js';
 
+// ---- Webhooks (event subscriptions) -----------------------------------------
+import { webhooksListTool } from './webhooks/list.js';
+import { webhooksCreateTool } from './webhooks/create.js';
+import { webhooksDeleteTool } from './webhooks/delete.js';
+
 // ---- Meta / Observability ---------------------------------------------------
 import { metaListChangelogTool } from './meta/list-changelog.js';
 import { metaVerifyAuditChainTool } from './meta/verify-audit-chain.js';
@@ -126,6 +131,11 @@ export const toolRegistry: AnyToolDef[] = [
 
   // ACC Docs — viewables for 2D PDF pushpins (1)
   docsGetViewablesTool,
+
+  // Webhooks — event subscriptions (3)
+  webhooksListTool,
+  webhooksCreateTool,
+  webhooksDeleteTool,
 
   // Meta / Observability (2)
   metaListChangelogTool,

@@ -61,6 +61,10 @@
 
     { "name": "docs_get_viewables", "description": "Resolve the ACC Docs-native viewable ID for a document version URN.", "mutating": false },
 
+    { "name": "webhooks_list", "description": "List the webhooks this application has registered, with each hook's id, event, delivery status, callback URL and scope.", "mutating": false },
+    { "name": "webhooks_create", "description": "Register a webhook so Autodesk posts an event payload to a customer-specified callback URL whenever the subscribed Data Management or Issues event occurs.", "mutating": true },
+    { "name": "webhooks_delete", "description": "Delete a webhook, permanently stopping event delivery to its callback URL.", "mutating": true },
+
     { "name": "meta_list_changelog", "description": "Read local audit-log entries for one date, filterable by tool name and audit stage.", "mutating": false },
     { "name": "meta_verify_audit_chain", "description": "Verify that the local audit log's hash chain has not been tampered with.", "mutating": false }
   ],
@@ -76,6 +80,11 @@
       "domain": "*.amazonaws.com",
       "purpose": "Autodesk-issued pre-signed S3 URLs (returned by the Model Coordination clash API) for downloading clash-result resource files. URLs are short-lived (~60s TTL), issued by Autodesk, and fetched without any bearer token. No data is uploaded.",
       "protocol": "https"
+    },
+    {
+      "domain": "customer-specified webhook callback host",
+      "purpose": "Disclosed because webhooks_create configures an outbound data flow this server does not itself make. When an operator registers a webhook, Autodesk — not this server — posts event payloads (file and folder metadata, or issue contents) directly to the callback URL the operator supplied, and continues to do so until the hook is deleted. This server never posts to that host and never fetches it; it only registers and deletes the subscription. The host is constrained by the FORMA_ALLOWED_CALLBACK_HOSTS allow-list, must be https, and may not be a loopback, private or link-local address.",
+      "protocol": "https"
     }
   ],
   "autodesk_apis_used": [
@@ -88,7 +97,8 @@
     "Model Derivative API (SVF2)",
     "Model Coordination API",
     "Model Properties API",
-    "ACC Docs Viewables"
+    "ACC Docs Viewables",
+    "Webhooks API v1 (2LO — registering, listing and deleting event subscriptions for Data Management and Construction Issues events)"
   ],
   "ai_llm_providers": [],
   "auth": {
@@ -99,9 +109,10 @@
   "security_controls": [
     "Two-step mutation flow (default FORMA_MUTATION_MODE=preview_required): a dry-run preview plus a payload-bound, single-use approval token are required before any mutating tool executes",
     "Operator-configurable mutation modes, disclosed here: preview_required (default, two-step), client_approval_only (the operator's MCP client is trusted to approve; the two-step token flow is skipped), readonly (all mutations disabled)",
-    "Hub/project allow-list (FORMA_ALLOWED_HUBS, FORMA_ALLOWED_PROJECTS) restricting which resources the server may touch. Every tool declares how it binds to the allow-list, and the binding is enforced centrally: tools that take a Data Management hub/project id are checked against it; discovery tools (dm_list_hubs, dm_list_projects, admin_list_projects) additionally filter their own results down to allow-listed entries. Tools addressed by an id that cannot be mapped back to a DM hub/project — a Model Derivative URN, or an AEC Data Model-native id, neither of whose endpoints are project-scoped — are refused outright while an allow-list is active, rather than allowed through unchecked; this covers all AEC Data Model tools, md_get_manifest, md_get_properties, md_trigger_translation, docs_get_viewables, and issues_pin_element",
+    "Hub/project allow-list (FORMA_ALLOWED_HUBS, FORMA_ALLOWED_PROJECTS) restricting which resources the server may touch. Every tool declares how it binds to the allow-list, and the binding is enforced centrally: tools that take a Data Management hub/project id are checked against it; discovery tools (dm_list_hubs, dm_list_projects, admin_list_projects) additionally filter their own results down to allow-listed entries. Tools addressed by an id that cannot be mapped back to a DM hub/project — a Model Derivative URN, or an AEC Data Model-native id, neither of whose endpoints are project-scoped — are refused outright while an allow-list is active, rather than allowed through unchecked; this covers all AEC Data Model tools, md_get_manifest, md_get_properties, md_trigger_translation, docs_get_viewables, issues_pin_element, and all three webhooks tools (a hook is addressed by a folder URN or a hook id, neither of which maps to a DM project)",
+    "Webhook callback allow-list (FORMA_ALLOWED_CALLBACK_HOSTS) constraining where webhooks_create may direct Autodesk to send event data. A callback URL must be https and publicly routable: loopback, private and link-local addresses are refused unconditionally, both because Autodesk cannot deliver to them and to keep the hook from silently targeting infrastructure adjacent to the server. The dry-run preview for webhooks_create states the egress explicitly — what data class flows, to which host, and that deleting the hook is the only way to stop it — so the approving operator sees the ongoing consequence, not just the API call",
     "Read-only mode toggle to globally disable all mutating tools",
-    "Per-tool, per-project hourly rate limits covering every project-scoped mutating tool (defaults built in; overridable via FORMA_RATE_CONFIG_PATH). md_trigger_translation is not rate-limited: it is addressed by URN and has no project id to bucket a counter on",
+    "Per-tool, per-project hourly rate limits covering every project-scoped mutating tool (defaults built in; overridable via FORMA_RATE_CONFIG_PATH). md_trigger_translation is not rate-limited: it is addressed by URN and has no project id to bucket a counter on. The same applies to webhooks_delete, which is addressed by hook id alone, and to a folder-scoped webhooks_create; a project-scoped (Issues) webhooks_create is rate-limited normally",
     "SHA-256 hash-chained local audit log, independently verifiable via meta_verify_audit_chain. An entry is attempted for every tool invocation that reaches a tool handler, at whatever outcome it reaches: preview, executed, idempotent_replay, failed_api, outcome_unknown, or a specific denial reason (denied_readonly, denied_allowlist, denied_rate_limit, denied_business_rule, denied_auth_mode, denied_missing_approval, denied_approval, denied_idempotency). Three limits are disclosed rather than implied: a request rejected by the MCP SDK's own input-schema validation, or naming an unknown tool, is refused by the protocol layer before any handler runs and so is not audited (no Autodesk data is touched on that path); FORMA_AUDIT_INCLUDE_READS=false excludes read-tool calls (mutation calls are always attempted); and audit writes are fail-open by default — a write failure is logged and the call still proceeds — unless FORMA_AUDIT_FAIL_CLOSED=true is set, which aborts the call instead. The log records only a SHA-256 fingerprint of an approval token, never the live token"
   ]
 }
