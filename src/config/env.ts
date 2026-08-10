@@ -90,6 +90,24 @@ const envSchema = z.object({
         'FORMA_APPROVAL_TOKEN_TTL must be a positive whole number of seconds — a non-numeric value would leave approval tokens that never expire',
     }),
 
+  // Transport (stdio = local MCP over stdin/stdout, http = remote multi-tenant server)
+  FORMA_TRANSPORT: z.enum(['stdio', 'http']).default('stdio'),
+  FORMA_HTTP_PORT: z
+    .string()
+    .default('8080')
+    .transform(Number)
+    .refine((n) => Number.isInteger(n) && n > 0 && n < 65536, {
+      message: 'FORMA_HTTP_PORT must be a valid TCP port number',
+    }),
+  /**
+   * Master key for encrypting tenant robot private keys at rest (AES-256-GCM).
+   * 64 hex chars (32 bytes). Required when FORMA_TRANSPORT=http.
+   */
+  FORMA_MASTER_KEY: z
+    .string()
+    .regex(/^[0-9a-fA-F]{64}$/, 'FORMA_MASTER_KEY must be 64 hex characters (32 bytes)')
+    .optional(),
+
   // Logging
   LOG_LEVEL: z
     .enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal'])
@@ -111,7 +129,9 @@ function loadEnv(): Env {
 
   const env = result.data;
 
-  if (env.APS_AUTH_MODE === 'ssa') {
+  // In http (remote multi-tenant) mode each tenant carries its own SSA robot
+  // credentials in the RobotStore, so process-level SSA vars are not required.
+  if (env.APS_AUTH_MODE === 'ssa' && env.FORMA_TRANSPORT === 'stdio') {
     const missing = (['SSA_ID', 'SSA_KEY_ID', 'SSA_KEY_PATH'] as const).filter(
       (k) => !env[k],
     );
@@ -120,6 +140,12 @@ function loadEnv(): Env {
         `APS_AUTH_MODE=ssa requires ${missing.join(', ')} to be set. See docs/AUTH.md.`,
       );
     }
+  }
+
+  if (env.FORMA_TRANSPORT === 'http' && !env.FORMA_MASTER_KEY) {
+    throw new Error(
+      'FORMA_TRANSPORT=http requires FORMA_MASTER_KEY (64 hex chars) to encrypt tenant robot keys at rest.',
+    );
   }
 
   if (env.APS_AUTH_MODE === '3lo') {

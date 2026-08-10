@@ -1,4 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
+// Kept as a module-level import (not a param) deliberately: rateConfig is process-level
+// config loaded once at module load, same category as FORMA_RATE_CONFIG_PATH itself —
+// removing it would just move the same env read into loadConfig()'s caller for no benefit.
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
 import { getRateStore } from '../persistence/rate-store.js';
@@ -43,17 +46,24 @@ export class RateGovernanceError extends Error {
   }
 }
 
-export function checkRateLimit(toolName: string, projectId: string): void {
+/**
+ * `tenantId` isolates the counter per remote tenant (undefined = local mode, stored as
+ * tenant ''). The bucket key text itself is UNCHANGED regardless of tenant — tenant
+ * isolation is a separate dimension in the store (see persistence/rate-store.ts), not
+ * baked into this string — so an existing local SQLite db's `bucket_key` values never
+ * drift when this ships.
+ */
+export function checkRateLimit(toolName: string, projectId: string, tenantId?: string): void {
   const config = rateConfig[toolName];
   const limit = config?.per_project_per_hour;
   if (limit === undefined) return;
 
   const bucket = hourBucket();
   const key = `${toolName}::${projectId}::${bucket}`;
-  const count = getRateStore().increment(key, bucket);
+  const count = getRateStore().increment(tenantId ?? '', key, bucket);
 
   if (count > limit) {
-    logger.warn({ toolName, projectId, count, limit }, 'Local rate limit exceeded');
+    logger.warn({ toolName, projectId, tenantId, count, limit }, 'Local rate limit exceeded');
     throw new RateGovernanceError(toolName, projectId, limit);
   }
 }

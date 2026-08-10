@@ -1,5 +1,5 @@
 import { createApprovalToken } from './approval.js';
-import { env } from '../config/env.js';
+import type { Env } from '../config/env.js';
 
 export interface DryRunPreview {
   preview: {
@@ -23,8 +23,11 @@ export function buildDryRunPreview(params: {
   sideEffects: string[];
   businessRulesPassed: string[];
   executePayload: unknown;
+  env: Env;
+  /** Remote multi-tenant caller (see ToolContext.tenantId). Undefined = local mode. */
+  tenantId?: string;
 }): DryRunPreview {
-  const token = createApprovalToken(params.toolName, params.executePayload);
+  const token = createApprovalToken(params.toolName, params.executePayload, params.env, params.tenantId);
 
   return {
     preview: {
@@ -39,6 +42,6 @@ export function buildDryRunPreview(params: {
     next_step:
       `To execute this action, call tool "${params.toolName}" again with ` +
       `the same inputs plus dry_run=false and approval_token="${token}". ` +
-      `Token expires in ${env.FORMA_APPROVAL_TOKEN_TTL}s and is single-use.`,
+      `Token expires in ${params.env.FORMA_APPROVAL_TOKEN_TTL}s and is single-use.`,
   };
 }

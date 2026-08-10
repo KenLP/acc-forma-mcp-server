@@ -1,0 +1,41 @@
+# fly.toml — acc-forma-mcp-server remote HTTP transport (SPEC_remote-mcp.md R1)
+#
+# `app` is a placeholder — rename before first `fly launch`/`fly deploy` (Fly app names are
+# globally unique). Not applied yet: this is R1 scaffolding, not a live deployment.
+#
+# Secrets (never put these here — set them out-of-band):
+#   fly secrets set \
+#     FORMA_MASTER_KEY=<64 hex chars, e.g. `openssl rand -hex 32`> \
+#     APS_CLIENT_ID=<publisher APS app client id> \
+#     APS_CLIENT_SECRET=<publisher APS app client secret>
+#
+# One-time volume + deploy:
+#   fly apps create acc-forma-mcp
+#   fly volumes create forma_data --region sin --size 1
+#   fly deploy
+
+app = "acc-forma-mcp"
+primary_region = "sin" # Singapore — closest Fly region to APAC; change to taste
+
+[build]
+
+[env]
+  # Non-secret defaults only. FORMA_TRANSPORT / FORMA_PERSISTENCE_MODE / FORMA_DB_PATH /
+  # FORMA_AUDIT_DIR already default correctly via the Dockerfile's ENV — nothing required
+  # here. Kept as an explicit (empty) table so secrets are visibly NOT the mechanism used.
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[mounts]]
+  source = "forma_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

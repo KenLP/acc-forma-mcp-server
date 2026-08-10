@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Dirent } from 'node:fs';
+import { join } from 'node:path';
+import type { Env } from '../../../src/config/env.js';
 
 vi.mock('../../../src/logger.js', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trace: vi.fn() },
@@ -19,13 +22,20 @@ const BASE_ENV = {
   FORMA_MUTATION_MODE: 'preview_required',
   FORMA_READONLY: false,
   FORMA_APPROVAL_TOKEN_TTL: 300,
-};
-
-vi.mock('../../../src/config/env.js', () => ({ env: BASE_ENV }));
+} as unknown as Env;
 
 const mockUnlinkSync = vi.fn();
 const mockReaddirSync = vi.fn();
 const mockExistsSync = vi.fn(() => true);
+
+// Real readdirSync(dir, {withFileTypes:true}) returns Dirent objects; pruneOldAuditFiles
+// uses that to tell files from tenant subdirectories apart, so the mock must too.
+function fileEntry(name: string): Dirent {
+  return { name, isFile: () => true, isDirectory: () => false } as unknown as Dirent;
+}
+function dirEntry(name: string): Dirent {
+  return { name, isFile: () => false, isDirectory: () => true } as unknown as Dirent;
+}
 
 vi.mock('node:fs', () => ({
   appendFileSync: vi.fn(),
@@ -54,9 +64,14 @@ describe('pruneOldAuditFiles', () => {
     const old1 = 'audit-2020-01-01.jsonl';
     const old2 = 'audit-2019-06-15.jsonl';
     const recent = `audit-${new Date().toISOString().slice(0, 10)}.jsonl`;
-    mockReaddirSync.mockReturnValue([old1, old2, recent, 'not-an-audit-file.txt']);
+    mockReaddirSync.mockReturnValue([
+      fileEntry(old1),
+      fileEntry(old2),
+      fileEntry(recent),
+      fileEntry('not-an-audit-file.txt'),
+    ]);
 
-    pruneOldAuditFiles();
+    pruneOldAuditFiles(BASE_ENV);
 
     expect(mockUnlinkSync).toHaveBeenCalledTimes(2);
     const deletedFiles = mockUnlinkSync.mock.calls.map((c) => String(c[0]));
@@ -71,22 +86,22 @@ describe('pruneOldAuditFiles', () => {
     const recent = new Date(today);
     recent.setUTCDate(recent.getUTCDate() - 10);
     const recentFile = `audit-${recent.toISOString().slice(0, 10)}.jsonl`;
-    mockReaddirSync.mockReturnValue([recentFile]);
+    mockReaddirSync.mockReturnValue([fileEntry(recentFile)]);
 
-    pruneOldAuditFiles();
+    pruneOldAuditFiles(BASE_ENV);
 
     expect(mockUnlinkSync).not.toHaveBeenCalled();
   });
 
   it('skips non-audit filenames', () => {
     mockReaddirSync.mockReturnValue([
-      'state.db',
-      'some-log.txt',
-      'audit-baddate.jsonl',       // malformed date
-      'audit-2020-01-01.json',     // wrong extension
+      fileEntry('state.db'),
+      fileEntry('some-log.txt'),
+      fileEntry('audit-baddate.jsonl'), // malformed date
+      fileEntry('audit-2020-01-01.json'), // wrong extension
     ]);
 
-    pruneOldAuditFiles();
+    pruneOldAuditFiles(BASE_ENV);
 
     expect(mockUnlinkSync).not.toHaveBeenCalled();
   });
@@ -94,7 +109,7 @@ describe('pruneOldAuditFiles', () => {
   it('is a no-op when audit dir does not exist', () => {
     mockExistsSync.mockReturnValue(false);
 
-    pruneOldAuditFiles();
+    pruneOldAuditFiles(BASE_ENV);
 
     expect(mockReaddirSync).not.toHaveBeenCalled();
     expect(mockUnlinkSync).not.toHaveBeenCalled();
@@ -103,11 +118,30 @@ describe('pruneOldAuditFiles', () => {
   it('continues pruning when one unlink fails', () => {
     const old1 = 'audit-2020-01-01.jsonl';
     const old2 = 'audit-2020-02-01.jsonl';
-    mockReaddirSync.mockReturnValue([old1, old2]);
+    mockReaddirSync.mockReturnValue([fileEntry(old1), fileEntry(old2)]);
     mockUnlinkSync.mockImplementationOnce(() => { throw new Error('permission denied'); });
 
     // Should not throw even if first unlink fails
-    expect(() => pruneOldAuditFiles()).not.toThrow();
+    expect(() => pruneOldAuditFiles(BASE_ENV)).not.toThrow();
     expect(mockUnlinkSync).toHaveBeenCalledTimes(2);
+  });
+
+  it('prunes expired files inside a one-level-deep tenant subdirectory too', () => {
+    const oldRoot = 'audit-2020-01-01.jsonl';
+    const oldTenant = 'audit-2020-03-01.jsonl';
+
+    const tenantDir = join(AUDIT_DIR, 'tenant-a');
+    mockReaddirSync.mockImplementation((dir: string) => {
+      if (dir === AUDIT_DIR) return [fileEntry(oldRoot), dirEntry('tenant-a')];
+      if (dir === tenantDir) return [oldTenant]; // plain readdirSync (no withFileTypes) returns string[]
+      return [];
+    });
+
+    pruneOldAuditFiles(BASE_ENV);
+
+    expect(mockUnlinkSync).toHaveBeenCalledTimes(2);
+    const deletedFiles = mockUnlinkSync.mock.calls.map((c) => String(c[0]));
+    expect(deletedFiles.some((p) => p.includes(oldRoot))).toBe(true);
+    expect(deletedFiles.some((p) => p.includes('tenant-a') && p.includes(oldTenant))).toBe(true);
   });
 });

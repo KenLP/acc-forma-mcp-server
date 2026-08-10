@@ -49,6 +49,7 @@
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "test": "vitest run",
     "test:watch": "vitest",
+    "tenant": "tsx scripts/tenant-seed.ts",
     "sea:build": "tsup --config tsup.sea.config.ts && pkg dist-cjs/index.cjs --targets node20-win-x64 --output forma-mcp.exe",
     "sea:build:linux": "tsup --config tsup.sea.config.ts && pkg dist-cjs/index.cjs --targets node20-linux-x64 --output forma-mcp-linux",
     "sea:copy": "npm run sea:build && node scripts/sea-copy.mjs",
@@ -59,6 +60,7 @@
     "@modelcontextprotocol/sdk": "^1.20.0",
     "better-sqlite3": "^12.10.0",
     "dotenv": "^16.5.0",
+    "express": "^5.2.1",
     "jsonwebtoken": "^9.0.2",
     "pino": "^9.6.0",
     "ulid": "^2.3.0",
@@ -72,6 +74,7 @@
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.5",
     "@types/jsonwebtoken": "^9.0.8",
     "@types/node": "^20.17.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",

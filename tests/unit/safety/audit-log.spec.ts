@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { verifyChain } from '../../../src/safety/hash-chain.js';
 import type { ChainEntry } from '../../../src/safety/hash-chain.js';
+import type { Env } from '../../../src/config/env.js';
 
 // Silence pino output so test runs don't emit scary JSON error lines to stderr
 vi.mock('../../../src/logger.js', () => ({
@@ -21,9 +22,7 @@ const BASE_ENV = {
   FORMA_MUTATION_MODE: 'preview_required',
   FORMA_READONLY: false,
   FORMA_APPROVAL_TOKEN_TTL: 300,
-};
-
-vi.mock('../../../src/config/env.js', () => ({ env: BASE_ENV }));
+} as unknown as Env;
 
 vi.mock('node:fs', () => ({
   appendFileSync: vi.fn(),
@@ -51,13 +50,16 @@ describe('audit-log', () => {
   });
 
   it('writes a JSONL entry with required fields', () => {
-    appendAuditEntry({
-      tool: 'dm.list_hubs',
-      kind: 'read',
-      stage: 'executed',
-      inputRedacted: {},
-      outputSummary: { success: true },
-    });
+    appendAuditEntry(
+      {
+        tool: 'dm.list_hubs',
+        kind: 'read',
+        stage: 'executed',
+        inputRedacted: {},
+        outputSummary: { success: true },
+      },
+      BASE_ENV,
+    );
 
     expect(mockAppendFileSync).toHaveBeenCalledOnce();
     const call = mockAppendFileSync.mock.calls[0]!;
@@ -74,8 +76,8 @@ describe('audit-log', () => {
   });
 
   it('chains hashes across consecutive entries', () => {
-    appendAuditEntry({ tool: 'a', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} });
-    appendAuditEntry({ tool: 'b', kind: 'mutation', stage: 'preview', inputRedacted: {}, outputSummary: {} });
+    appendAuditEntry({ tool: 'a', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} }, BASE_ENV);
+    appendAuditEntry({ tool: 'b', kind: 'mutation', stage: 'preview', inputRedacted: {}, outputSummary: {} }, BASE_ENV);
 
     const entry1 = JSON.parse(String(mockAppendFileSync.mock.calls[0]![1]).trim()) as Record<string, unknown>;
     const entry2 = JSON.parse(String(mockAppendFileSync.mock.calls[1]![1]).trim()) as Record<string, unknown>;
@@ -84,9 +86,9 @@ describe('audit-log', () => {
   });
 
   it('written entries pass verifyChain end-to-end', () => {
-    appendAuditEntry({ tool: 'a', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} });
-    appendAuditEntry({ tool: 'b', kind: 'mutation', stage: 'preview', inputRedacted: {}, outputSummary: {} });
-    appendAuditEntry({ tool: 'c', kind: 'mutation', stage: 'executed', inputRedacted: {}, outputSummary: {} });
+    appendAuditEntry({ tool: 'a', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} }, BASE_ENV);
+    appendAuditEntry({ tool: 'b', kind: 'mutation', stage: 'preview', inputRedacted: {}, outputSummary: {} }, BASE_ENV);
+    appendAuditEntry({ tool: 'c', kind: 'mutation', stage: 'executed', inputRedacted: {}, outputSummary: {} }, BASE_ENV);
 
     const entries = mockAppendFileSync.mock.calls.map((call) =>
       JSON.parse(String(call[1]).trim()) as ChainEntry,
@@ -96,8 +98,8 @@ describe('audit-log', () => {
   });
 
   it('verifyChain detects a tampered entry', () => {
-    appendAuditEntry({ tool: 'a', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} });
-    appendAuditEntry({ tool: 'b', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} });
+    appendAuditEntry({ tool: 'a', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} }, BASE_ENV);
+    appendAuditEntry({ tool: 'b', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} }, BASE_ENV);
 
     const entries = mockAppendFileSync.mock.calls.map((call) =>
       JSON.parse(String(call[1]).trim()) as ChainEntry,
@@ -111,15 +113,15 @@ describe('audit-log', () => {
 
   it('does not advance lastHash when appendFileSync throws (R2-3)', () => {
     // entry1 succeeds
-    appendAuditEntry({ tool: 'a', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} });
+    appendAuditEntry({ tool: 'a', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} }, BASE_ENV);
     const entry1 = JSON.parse(String(mockAppendFileSync.mock.calls[0]![1]).trim()) as Record<string, unknown>;
 
     // entry2 fails to write — lastHash must NOT advance
     mockAppendFileSync.mockImplementationOnce(() => { throw new Error('disk full'); });
-    appendAuditEntry({ tool: 'b', kind: 'mutation', stage: 'preview', inputRedacted: {}, outputSummary: {} });
+    appendAuditEntry({ tool: 'b', kind: 'mutation', stage: 'preview', inputRedacted: {}, outputSummary: {} }, BASE_ENV);
 
     // entry3 must chain from entry1 (prev_hash === entry1.this_hash), not from the failed entry2
-    appendAuditEntry({ tool: 'c', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} });
+    appendAuditEntry({ tool: 'c', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} }, BASE_ENV);
     const entry3 = JSON.parse(String(mockAppendFileSync.mock.calls[2]![1]).trim()) as Record<string, unknown>;
 
     expect(entry3['prev_hash']).toBe(entry1['this_hash']);
@@ -128,9 +130,6 @@ describe('audit-log', () => {
 
   it('throws AuditPersistenceError when FORMA_AUDIT_FAIL_CLOSED=true and write fails (E2)', async () => {
     vi.resetModules();
-    vi.doMock('../../../src/config/env.js', () => ({
-      env: { ...BASE_ENV, FORMA_AUDIT_FAIL_CLOSED: true },
-    }));
     const fs = await import('node:fs');
     vi.mocked(fs.appendFileSync).mockImplementation(() => { throw new Error('disk full'); });
     vi.mocked(fs.existsSync).mockReturnValue(false);
@@ -140,18 +139,24 @@ describe('audit-log', () => {
     );
 
     expect(() =>
-      failClosedAppend({ tool: 'test', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} }),
+      failClosedAppend(
+        { tool: 'test', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} },
+        { ...BASE_ENV, FORMA_AUDIT_FAIL_CLOSED: true },
+      ),
     ).toThrow(APE);
   });
 
   it('redacts secrets from input', () => {
-    appendAuditEntry({
-      tool: 'test',
-      kind: 'mutation',
-      stage: 'executed',
-      inputRedacted: { access_token: 'super-secret', title: 'My Issue' },
-      outputSummary: {},
-    });
+    appendAuditEntry(
+      {
+        tool: 'test',
+        kind: 'mutation',
+        stage: 'executed',
+        inputRedacted: { access_token: 'super-secret', title: 'My Issue' },
+        outputSummary: {},
+      },
+      BASE_ENV,
+    );
 
     const call0 = mockAppendFileSync.mock.calls[0]!;
     const raw: unknown = call0[1];
@@ -159,5 +164,30 @@ describe('audit-log', () => {
     const input = entry['input_redacted'] as Record<string, unknown>;
     expect(input['access_token']).toBe('[REDACTED]');
     expect(input['title']).toBe('My Issue');
+  });
+
+  it('each audit dir is its own hash chain: interleaved writes to two dirs both verify independently', () => {
+    const envA = { ...BASE_ENV, FORMA_AUDIT_DIR: '/tmp/test-audit-tenant-a' };
+    const envB = { ...BASE_ENV, FORMA_AUDIT_DIR: '/tmp/test-audit-tenant-b' };
+
+    appendAuditEntry({ tool: 'a1', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} }, envA);
+    appendAuditEntry({ tool: 'b1', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} }, envB);
+    appendAuditEntry({ tool: 'a2', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} }, envA);
+    appendAuditEntry({ tool: 'b2', kind: 'read', stage: 'executed', inputRedacted: {}, outputSummary: {} }, envB);
+
+    const written = mockAppendFileSync.mock.calls.map(
+      (call) => JSON.parse(String(call[1]).trim()) as ChainEntry & { tool: string },
+    );
+    const chainA = written.filter((e) => e.tool.startsWith('a'));
+    const chainB = written.filter((e) => e.tool.startsWith('b'));
+
+    // Each dir's chain starts at genesis and is internally consistent, independent of
+    // the other dir's interleaved writes.
+    expect(chainA[0]!.prev_hash).toBe('sha256:genesis');
+    expect(chainB[0]!.prev_hash).toBe('sha256:genesis');
+    expect(chainA[1]!.prev_hash).toBe(chainA[0]!.this_hash);
+    expect(chainB[1]!.prev_hash).toBe(chainB[0]!.this_hash);
+    expect(verifyChain(chainA)).toEqual({ valid: true });
+    expect(verifyChain(chainB)).toEqual({ valid: true });
   });
 });

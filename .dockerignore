@@ -1,0 +1,26 @@
+# Build context should only carry what the Dockerfile actually COPYs (package.json,
+# pnpm-lock.yaml, tsconfig.json, tsup.config.ts, src/) plus whatever `pnpm install` /
+# `npm run build` themselves need. Everything else just slows the build and risks leaking
+# local secrets into an image layer.
+
+node_modules
+dist
+dist-cjs
+.git
+
+docs
+tests
+notes
+.claude
+
+# Local dev artifacts / secrets — never belongs in an image layer.
+*.pem
+.env
+.env.*
+!.env.example
+*.log
+coverage
+
+# Packaged-executable build output (sea:build) — unrelated to the container image.
+forma-mcp.exe
+forma-mcp-linux

@@ -51,8 +51,5 @@ skills/
 CLAUDE.md
 .claude/LOCAL.md
 
-# Dockerfile scaffold (not used yet; revisit when adding container distribution)
-Dockerfile
-
 # change-alert prototype runtime state
 prototypes/change-alert/.state.json

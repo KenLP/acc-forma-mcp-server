@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { env } from '../config/env.js';
+import type { Env } from '../config/env.js';
 import { generateApprovalToken } from '../utils/id-generator.js';
 import { getTokenStore } from '../persistence/token-store.js';
 
@@ -10,10 +10,18 @@ export class ApprovalError extends Error {
   }
 }
 
-/** Issue a single-use approval token bound to the tool name and payload hash */
-export function createApprovalToken(toolName: string, executePayload: unknown): string {
+/**
+ * Issue a single-use approval token bound to the tool name, payload hash, and tenant.
+ * `tenantId` undefined (local mode) is stored as tenant `''` — see ToolContext.tenantId.
+ */
+export function createApprovalToken(
+  toolName: string,
+  executePayload: unknown,
+  env: Env,
+  tenantId?: string,
+): string {
   const token = generateApprovalToken();
-  getTokenStore().set({
+  getTokenStore().set(tenantId ?? '', {
     id: token,
     toolName,
     payloadHash: hashPayload(executePayload),
@@ -24,15 +32,21 @@ export function createApprovalToken(toolName: string, executePayload: unknown): 
 
 /**
  * Verify and consume an approval token.
- * Throws ApprovalError on any mismatch — not found, expired, wrong tool, or changed payload.
+ * Throws ApprovalError on any mismatch — not found, expired, wrong tool, changed payload,
+ * or (implicitly, via the tenant-scoped store lookup) issued for a different tenant. A
+ * token from tenant A looked up under tenant B simply isn't found — same error as a token
+ * that never existed, so no tenant identity leaks through the error message.
  */
 export function verifyAndConsumeToken(
   token: string,
   toolName: string,
   executePayload: unknown,
+  env: Env,
+  tenantId?: string,
 ): void {
   const store = getTokenStore();
-  const entry = store.get(token);
+  const tid = tenantId ?? '';
+  const entry = store.get(tid, token);
 
   if (!entry) {
     throw new ApprovalError(
@@ -42,7 +56,7 @@ export function verifyAndConsumeToken(
   }
 
   if (Date.now() > entry.expiresAt) {
-    store.delete(token);
+    store.delete(tid, token);
     throw new ApprovalError(
       `Token "${token}" expired (TTL: ${env.FORMA_APPROVAL_TOKEN_TTL}s). ` +
         `Call with dry_run=true again to get a new token.`,
@@ -64,7 +78,7 @@ export function verifyAndConsumeToken(
     );
   }
 
-  store.delete(token); // single-use: consume immediately
+  store.delete(tid, token); // single-use: consume immediately
 }
 
 /** Canonical payload hash — shared with the idempotency binding in _wrap.ts. */

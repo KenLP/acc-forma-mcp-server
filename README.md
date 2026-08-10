@@ -379,6 +379,12 @@ Key variables:
 
 ---
 
+## Remote / HTTP mode (opt-in)
+
+The default is still local **stdio**, spawned by your MCP client as shown in Quickstart above. Set `FORMA_TRANSPORT=http` to instead run a stateless, multi-tenant HTTP server (one bearer key per tenant, each mapped to its own SSA robot) — for self-hosting the server for multiple people/orgs instead of running it per-machine. This is early (R1): local stdio behavior is unaffected either way. See `CLAUDE.md`'s "Remote mode (R1)" section and [docs/specs/SPEC_remote-mcp.md](docs/specs/SPEC_remote-mcp.md) for the full design, `Dockerfile`/`fly.toml` for deployment, and `scripts/tenant-seed.ts` (`npm run tenant -- create|list|disable`) to provision tenants.
+
+---
+
 ## Core SDK (`acc-forma-mcp-server/core`)
 
 The typed APS client layer (auth providers, `apsRequest`/`apsGraphQL`, all eight API domains) is also consumable as a **library** — no MCP server, no `APS_*`/`FORMA_*` env vars required at import:

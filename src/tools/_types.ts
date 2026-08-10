@@ -47,6 +47,13 @@ export interface ToolContext {
   /** 2-legged provider for tools that need hub-wide project visibility. */
   auth2lo?: AuthProvider;
   env: Env;
+  /**
+   * Remote multi-tenant caller identity (R1 remote transport). Undefined means local
+   * single-tenant (stdio) mode — every safety module treats that the same as tenant `''`,
+   * so local behavior (audit paths, store keys) is byte-identical to before per-tenant
+   * support existed.
+   */
+  tenantId?: string;
 }
 
 export type McpToolResult = {

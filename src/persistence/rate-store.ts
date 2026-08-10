@@ -1,8 +1,15 @@
 import { env } from '../config/env.js';
 import { getDb } from './db.js';
 
+/**
+ * `tenantId` isolates counters per remote tenant. `bucketKey` is the same
+ * `${toolName}::${projectId}::${bucket}` string local mode has always used (see
+ * src/safety/rate-governance.ts) — tenant isolation is layered on as a separate
+ * dimension here, not folded into that string, so a pre-existing local SQLite db's
+ * `bucket_key` values never change shape.
+ */
 export interface RateStore {
-  increment(bucketKey: string, hourBucket: string): number;
+  increment(tenantId: string, bucketKey: string, hourBucket: string): number;
   pruneStale(currentHourBucket: string): void;
 }
 
@@ -11,9 +18,14 @@ export interface RateStore {
 class MemoryRateStore implements RateStore {
   private readonly counters = new Map<string, number>();
 
-  increment(bucketKey: string): number {
-    const count = (this.counters.get(bucketKey) ?? 0) + 1;
-    this.counters.set(bucketKey, count);
+  private key(tenantId: string, bucketKey: string): string {
+    return `${tenantId}::${bucketKey}`;
+  }
+
+  increment(tenantId: string, bucketKey: string): number {
+    const key = this.key(tenantId, bucketKey);
+    const count = (this.counters.get(key) ?? 0) + 1;
+    this.counters.set(key, count);
     return count;
   }
 
@@ -26,18 +38,18 @@ class MemoryRateStore implements RateStore {
 
 // ---- SQLite backend --------------------------------------------------------
 
-type RateRow = { bucket_key: string; count: number };
+type RateRow = { count: number };
 
 class SqliteRateStore implements RateStore {
-  increment(bucketKey: string, hourBucket: string): number {
+  increment(tenantId: string, bucketKey: string, hourBucket: string): number {
     getDb().prepare(
-      'INSERT INTO rate_counters (bucket_key,count,hour_bucket) VALUES (?,1,?) ' +
-      'ON CONFLICT(bucket_key) DO UPDATE SET count = count + 1',
-    ).run(bucketKey, hourBucket);
+      'INSERT INTO rate_counters (tenant_id,bucket_key,count,hour_bucket) VALUES (?,?,1,?) ' +
+      'ON CONFLICT(tenant_id,bucket_key) DO UPDATE SET count = count + 1',
+    ).run(tenantId, bucketKey, hourBucket);
 
     const row = getDb()
-      .prepare('SELECT count FROM rate_counters WHERE bucket_key=?')
-      .get(bucketKey) as RateRow | undefined;
+      .prepare('SELECT count FROM rate_counters WHERE tenant_id=? AND bucket_key=?')
+      .get(tenantId, bucketKey) as RateRow | undefined;
     return row?.count ?? 1;
   }
 

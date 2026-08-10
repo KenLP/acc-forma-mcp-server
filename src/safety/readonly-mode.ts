@@ -1,4 +1,4 @@
-import { env } from '../config/env.js';
+import type { Env } from '../config/env.js';
 
 export class ReadonlyModeError extends Error {
   constructor(toolName: string) {
@@ -11,7 +11,7 @@ export class ReadonlyModeError extends Error {
   }
 }
 
-export function checkNotReadonly(toolName: string): void {
+export function checkNotReadonly(toolName: string, env: Env): void {
   if (env.FORMA_READONLY || env.FORMA_MUTATION_MODE === 'readonly') {
     throw new ReadonlyModeError(toolName);
   }

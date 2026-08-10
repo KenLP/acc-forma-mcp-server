@@ -14,7 +14,7 @@ import { verifyAndConsumeToken, ApprovalError, hashPayload, fingerprintToken } f
 import { appendAuditEntry, AuditPersistenceError } from '../safety/audit-log.js';
 import { checkIdempotency, storeIdempotencyResult, IdempotencyError } from '../safety/idempotency.js';
 import { ApsApiError, ApsIndeterminateError } from '../http/errors.js';
-import { env } from '../config/env.js';
+import type { Env } from '../config/env.js';
 import { logger } from '../logger.js';
 
 /** Extra fields injected into every mutation tool's inputSchema */
@@ -128,14 +128,17 @@ export function wrapReadTool<T extends z.ZodTypeAny>(
       // Auth mode gate — fail fast before any API call
       const authCheck = checkAuthMode(tool.name, tool.requiredAuthModes, ctx.env.APS_AUTH_MODE);
       if (authCheck) {
-        appendAuditEntry({
-          tool: tool.name,
-          kind: 'read',
-          stage: 'denied_auth_mode',
-          ...(projectId !== undefined ? { projectId } : {}),
-          inputRedacted: input,
-          outputSummary: { reason: authCheck.content[0]?.text },
-        });
+        appendAuditEntry(
+          {
+            tool: tool.name,
+            kind: 'read',
+            stage: 'denied_auth_mode',
+            ...(projectId !== undefined ? { projectId } : {}),
+            inputRedacted: input,
+            outputSummary: { reason: authCheck.content[0]?.text },
+          },
+          ctx.env,
+        );
         return authCheck;
       }
 
@@ -143,18 +146,21 @@ export function wrapReadTool<T extends z.ZodTypeAny>(
 
       const result = await tool.execute(input, effectiveCtx(tool, ctx));
 
-      appendAuditEntry({
-        tool: tool.name,
-        kind: 'read',
-        stage: 'executed',
-        ...(projectId !== undefined ? { projectId } : {}),
-        inputRedacted: input,
-        outputSummary: { success: true },
-      });
+      appendAuditEntry(
+        {
+          tool: tool.name,
+          kind: 'read',
+          stage: 'executed',
+          ...(projectId !== undefined ? { projectId } : {}),
+          inputRedacted: input,
+          outputSummary: { success: true },
+        },
+        ctx.env,
+      );
 
       return result;
     } catch (err) {
-      return handleError(err, tool.name, 'read', projectId, input);
+      return handleError(err, tool.name, 'read', projectId, input, ctx.env);
     }
   };
 }
@@ -186,7 +192,7 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
     const projectId = tool.getProjectId?.(input);
 
     // In client_approval_only mode, skip the two-step flow
-    const requirePreview = env.FORMA_MUTATION_MODE === 'preview_required';
+    const requirePreview = ctx.env.FORMA_MUTATION_MODE === 'preview_required';
     const effectiveDryRun = requirePreview ? dry_run : false;
 
     // Track whether tool.execute() completed so AuditPersistenceError can report accurately
@@ -196,14 +202,17 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
       // 0. Auth mode gate
       const authCheck = checkAuthMode(tool.name, tool.requiredAuthModes, ctx.env.APS_AUTH_MODE);
       if (authCheck) {
-        appendAuditEntry({
-          tool: tool.name,
-          kind: 'mutation',
-          stage: 'denied_auth_mode',
-          ...(projectId !== undefined ? { projectId } : {}),
-          inputRedacted: input,
-          outputSummary: { reason: authCheck.content[0]?.text },
-        });
+        appendAuditEntry(
+          {
+            tool: tool.name,
+            kind: 'mutation',
+            stage: 'denied_auth_mode',
+            ...(projectId !== undefined ? { projectId } : {}),
+            inputRedacted: input,
+            outputSummary: { reason: authCheck.content[0]?.text },
+          },
+          ctx.env,
+        );
         return authCheck;
       }
 
@@ -211,10 +220,10 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
       enforceScope(tool, input);
 
       // 2. Readonly mode
-      checkNotReadonly(tool.name);
+      checkNotReadonly(tool.name, ctx.env);
 
       // 3. Rate governance
-      if (projectId) checkRateLimit(tool.name, projectId);
+      if (projectId) checkRateLimit(tool.name, projectId, ctx.tenantId);
 
       // 4. Local business rule validators (no APS call, fast)
       const rulesPassed = await runBusinessRules(
@@ -238,18 +247,23 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
           sideEffects: preview.sideEffects,
           businessRulesPassed: preview.businessRulesPassed,
           executePayload: preview.executePayload,
+          env: ctx.env,
+          ...(ctx.tenantId !== undefined ? { tenantId: ctx.tenantId } : {}),
         });
 
         // Audit the token's FINGERPRINT, never the live token — the JSONL is readable
         // on disk and the token stays valid for the whole TTL.
-        appendAuditEntry({
-          tool: tool.name,
-          kind: 'mutation',
-          stage: 'preview',
-          ...(projectId !== undefined ? { projectId } : {}),
-          inputRedacted: input,
-          outputSummary: { approval_token_fp: fingerprintToken(dryResult.approval_token) },
-        });
+        appendAuditEntry(
+          {
+            tool: tool.name,
+            kind: 'mutation',
+            stage: 'preview',
+            ...(projectId !== undefined ? { projectId } : {}),
+            inputRedacted: input,
+            outputSummary: { approval_token_fp: fingerprintToken(dryResult.approval_token) },
+          },
+          ctx.env,
+        );
 
         return {
           content: [{ type: 'text', text: JSON.stringify(dryResult, null, 2) }],
@@ -262,17 +276,20 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
       // operation is rejected instead of silently returning the older result.
       const payloadHash = hashPayload(preview.executePayload);
       if (idempotency_key) {
-        const cached = checkIdempotency(idempotency_key, tool.name, payloadHash);
+        const cached = checkIdempotency(idempotency_key, tool.name, payloadHash, ctx.tenantId);
         if (cached) {
           logger.info({ toolName: tool.name, idempotency_key }, 'idempotency: returning cached result');
-          appendAuditEntry({
-            tool: tool.name,
-            kind: 'mutation',
-            stage: 'idempotent_replay',
-            ...(projectId !== undefined ? { projectId } : {}),
-            inputRedacted: input,
-            outputSummary: { note: 'cached result returned; the APS call did NOT re-execute', idempotency_key },
-          });
+          appendAuditEntry(
+            {
+              tool: tool.name,
+              kind: 'mutation',
+              stage: 'idempotent_replay',
+              ...(projectId !== undefined ? { projectId } : {}),
+              inputRedacted: input,
+              outputSummary: { note: 'cached result returned; the APS call did NOT re-execute', idempotency_key },
+            },
+            ctx.env,
+          );
           return cached;
         }
       }
@@ -292,39 +309,47 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
               },
             ],
           };
-          appendAuditEntry({
-            tool: tool.name,
-            kind: 'mutation',
-            stage: 'denied_missing_approval',
-            ...(projectId !== undefined ? { projectId } : {}),
-            inputRedacted: input,
-            outputSummary: { error: missingTokenResult.content[0]?.text },
-          });
+          appendAuditEntry(
+            {
+              tool: tool.name,
+              kind: 'mutation',
+              stage: 'denied_missing_approval',
+              ...(projectId !== undefined ? { projectId } : {}),
+              inputRedacted: input,
+              outputSummary: { error: missingTokenResult.content[0]?.text },
+            },
+            ctx.env,
+          );
           return missingTokenResult;
         }
-        verifyAndConsumeToken(approval_token, tool.name, preview.executePayload);
+        verifyAndConsumeToken(approval_token, tool.name, preview.executePayload, ctx.env, ctx.tenantId);
       }
 
       // 8. Execute
       const result = await tool.execute(input, effectiveCtx(tool, ctx));
       apsExecutionCompleted = true; // set BEFORE audit so error reporting is accurate
 
-      appendAuditEntry({
-        tool: tool.name,
-        kind: 'mutation',
-        stage: 'executed',
-        ...(projectId !== undefined ? { projectId } : {}),
-        inputRedacted: input,
-        outputSummary: result.structuredContent ?? { success: true },
-        // Fingerprint only — matches the preview entry's approval_token_fp.
-        ...(approval_token !== undefined ? { approvalToken: fingerprintToken(approval_token) } : {}),
-      });
+      appendAuditEntry(
+        {
+          tool: tool.name,
+          kind: 'mutation',
+          stage: 'executed',
+          ...(projectId !== undefined ? { projectId } : {}),
+          inputRedacted: input,
+          outputSummary: result.structuredContent ?? { success: true },
+          // Fingerprint only — matches the preview entry's approval_token_fp.
+          ...(approval_token !== undefined ? { approvalToken: fingerprintToken(approval_token) } : {}),
+        },
+        ctx.env,
+      );
 
-      if (idempotency_key) storeIdempotencyResult(idempotency_key, tool.name, payloadHash, result);
+      if (idempotency_key) {
+        storeIdempotencyResult(idempotency_key, tool.name, payloadHash, result, ctx.env, ctx.tenantId);
+      }
 
       return result;
     } catch (err) {
-      return handleError(err, tool.name, 'mutation', projectId, input, apsExecutionCompleted);
+      return handleError(err, tool.name, 'mutation', projectId, input, ctx.env, apsExecutionCompleted);
     }
   };
 }
@@ -337,6 +362,7 @@ function handleError(
   kind: 'read' | 'mutation',
   projectId: string | undefined,
   input: unknown,
+  env: Env,
   apsExecutionCompleted = false,
 ): McpToolResult {
   type Stage =
@@ -394,14 +420,17 @@ function handleError(
     logger.error({ err, toolName }, 'Unexpected error in tool execution');
   }
 
-  appendAuditEntry({
-    tool: toolName,
-    kind,
-    stage,
-    ...(projectId !== undefined ? { projectId } : {}),
-    inputRedacted: input,
-    outputSummary: { error: message },
-  });
+  appendAuditEntry(
+    {
+      tool: toolName,
+      kind,
+      stage,
+      ...(projectId !== undefined ? { projectId } : {}),
+      inputRedacted: input,
+      outputSummary: { error: message },
+    },
+    env,
+  );
 
   return { isError: true, content: [{ type: 'text', text: message }] };
 }

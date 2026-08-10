@@ -8,23 +8,33 @@ export interface TokenRecord {
   expiresAt: number;
 }
 
+/**
+ * `tenantId` isolates tokens per remote tenant — a token created under one tenant is
+ * simply not found when looked up under another (see src/safety/approval.ts). Callers in
+ * local (stdio) mode always pass '' (ToolContext.tenantId undefined maps to '').
+ */
 export interface TokenStore {
-  set(record: TokenRecord): void;
-  get(id: string): TokenRecord | undefined;
-  delete(id: string): void;
+  set(tenantId: string, record: TokenRecord): void;
+  get(tenantId: string, id: string): TokenRecord | undefined;
+  delete(tenantId: string, id: string): void;
 }
 
 // ---- Memory backend --------------------------------------------------------
 
 class MemoryTokenStore implements TokenStore {
   private readonly map = new Map<string, TokenRecord>();
-  set(r: TokenRecord): void { this.map.set(r.id, r); }
-  get(id: string): TokenRecord | undefined { return this.map.get(id); }
-  delete(id: string): void { this.map.delete(id); }
+
+  private key(tenantId: string, id: string): string {
+    return `${tenantId}::${id}`;
+  }
+
+  set(tenantId: string, r: TokenRecord): void { this.map.set(this.key(tenantId, r.id), r); }
+  get(tenantId: string, id: string): TokenRecord | undefined { return this.map.get(this.key(tenantId, id)); }
+  delete(tenantId: string, id: string): void { this.map.delete(this.key(tenantId, id)); }
 
   gc(): void {
     const now = Date.now();
-    for (const [id, r] of this.map) if (r.expiresAt < now) this.map.delete(id);
+    for (const [key, r] of this.map) if (r.expiresAt < now) this.map.delete(key);
   }
 }
 
@@ -33,22 +43,24 @@ class MemoryTokenStore implements TokenStore {
 type TokenRow = { id: string; tool_name: string; payload_hash: string; expires_at: number };
 
 class SqliteTokenStore implements TokenStore {
-  set(r: TokenRecord): void {
+  set(tenantId: string, r: TokenRecord): void {
     getDb()
-      .prepare('INSERT OR REPLACE INTO approval_tokens (id,tool_name,payload_hash,expires_at) VALUES (?,?,?,?)')
-      .run(r.id, r.toolName, r.payloadHash, r.expiresAt);
+      .prepare(
+        'INSERT OR REPLACE INTO approval_tokens (tenant_id,id,tool_name,payload_hash,expires_at) VALUES (?,?,?,?,?)',
+      )
+      .run(tenantId, r.id, r.toolName, r.payloadHash, r.expiresAt);
   }
 
-  get(id: string): TokenRecord | undefined {
+  get(tenantId: string, id: string): TokenRecord | undefined {
     const row = getDb()
-      .prepare('SELECT id,tool_name,payload_hash,expires_at FROM approval_tokens WHERE id=?')
-      .get(id) as TokenRow | undefined;
+      .prepare('SELECT id,tool_name,payload_hash,expires_at FROM approval_tokens WHERE tenant_id=? AND id=?')
+      .get(tenantId, id) as TokenRow | undefined;
     if (!row) return undefined;
     return { id: row.id, toolName: row.tool_name, payloadHash: row.payload_hash, expiresAt: row.expires_at };
   }
 
-  delete(id: string): void {
-    getDb().prepare('DELETE FROM approval_tokens WHERE id=?').run(id);
+  delete(tenantId: string, id: string): void {
+    getDb().prepare('DELETE FROM approval_tokens WHERE tenant_id=? AND id=?').run(tenantId, id);
   }
 }
 

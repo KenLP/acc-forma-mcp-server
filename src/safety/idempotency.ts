@@ -1,4 +1,4 @@
-import { env } from '../config/env.js';
+import type { Env } from '../config/env.js';
 import type { McpToolResult } from '../tools/_types.js';
 import { getIdempotencyStore } from '../persistence/idempotency-store.js';
 
@@ -10,7 +10,8 @@ export class IdempotencyError extends Error {
 }
 
 /**
- * Look up a cached result for `key`, bound to the operation identity.
+ * Look up a cached result for `key`, bound to the operation identity AND the tenant that
+ * created it (`tenantId` undefined = local mode, stored as tenant `''`).
  *
  * A key is only a valid replay of the SAME operation — same tool, same execute
  * payload. Reusing a key for a different operation would otherwise return the
@@ -21,8 +22,9 @@ export function checkIdempotency(
   key: string,
   toolName: string,
   payloadHash: string,
+  tenantId?: string,
 ): McpToolResult | null {
-  const rec = getIdempotencyStore().check(key);
+  const rec = getIdempotencyStore().check(tenantId ?? '', key);
   if (!rec) return null;
   if (rec.toolName !== toolName || rec.payloadHash !== payloadHash) {
     throw new IdempotencyError(
@@ -39,8 +41,11 @@ export function storeIdempotencyResult(
   toolName: string,
   payloadHash: string,
   result: McpToolResult,
+  env: Env,
+  tenantId?: string,
 ): void {
   getIdempotencyStore().store(
+    tenantId ?? '',
     key,
     { toolName, payloadHash, result },
     Date.now() + env.FORMA_APPROVAL_TOKEN_TTL * 1000,

@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync, existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { env } from '../config/env.js';
+import type { Env } from '../config/env.js';
 import { logger } from '../logger.js';
 import { redact } from '../utils/redact.js';
 import { generateEventId } from '../utils/id-generator.js';
@@ -55,11 +55,15 @@ export interface AuditEntry {
   this_hash: string;
 }
 
-// Restore chain state from the last line of today's audit file so a restart
-// doesn't silently break the chain by resetting to 'sha256:genesis'.
-function loadLastHashFromFile(): string {
+// Each audit directory is its own independent hash chain (one per tenant in remote mode —
+// env.FORMA_AUDIT_DIR is what the tenancy layer overrides per tenant, see CLAUDE.md). Keyed
+// by the resolved dir, lazily populated on first use per dir via loadLastHashFromFile below,
+// so a restart doesn't silently break any chain by resetting it to 'sha256:genesis'.
+const lastHashByDir = new Map<string, string>();
+
+function loadLastHashFromFile(dir: string): string {
   try {
-    const filePath = todayLogFile();
+    const filePath = todayLogFile(dir);
     if (!existsSync(filePath)) return 'sha256:genesis';
     const content = readFileSync(filePath, 'utf-8');
     const lines = content.trimEnd().split('\n').filter(Boolean);
@@ -67,42 +71,54 @@ function loadLastHashFromFile(): string {
     const last = JSON.parse(lines[lines.length - 1]!) as { this_hash?: string };
     return typeof last.this_hash === 'string' ? last.this_hash : 'sha256:genesis';
   } catch (err) {
-    logger.warn({ err, auditDir: env.FORMA_AUDIT_DIR }, 'audit-log: failed to restore lastHash from file — chain will restart from genesis');
+    logger.warn({ err, auditDir: dir }, 'audit-log: failed to restore lastHash from file — chain will restart from genesis');
     return 'sha256:genesis';
   }
 }
 
-// Module-level chain state (persists across calls for the process lifetime)
-let lastHash = loadLastHashFromFile();
-
-function todayLogFile(): string {
-  const d = new Date();
-  const date = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-  return join(env.FORMA_AUDIT_DIR, `audit-${date}.jsonl`);
+function getLastHash(dir: string): string {
+  let hash = lastHashByDir.get(dir);
+  if (hash === undefined) {
+    hash = loadLastHashFromFile(dir);
+    lastHashByDir.set(dir, hash);
+  }
+  return hash;
 }
 
-function ensureDir(): void {
-  if (!existsSync(env.FORMA_AUDIT_DIR)) {
+function todayLogFile(dir: string): string {
+  const d = new Date();
+  const date = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+  return join(dir, `audit-${date}.jsonl`);
+}
+
+function ensureDir(dir: string): void {
+  if (!existsSync(dir)) {
     // 0o700 / 0o600: the audit log and state.db hold project data and must not be
     // world-readable. POSIX only — on Windows the file inherits the directory ACL.
-    mkdirSync(env.FORMA_AUDIT_DIR, { recursive: true, mode: 0o700 });
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
 }
 
-export function appendAuditEntry(params: {
-  tool: string;
-  kind: 'read' | 'mutation';
-  stage: AuditStage;
-  projectId?: string;
-  inputRedacted: unknown;
-  outputSummary: unknown;
-  approvalToken?: string;
-}): void {
+export function appendAuditEntry(
+  params: {
+    tool: string;
+    kind: 'read' | 'mutation';
+    stage: AuditStage;
+    projectId?: string;
+    inputRedacted: unknown;
+    outputSummary: unknown;
+    approvalToken?: string;
+  },
+  env: Env,
+): void {
   // Skip read entries if disabled
   if (!env.FORMA_AUDIT_INCLUDE_READS && params.kind === 'read') return;
 
+  const dir = env.FORMA_AUDIT_DIR;
+
   try {
-    ensureDir();
+    ensureDir(dir);
+    const prevHash = getLastHash(dir);
 
     // Build entry without this_hash first (needed for hash computation)
     const partial: Omit<AuditEntry, 'this_hash'> = {
@@ -120,16 +136,16 @@ export function appendAuditEntry(params: {
       input_redacted: redact(params.inputRedacted),
       output_summary: redact(params.outputSummary),
       ...(params.approvalToken !== undefined ? { approval_token: params.approvalToken } : {}),
-      prev_hash: lastHash,
+      prev_hash: prevHash,
     };
 
     // Strip prev_hash before hashing so the canonical form matches what
     // verifyChain reconstructs (it also strips prev_hash via destructuring).
     const { prev_hash: _ph, ...restForHash } = partial; void _ph;
-    const thisHash = computeHash(lastHash, restForHash);
+    const thisHash = computeHash(prevHash, restForHash);
     const entry: AuditEntry = { ...partial, this_hash: thisHash };
-    appendFileSync(todayLogFile(), JSON.stringify(entry) + '\n', { encoding: 'utf-8', mode: 0o600 });
-    lastHash = thisHash;
+    appendFileSync(todayLogFile(dir), JSON.stringify(entry) + '\n', { encoding: 'utf-8', mode: 0o600 });
+    lastHashByDir.set(dir, thisHash);
   } catch (err) {
     logger.error({ err }, 'Failed to write audit log entry');
     if (env.FORMA_AUDIT_FAIL_CLOSED) {
@@ -140,10 +156,12 @@ export function appendAuditEntry(params: {
 
 /**
  * Delete audit JSONL files older than FORMA_AUDIT_RETENTION_DAYS days.
- * Called once at startup; non-fatal on any error.
+ * Called once at startup; non-fatal on any error. Prunes both the root audit dir and, one
+ * level deep, any tenant subdirectory (FORMA_AUDIT_DIR/<tenantId>/) — no deeper recursion.
  */
-export function pruneOldAuditFiles(): void {
-  if (!existsSync(env.FORMA_AUDIT_DIR)) return;
+export function pruneOldAuditFiles(env: Env): void {
+  const dir = env.FORMA_AUDIT_DIR;
+  if (!existsSync(dir)) return;
 
   const cutoff = new Date();
   cutoff.setUTCDate(cutoff.getUTCDate() - env.FORMA_AUDIT_RETENTION_DAYS);
@@ -151,27 +169,41 @@ export function pruneOldAuditFiles(): void {
 
   let pruned = 0;
   try {
-    const files = readdirSync(env.FORMA_AUDIT_DIR).filter((f) =>
-      /^audit-\d{4}-\d{2}-\d{2}\.jsonl$/.test(f),
-    );
+    const entries = readdirSync(dir, { withFileTypes: true });
 
-    for (const file of files) {
-      const dateStr = file.slice('audit-'.length, -'.jsonl'.length);
-      const fileMs = new Date(`${dateStr}T00:00:00Z`).getTime();
-      if (isNaN(fileMs) || fileMs >= cutoffMs) continue;
-      try {
-        unlinkSync(join(env.FORMA_AUDIT_DIR, file));
-        pruned++;
-        logger.info({ file }, 'audit-log: pruned expired audit file');
-      } catch (err) {
-        logger.warn({ err, file }, 'audit-log: failed to delete expired audit file');
-      }
+    const auditFiles = entries
+      .filter((e) => e.isFile() && /^audit-\d{4}-\d{2}-\d{2}\.jsonl$/.test(e.name))
+      .map((e) => e.name);
+    pruned += pruneFilesInDir(dir, auditFiles, cutoffMs);
+
+    const subDirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+    for (const name of subDirs) {
+      const subDir = join(dir, name);
+      const subFiles = readdirSync(subDir).filter((f) => /^audit-\d{4}-\d{2}-\d{2}\.jsonl$/.test(f));
+      pruned += pruneFilesInDir(subDir, subFiles, cutoffMs);
     }
   } catch (err) {
-    logger.warn({ err, auditDir: env.FORMA_AUDIT_DIR }, 'audit-log: failed to read audit dir for pruning');
+    logger.warn({ err, auditDir: dir }, 'audit-log: failed to read audit dir for pruning');
   }
 
   if (pruned > 0) {
     logger.info({ pruned, retentionDays: env.FORMA_AUDIT_RETENTION_DAYS }, 'audit-log: retention prune complete');
   }
+}
+
+function pruneFilesInDir(dir: string, files: string[], cutoffMs: number): number {
+  let pruned = 0;
+  for (const file of files) {
+    const dateStr = file.slice('audit-'.length, -'.jsonl'.length);
+    const fileMs = new Date(`${dateStr}T00:00:00Z`).getTime();
+    if (isNaN(fileMs) || fileMs >= cutoffMs) continue;
+    try {
+      unlinkSync(join(dir, file));
+      pruned++;
+      logger.info({ file }, 'audit-log: pruned expired audit file');
+    } catch (err) {
+      logger.warn({ err, file }, 'audit-log: failed to delete expired audit file');
+    }
+  }
+  return pruned;
 }
