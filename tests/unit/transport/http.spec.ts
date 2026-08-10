@@ -1,11 +1,25 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
-import { startHttpServer } from '../../../src/transport/http.js';
 import type { ContextResolver } from '../../../src/transport/http.js';
 import type { Env } from '../../../src/config/env.js';
 import type { ToolContext } from '../../../src/tools/_types.js';
 import type { AuthProvider } from '../../../src/auth/index.js';
+
+/**
+ * config/env.js MUST be mocked before src/transport/http.js is imported: http.ts imports
+ * buildServer() from ../server.js, which transitively pulls in every tool file and the
+ * safety/* modules — several of those (safety/allowlist.ts among them) import the `env`
+ * singleton directly and read from it at module top level (e.g.
+ * `parseList(env.FORMA_ALLOWED_HUBS)`), which runs the moment the module is first loaded.
+ * A static top-level `import { startHttpServer } from '.../http.js'` would therefore load
+ * the real config/env.js (which THROWS when APS_CLIENT_ID/APS_CLIENT_SECRET are absent from
+ * process.env) before beforeAll() ever runs — failing this whole file in any environment
+ * without a populated .env, including a clean CI checkout. Same pattern as
+ * tests/unit/transport/e2e-tenants.spec.ts: vi.doMock (not vi.mock — needs no hoisting, and
+ * the fake env is only needed for this file's own dynamic import) + a dynamic import() of
+ * startHttpServer done AFTER the mock is registered.
+ */
 
 /**
  * Fake Env — only the fields startHttpServer / buildServer's registration path actually
@@ -79,6 +93,10 @@ describe('transport/http — startHttpServer (stateless streamable HTTP)', () =>
   let baseUrl: string;
 
   beforeAll(async () => {
+    vi.resetModules();
+    vi.doMock('../../../src/config/env.js', () => ({ env: makeEnv() }));
+    const { startHttpServer } = await import('../../../src/transport/http.js');
+
     httpServer = await startHttpServer(makeEnv(), fakeResolver);
     const { port } = httpServer.address() as AddressInfo;
     baseUrl = `http://127.0.0.1:${port}`;

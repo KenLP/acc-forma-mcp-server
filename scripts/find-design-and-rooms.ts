@@ -81,7 +81,7 @@ async function main(): Promise<void> {
           console.log(`                 Rooms count: ${rooms.length}`);
           const sample = rooms.slice(0, 10);
           for (const r of sample) {
-            const get = (n: string): unknown =>
+            const get = (n: string): string | number | boolean | null | undefined =>
               r.properties?.find((p) => p.name === n)?.value;
             const name = get('Name') ?? '(no Name)';
             const number = get('Number') ?? '(no Number)';

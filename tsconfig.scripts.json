@@ -1,0 +1,10 @@
+{
+  // Type-aware ESLint program for scripts/*.ts only (see eslint.config.js). Deliberately
+  // NOT merged into tsconfig.json's own `include` — `npm run typecheck` runs `tsc --noEmit`
+  // against tsconfig.json directly, and scripts/ has never been part of that surface (these
+  // are standalone CLI/diagnostic entry points, not library code consumed elsewhere). This
+  // file exists only so ESLint's type-aware rules have a program that contains scripts/*.ts.
+  "extends": "./tsconfig.json",
+  "include": ["scripts"],
+  "exclude": ["node_modules", "dist", "scripts/diag-*.ts", "scripts/test-*.ts", "scripts/probe-*.ts"]
+}

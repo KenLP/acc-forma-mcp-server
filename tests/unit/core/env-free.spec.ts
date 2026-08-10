@@ -32,6 +32,7 @@ describe('core subpath is env-free', () => {
       expect(core.aecdmApi.queryElementsByCategory).toBeTypeOf('function');
       expect(core.mcApi.resolveClashes).toBeTypeOf('function');
       expect(core.reviewsApi.listReviews).toBeTypeOf('function');
+      expect(core.ssaAdminApi.createServiceAccount).toBeTypeOf('function');
       expect(core.stripBPrefix('b.1234')).toBe('1234');
     } finally {
       for (const [key, value] of Object.entries(saved)) {
