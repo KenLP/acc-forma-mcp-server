@@ -1,0 +1,6 @@
+* text=auto
+
+# Shell scripts must keep LF even when checked out on Windows (core.autocrlf=true):
+# a CRLF shebang makes the container entrypoint fail with "no such file or directory".
+*.sh text eol=lf
+Dockerfile text eol=lf

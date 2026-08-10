@@ -1,20 +1,21 @@
 # fly.toml — acc-forma-mcp-server remote HTTP transport (SPEC_remote-mcp.md R1)
 #
-# `app` is a placeholder — rename before first `fly launch`/`fly deploy` (Fly app names are
-# globally unique). Not applied yet: this is R1 scaffolding, not a live deployment.
+# Public endpoint is https://mcp.bimlynx.com/mcp — the *.fly.dev hostname is an
+# implementation detail and must not be handed out to tenants (see docs/HANDOFF.md).
 #
 # Secrets (never put these here — set them out-of-band):
 #   fly secrets set \
-#     FORMA_MASTER_KEY=<64 hex chars, e.g. `openssl rand -hex 32`> \
+#     FORMA_MASTER_KEY=<64 hex chars — LOSING THIS ORPHANS EVERY TENANT ROBOT KEY> \
 #     APS_CLIENT_ID=<publisher APS app client id> \
 #     APS_CLIENT_SECRET=<publisher APS app client secret>
 #
-# One-time volume + deploy:
-#   fly apps create acc-forma-mcp
-#   fly volumes create forma_data --region sin --size 1
+# One-time setup:
+#   fly apps create bimlynx-mcp
+#   fly volumes create forma_data --region sin --size 1 --app bimlynx-mcp
 #   fly deploy
+#   fly certs add mcp.bimlynx.com            # then CNAME mcp -> bimlynx-mcp.fly.dev, DNS-only
 
-app = "acc-forma-mcp"
+app = "bimlynx-mcp"
 primary_region = "sin" # Singapore — closest Fly region to APAC; change to taste
 
 [build]

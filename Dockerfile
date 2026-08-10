@@ -34,6 +34,12 @@ RUN pnpm prune --prod
 FROM node:20-slim AS runtime
 WORKDIR /app
 
+# gosu lets the entrypoint chown the freshly mounted volume as root, then hand the server
+# process to the unprivileged user with a real exec (so signals still reach node).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gosu \
+    && rm -rf /var/lib/apt/lists/*
+
 # Non-root: the container only ever needs to read/write /app (read-only in practice) and
 # the /data volume (SQLite state + audit log).
 RUN groupadd --system forma \
@@ -44,6 +50,9 @@ RUN groupadd --system forma \
 COPY --from=build --chown=forma:forma /app/node_modules ./node_modules
 COPY --from=build --chown=forma:forma /app/dist ./dist
 COPY --chown=forma:forma package.json ./
+# chmod here rather than relying on the git exec bit — this repo is developed on Windows.
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Container default: remote multi-tenant HTTP mode with durable SQLite state on the mounted
 # volume. Fly secrets (FORMA_MASTER_KEY, APS_CLIENT_ID/SECRET, ...) are supplied at deploy
@@ -56,6 +65,8 @@ ENV NODE_ENV=production \
 
 EXPOSE 8080
 VOLUME ["/data"]
-USER forma
 
+# Deliberately NOT `USER forma`: the entrypoint needs root to chown the mounted volume, and
+# drops to `forma` via gosu before exec'ing the command below. The server never runs as root.
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "dist/index.js"]
