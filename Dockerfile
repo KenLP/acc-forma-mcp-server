@@ -24,6 +24,9 @@ RUN pnpm install --frozen-lockfile
 
 COPY tsconfig.json tsup.config.ts ./
 COPY src ./src
+# tsup builds dist/tenant-admin.js + dist/tenant-seed.js from here — without this the image
+# has no way to provision a tenant into the volume's state.db.
+COPY scripts ./scripts
 RUN npm run build
 
 # Drop devDependencies in place — this keeps the already-compiled better-sqlite3 binary

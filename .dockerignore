@@ -13,6 +13,12 @@ tests
 notes
 .claude
 
+# scripts/ IS copied (tsup builds the tenant CLIs from it), but the one-off diagnostic
+# scripts are local scratch — git-ignored, and nothing in the build references them.
+scripts/diag-*
+scripts/test-*
+scripts/probe-*
+
 # Local dev artifacts / secrets — never belongs in an image layer.
 *.pem
 .env
