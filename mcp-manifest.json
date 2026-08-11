@@ -1,14 +1,15 @@
 {
   "mcp_manifest_version": "1.0",
-  "app_model": "A",
+  "app_model": "C",
   "mcp_spec_version": "2025-11-25",
   "server": {
     "name": "acc-forma-mcp-server",
     "version": "0.1.4",
-    "transport": "stdio",
+    "transport": "streamable-http",
+    "url": "https://mcp.bimlynx.com/mcp",
     "repository": "https://github.com/KenLP/acc-forma-mcp-server",
     "license": "MIT",
-    "description": "MCP server exposing read and governed-write access to Autodesk Construction Cloud (ACC) and Autodesk Platform Services (APS) APIs — Data Management, Issues, Reviews, AEC Data Model, Model Derivative, Model Coordination, and Model Properties — for use by LLM agents in AEC/BIM QC and coordination workflows."
+    "description": "Remote (app_model C) MCP server, operated by the publisher at the URL above, exposing read and governed-write access to Autodesk Construction Cloud (ACC) and Autodesk Platform Services (APS) APIs — Data Management, Issues, Reviews, AEC Data Model, Model Derivative, Model Coordination, and Model Properties — for use by LLM agents in AEC/BIM QC and coordination workflows. Each customer is provisioned a dedicated Autodesk Secure Service Account (robot-per-tenant) and authenticates with a per-tenant bearer key. The same source (this repository) can alternatively be self-hosted over stdio transport by the operator; that mode is not part of this marketplace listing — see the repository README's 'Self-host (advanced)' section."
   },
   "tools": [
     { "name": "admin_list_projects", "description": "List the projects under a hub with account-admin metadata (status, type, dates, address), optionally filtered by status.", "mutating": false },
@@ -72,6 +73,11 @@
   "prompts": [],
   "external_endpoints": [
     {
+      "domain": "mcp.bimlynx.com",
+      "purpose": "The MCP server itself (this listing). The client connects here over Streamable HTTP; the server terminates the MCP session and, per request, calls the Autodesk endpoints listed below on the authenticated tenant's behalf. Hosted on Fly.io (Singapore region); TLS-only.",
+      "protocol": "https"
+    },
+    {
       "domain": "developer.api.autodesk.com",
       "purpose": "Autodesk Platform Services (APS) REST and GraphQL APIs: Account Admin, Data Management, Construction Issues, Construction Reviews, AEC Data Model, Model Derivative, Model Coordination, and Model Properties.",
       "protocol": "https"
@@ -102,9 +108,9 @@
   ],
   "ai_llm_providers": [],
   "auth": {
-    "type": "SSA (Secure Service Account)",
+    "type": "SSA (Secure Service Account), one dedicated robot per tenant",
     "modes_supported": ["ssa", "2lo"],
-    "notes": "SSA is a bot identity scoped per-project via Hub Admin > Custom Integrations; it is required for user-context APIs (Issues, Reviews, AEC Data Model, Model Coordination) and is the default for everything else. When APS_AUTH_MODE=ssa the server also mints a 2LO (app-only client-credentials) token, and the Account Admin, Data Management, Model Derivative and Docs viewables read tools use that one, because 2LO sees every project in the hub while SSA sees only the projects it is assigned to. The choice is made per tool at startup and is not a failover: a failed 2LO request is not retried under SSA. When APS_AUTH_MODE=2lo, no SSA token is minted and the tools requiring SSA are disabled. Credentials are supplied by the customer via environment variables; the server ships with no credentials. End-user OAuth (3LO) is not implemented in this release; it is planned for a later phase."
+    "notes": "This listing is the remote, publisher-operated deployment (app_model C) at server.url. Each customer (tenant) is provisioned its own Autodesk Secure Service Account — a bot identity created and owned by the publisher, added to the customer's hub via Hub Admin > Custom Integrations and invited as a project/hub member by the customer's own admin, who thereby controls exactly what the robot can see. The customer authenticates to this server with a single per-tenant bearer key (issued once at provisioning) sent as `Authorization: Bearer <key>`; the server maps that key to the tenant's robot and mints APS tokens on its behalf, per request. Robot private keys are stored server-side encrypted at rest (AES-256-GCM, a publisher-held master key); the bearer key itself is stored only as a SHA-256 hash, never in reusable form. End-user OAuth (3LO) is not offered in remote mode: 3LO would authenticate as an individual human across every project their Autodesk login can see, which defeats the per-tenant, admin-controlled isolation this deployment relies on. The same source code also supports self-hosting over stdio transport, in which case the operator supplies their own APS_CLIENT_ID/APS_CLIENT_SECRET and either SSA or 2LO credentials via environment variables (modes_supported reflects that self-host capability of the codebase); self-host is not part of this marketplace listing — see the repository README."
   },
   "security_controls": [
     "Two-step mutation flow (default FORMA_MUTATION_MODE=preview_required): a dry-run preview plus a payload-bound, single-use approval token are required before any mutating tool executes",

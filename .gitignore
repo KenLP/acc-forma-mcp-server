@@ -45,6 +45,8 @@ scripts/probe-*.ts
 # Research artifacts (downloaded SDK/HTML files from agent research passes)
 *.gen.cs
 *.html
+# ...but the landing page is a real deliverable, not a research artifact
+!site/*.html
 
 # Personal Claude Code skill configs and local session notes (not for public)
 skills/
@@ -53,3 +55,8 @@ CLAUDE.md
 
 # change-alert prototype runtime state
 prototypes/change-alert/.state.json
+
+# MCP Bundle (.mcpb) — packed output, rebuilt via bundle/README.md; bundle/server/node_modules
+# and bundle/server/package-lock.json are already covered by the node_modules/ and
+# package-lock.json rules above
+*.mcpb

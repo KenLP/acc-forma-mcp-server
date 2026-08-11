@@ -1,151 +1,127 @@
-# Privacy Policy — acc-forma-mcp-server
+# Privacy Policy — acc-forma-mcp-server / BIMLynx
 
-**Last updated:** 2026-07-17
-**Applies to:** `acc-forma-mcp-server` (all versions)
-**Publisher contact:** ken.lephuc@gmail.com
+**Last updated:** 2026-08-11
+**Applies to:** the hosted service at `https://mcp.bimlynx.com/mcp` (the primary subject of
+this policy) and the open-source `acc-forma-mcp-server` codebase when self-hosted (§0)
+**Publisher contact:** hello@bimlynx.com (general) · support@bimlynx.com (data requests) ·
+ken.lephuc@gmail.com
 
-## Summary
+## 0. Two ways to run this software — which one applies to you
 
-`acc-forma-mcp-server` is an open-source MCP server that **you run on your own machine or
-infrastructure**. It is not a hosted service.
+`acc-forma-mcp-server` is open-source (MIT). It can run two ways:
 
-**The publisher receives no data from you — none, ever.** There is no telemetry, no
-analytics, no usage reporting, no crash reporting, and no "phone home" of any kind. The
-software contacts only Autodesk's own APIs, using credentials that you supply, to do the
-work you ask of it.
+- **Hosted service ("BIMLynx", `mcp.bimlynx.com`)** — the publisher operates the server for
+  you. You connect your MCP client to a URL and authenticate with a bearer key issued to your
+  organization. **This is the mode almost all of this policy describes**, because it is the
+  mode with data flowing through infrastructure you do not control.
+- **Self-host** — you clone the repository and run the server yourself, on your own machine
+  or infrastructure, with your own Autodesk credentials. In this mode the publisher operates
+  nothing and receives nothing: every byte — credentials, project data, the audit log —
+  stays on your machine, under your control, exactly as this document described before the
+  hosted service existed. If you are self-hosting, skip to §6, which is the only section
+  written for that mode; everything else describes the hosted service.
 
-Everything below describes data handled **on your own machine, under your own control**.
+If you are unsure which applies to you: if you were given a bearer key and a URL by BIMLynx,
+you are using the hosted service. If you cloned the repository and supplied your own
+`APS_CLIENT_ID`/`SSA_*` credentials, you are self-hosting.
 
 ---
 
-## 1. What data the software handles, how, and why
+## 1. Hosted service — what data the software handles, how, and why
 
-### 1.1 Credentials you supply
+### 1.1 Tenant provisioning data
 
-You provide your own Autodesk Platform Services (APS) credentials through environment
-variables (`APS_CLIENT_ID`, `APS_CLIENT_SECRET`, `SSA_ID`, `SSA_KEY_ID`, `SSA_KEY_PATH`).
-
-- **How collected:** read from your process environment at startup. The software ships with
-  no credentials of its own.
-- **Used for:** obtaining an access token from Autodesk's token endpoint and authenticating
-  API calls, and nothing else.
-- **Never** written to disk by the software, never logged, never transmitted anywhere except
-  Autodesk (`developer.api.autodesk.com`).
-
-### 1.2 Autodesk project data
-
-When you invoke a tool, the software calls Autodesk APIs and returns the result to your MCP
-client. This may include project and account metadata, folders, files and versions, issues
-and comments, reviews, BIM element properties, clash results, and model version diffs —
-whatever the tool you invoked is for.
-
-- **How collected:** requested from Autodesk's APIs on your behalf, in direct response to a
-  tool call you (or your agent) makes.
-- **Used for:** producing that tool's result. It is held in memory for the duration of the
-  call and returned to your MCP client.
-- **Not stored** by the software, other than the audit-log record described in §1.3 and —
-  only if you enable SQLite persistence — the cached tool result described in §1.4.
-
-### 1.3 The local audit log
-
-Tool calls are appended to a local audit log — a JSONL file on your own machine. This is a
-deliberate safety feature: it lets you prove what an AI agent did.
-
-An entry is attempted for every tool invocation that reaches a tool handler, at whatever
-outcome it reached — executed, previewed, denied, or indeterminate. Three limits are worth
-stating plainly. A request rejected by the MCP protocol layer — malformed input, or an unknown
-tool name — never reaches a handler and is not logged; nothing is recorded because nothing was
-done, and no Autodesk data is touched on that path. `FORMA_AUDIT_INCLUDE_READS=false` excludes
-read-tool calls (mutations are always attempted). And because audit writes are fail-open by
-default, a call still proceeds if the log cannot be written — set `FORMA_AUDIT_FAIL_CLOSED=true`
-to have the call fail instead. Nothing is transmitted anywhere in any case; the file never
-leaves your machine.
-
-Each entry records:
+To provision your organization ("tenant") on the hosted service, the publisher creates a
+dedicated Autodesk Secure Service Account (a "robot") for you and stores:
 
 | Field | Content |
 |---|---|
-| `ts`, `id` | timestamp and a call id |
-| `tool`, `kind`, `stage` | which tool ran, whether it was a read or a mutation, and at what stage |
-| `actor` | `auth_mode` and your `ssa_id`. `user_email` exists in the schema but is **always `null`** in this release (it is reserved for a future end-user-login mode that is not implemented) |
-| `project_id` | the ACC project the call targeted |
-| `input_redacted` | the tool's inputs, **after** secret redaction (see below) |
-| `output_summary` | a short summary of the result |
-| `approval_token` | for mutating calls, a SHA-256 **fingerprint** of the approval token — the live token is never written to the audit log |
-| `prev_hash`, `this_hash` | SHA-256 hash chain linking entries so tampering is detectable |
+| Tenant name, robot email, service account id, key id | Identifying metadata for your robot |
+| Robot private key | Encrypted at rest (AES-256-GCM) with a publisher-held master key (`FORMA_MASTER_KEY`) — never stored or logged in plaintext |
+| Bearer key | Only its SHA-256 **hash** is stored. The live key is shown to you exactly once, at provisioning, and cannot be recovered from the stored hash |
 
-**Redaction before writing.** Inputs and outputs are passed through a redactor
-(`src/utils/redact.ts`) that removes bearer tokens, JWTs, `client_secret` values, live
-approval tokens (`appr_…` strings), and any field named `access_token`, `refresh_token`,
-`client_secret`, `password`, `authorization`, `x-api-key`, `api_key`, `private_key`,
-`assertion`, or `approval_token`.
+This is the credential architecture behind the "one bearer key per tenant, robot-per-tenant"
+model: your MCP client sends the bearer key, the server maps it to your robot, and mints
+Autodesk API tokens on your robot's behalf for that request. Source: `src/tenancy/robot-store.ts`,
+`src/tenancy/crypto.ts`.
 
-**Be aware:** redaction targets *secrets*, not *business content*. If you pass business data
-to a tool — for example an issue title or description — that content is recorded in
-`input_redacted`. Treat the audit directory with the same care as the project data itself.
+### 1.2 Autodesk project data — in transit, not retained as such
 
-- **Where:** `~/.acc-forma-mcp/audit` by default; configurable via `FORMA_AUDIT_DIR`.
-- **Who can read it:** only you. The server creates the audit directory with `0700` and each
-  log file with `0600` on POSIX systems, so other local users cannot read them; on Windows
-  the files inherit the parent directory's ACL. Nothing ever leaves your machine.
+When you invoke a tool, the server calls Autodesk APIs using your tenant's robot credentials
+and returns the result to your MCP client. This may include project and account metadata,
+folders, files and versions, issues and comments, reviews, BIM element properties, clash
+results, and model version diffs — whatever the tool you invoked is for.
+
+- **How collected:** requested from Autodesk's APIs on your behalf, in direct response to a
+  tool call you (or your agent) make.
+- **Used for:** producing that tool's result, then discarded. The server does not log,
+  index, or persist full tool outputs.
+- **Exception — idempotency cache:** if a mutation tool call supplies an `idempotency_key`
+  and `FORMA_PERSISTENCE_MODE=sqlite` is enabled (the hosted service's default), the server
+  caches that call's result for replay in case the same key is retried — see §1.4. This is
+  the one place a mutation's result (which can include Autodesk project/business data) is
+  written to disk, and it is short-lived (bounded by the approval-token TTL, default 300s).
+- **Audit log entries** (§1.3) record inputs (redacted) and a short output summary for every
+  call, not full outputs — that is the one durable record of what happened.
+
+### 1.3 The per-tenant audit log
+
+Every tool invocation that reaches a tool handler is appended to a hash-chained JSONL audit
+log, stored on the publisher's infrastructure under a directory scoped to your tenant
+(`FORMA_AUDIT_DIR/<tenantId>/`) — one tenant's chain is a separate file tree from another's.
+This is a deliberate safety feature: it lets you and the publisher verify what an AI agent
+did through your credentials.
+
+Each entry records: timestamp and call id; which tool ran and whether it was a read or a
+mutation; the actor (auth mode, your tenant's robot id); the ACC project targeted; the tool's
+inputs **after** secret redaction; a short output summary; for mutating calls, a SHA-256
+**fingerprint** of the approval token (never the live token); and the hash-chain fields
+linking entries so tampering is detectable.
+
+**Redaction before writing.** Inputs and outputs pass through a redactor (`src/utils/redact.ts`)
+that strips bearer tokens, JWTs, `client_secret` values, live approval tokens, and any field
+named `access_token`, `refresh_token`, `client_secret`, `password`, `authorization`,
+`x-api-key`, `api_key`, `private_key`, `assertion`, or `approval_token`. Redaction targets
+*secrets*, not *business content* — if a tool call includes an issue title or description,
+that content is recorded in `input_redacted`.
 
 ### 1.4 Approval tokens, rate counters, idempotency records
 
-By default (`FORMA_PERSISTENCE_MODE=memory`) approval tokens, rate-limit counters, and
-idempotency records are held **in memory only** and are discarded when the process exits.
-
-If you opt into `FORMA_PERSISTENCE_MODE=sqlite`, the same data is instead stored in a
-local SQLite database on your machine (default `~/.acc-forma-mcp/state.db`, configurable
-via `FORMA_DB_PATH`) so that restarts do not invalidate in-flight approvals:
+The hosted service runs `FORMA_PERSISTENCE_MODE=sqlite`, so this data is stored in a SQLite
+database on the publisher's infrastructure (the Fly.io volume backing the service — see
+§2), keyed per tenant:
 
 | Table | Contents |
 |---|---|
-| `approval_tokens` | live approval token ids, the tool name, a SHA-256 payload hash, expiry |
-| `rate_counters` | per-tool/per-project hourly counters |
+| `approval_tokens` | live approval token ids, tool name, a SHA-256 payload hash, expiry |
+| `rate_counters` | per-tenant/per-tool/per-project hourly counters |
 | `idempotency_records` | idempotency keys, tool name, payload hash, and the **cached tool result** — which can include Autodesk project/business data returned by that call |
 
-Approval tokens and idempotency records expire with the approval-token TTL; rate counters
-are keyed by the hour and stale buckets are discarded. All expired rows are purged at
-startup. Like the audit log, `state.db` never leaves your machine — treat it with the same
-care as project data. `state.db` is also created inside a `0700` directory, for the same
-reason as the audit directory above.
+All three expire with `FORMA_APPROVAL_TOKEN_TTL` (default 300 seconds) or, for rate
+counters, at the next hour boundary; expired rows are purged at server startup.
 
 ---
 
-## 2. Data shared with third parties
+## 2. Sub-processors — who else touches your data
 
-**The software shares your data with exactly one third party: Autodesk** — because calling
-Autodesk's APIs on your behalf is its entire purpose. Your use of Autodesk's services is
-governed by the [Autodesk Privacy Statement](https://www.autodesk.com/company/legal-notices-trademarks/privacy-statement).
+The hosted service has exactly two sub-processors, both necessary to its operation:
 
-Network destinations, in full:
-
-| Destination | Why | Direction |
+| Sub-processor | Role | Data involved |
 |---|---|---|
-| `developer.api.autodesk.com` | APS REST/GraphQL API calls and OAuth token requests | request + response |
-| `*.amazonaws.com` | Autodesk-issued pre-signed S3 URLs (short-lived, ~60 s) returned by the Model Coordination clash API, used to download clash-result files | **download only** — nothing is uploaded |
+| **Autodesk** | The APS/ACC APIs the server calls on your robot's behalf | Whatever Autodesk data your tool call requests or writes — governed by the [Autodesk Privacy Statement](https://www.autodesk.com/company/legal-notices-trademarks/privacy-statement) |
+| **Fly.io** | Hosts the server container and its persistent volume (region: Singapore) | Everything described in §1: tenant records, robot keys (encrypted), the audit log, approval tokens/rate counters/idempotency cache |
 
-Both destinations are Autodesk's own: the `*.amazonaws.com` URLs are pre-signed links that
-Autodesk itself issues, pointing at Autodesk's own storage hosted on AWS — not a separate
-vendor we chose. So the only party that
-receives your data is Autodesk, under the Autodesk Privacy Statement linked above — a level
-of protection at least equivalent to this policy, since the data is already theirs and the
-software adds no onward sharing of its own.
-
-There are **no other network destinations**. No analytics provider, no advertising network,
-no third-party SDK, no logging service, and no publisher-operated endpoint. The publisher
-operates no server and receives nothing.
+There are no other sub-processors: no analytics provider, no advertising network, no
+third-party logging or monitoring SDK, no data broker. Your data is not sold, and it is not
+used to train any model, by the publisher or otherwise.
 
 ### AI / LLM services
 
-The software **does not send data to any AI or LLM service.** It bundles no AI SDK or model,
-holds no AI provider credentials, and makes no calls to any AI provider.
-
-For clarity about how MCP works: the software returns tool results over a local `stdio`
-channel to the MCP client **you** run, and that client is typically an AI agent. Whether an
-AI model receives the data, and which provider that model belongs to, is determined entirely
-by your own choice of client, your configuration, and your consent with that provider. The
-software neither selects, contracts with, nor transmits to any AI provider.
+The server itself does not send data to any AI or LLM service — it bundles no AI SDK, holds
+no AI provider credentials, and makes no calls to any AI provider. It returns tool results
+over the MCP protocol to whichever client you configured; that client is typically an AI
+agent, and whether an AI model receives the data — and which provider — is determined by
+your own choice of client and your consent with that provider, not by this server.
 
 ---
 
@@ -153,51 +129,77 @@ software neither selects, contracts with, nor transmits to any AI provider.
 
 | Data | Retention |
 |---|---|
-| Credentials | Not retained. Held in process memory only; discarded on exit. |
-| Autodesk project data | Not retained. Held in memory for the duration of a call. |
-| Approval tokens, rate counters, idempotency records | Memory mode (default): discarded on exit. SQLite mode: stored in `state.db` on your machine until the approval-token TTL expires; expired rows are purged at startup. |
-| Audit log | Retained on **your** machine for **90 days by default**, then deleted automatically. Configurable via `FORMA_AUDIT_RETENTION_DAYS`. Old files are pruned at server startup (`pruneOldAuditFiles()`). |
-
-Because the publisher holds no data, there is nothing for the publisher to retain or delete.
+| Tenant record (robot identity, encrypted private key, bearer key hash) | Retained until you request tenant deletion (§4) or the publisher disables/removes the tenant |
+| Autodesk project data returned by a tool call | Not retained as such — see the idempotency-cache exception in §1.2 |
+| Approval tokens, rate counters, idempotency records | Expire with the approval-token TTL (default 300s) or hourly boundary; purged at server startup |
+| Audit log | **90 days by default** (`FORMA_AUDIT_RETENTION_DAYS`, `src/config/env.ts`), then deleted automatically by `pruneOldAuditFiles()`, scoped per tenant |
 
 ---
 
-## 4. Your control — revoking consent and deleting data
+## 4. Your control — revoking access and deleting data
 
-You are in full control at all times:
-
-- **Stop all data processing:** stop the server process, or remove it from your MCP client's
-  configuration.
-- **Revoke access to Autodesk data:** revoke or rotate the credentials you supplied (remove
-  the Secure Service Account from the project in ACC Hub Admin → Custom Integrations, and/or
-  delete the APS app or its keys in the APS Developer Portal). The software then has no
-  access to anything.
-- **Restrict access without revoking:** set `FORMA_ALLOWED_HUBS` / `FORMA_ALLOWED_PROJECTS`
-  to limit which hubs and projects the software may touch, and/or
-  `FORMA_MUTATION_MODE=readonly` to disable every write.
-- **Delete all stored data:** delete the audit directory (`~/.acc-forma-mcp/audit`, or your
-  `FORMA_AUDIT_DIR`), delete `state.db` if you enabled SQLite persistence
-  (`~/.acc-forma-mcp/state.db`, or your `FORMA_DB_PATH`), and unset the environment
-  variables. With the audit directory and state.db removed, nothing else is stored
-  anywhere — this is complete deletion.
-
-There is no publisher-side account, so there is no consent to withdraw from the publisher
-and no deletion request to file.
+- **Cut off Autodesk-layer access instantly, without the publisher:** your Autodesk hub
+  admin can remove the tenant robot from Hub Admin → Custom Integrations, or remove its
+  project/hub membership. This takes effect at Autodesk's own layer — it does not depend on
+  the publisher acting on your request, and it is the fastest way to guarantee the robot can
+  read nothing further.
+- **Request the tenant be disabled:** email support@bimlynx.com. Once disabled, the bearer
+  key is rejected immediately (checked locally on every request, before any Autodesk call is
+  made).
+- **Request permanent deletion of your tenant record and audit history:** email
+  support@bimlynx.com. This is a manual process on the publisher's side today — there is no
+  self-service deletion endpoint — so expect it to take a support turnaround, not be
+  instantaneous.
+- **What is not promised:** disabling a tenant does not guarantee an Autodesk access token
+  already issued to the robot is invalidated the instant you ask. Autodesk's own token
+  lifetime applies to any token minted before disablement (potentially up to roughly an
+  hour) — this has not been independently verified against a live token. If you need a hard
+  guarantee of zero further access, use the Autodesk-layer removal above; it is not
+  best-effort in the same way.
 
 ---
 
 ## 5. Children's privacy
 
-The software is a developer tool for professional AEC/BIM workflows. It is not directed at
-children and collects no data from anyone.
+The service is a developer/professional tool for AEC/BIM workflows. It is not directed at
+children and does not knowingly collect data from anyone under the age required by
+applicable law.
 
-## 6. Changes to this policy
+---
+
+## 6. Self-host mode
+
+If you clone the repository and run the server yourself with your own Autodesk credentials,
+none of §§1–4 apply — there is no publisher-operated infrastructure in the picture at all.
+
+**The publisher receives no data from you in this mode — none.** There is no telemetry, no
+analytics, no usage reporting, no crash reporting, and no "phone home" of any kind. The
+software contacts only Autodesk's own APIs, using credentials that you supply, to do the work
+you ask of it. Credentials are read from your process environment at startup and never
+written to disk by the software. Autodesk project data is held in memory for the duration of
+a call and returned to your MCP client — not stored, other than the local audit log (a JSONL
+file on your own machine, `~/.acc-forma-mcp/audit` by default) and, only if you opt into
+`FORMA_PERSISTENCE_MODE=sqlite`, a local `state.db` holding approval tokens, rate counters,
+and idempotency records (which can include cached tool results). Both files stay on your
+machine; nothing is transmitted anywhere except Autodesk (`developer.api.autodesk.com`,
+plus Autodesk-issued pre-signed S3 URLs for Model Coordination clash downloads).
+
+You are in full control: stop the process to stop all data processing; revoke or rotate your
+Autodesk credentials to cut off access entirely; delete the audit directory and `state.db`
+to delete everything the software ever wrote. There is no publisher-side account in this
+mode, so there is no consent to withdraw from the publisher and no deletion request to file
+— the data never left your machine.
+
+---
+
+## 7. Changes to this policy
 
 Material changes will be published in this file, with the "Last updated" date revised, and
 recorded in the repository's public commit history at
 <https://github.com/KenLP/acc-forma-mcp-server>.
 
-## 7. Contact
+## 8. Contact
 
-Questions about this policy: **ken.lephuc@gmail.com**, or open an issue at
+Questions about this policy, or requests under §4: **support@bimlynx.com** (data requests) ·
+**hello@bimlynx.com** (general) · or open an issue at
 <https://github.com/KenLP/acc-forma-mcp-server/issues>.

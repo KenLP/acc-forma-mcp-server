@@ -106,6 +106,31 @@ cat ~/.acc-forma-mcp/audit/audit-$(date +%F).jsonl | jq .
 change. Distinct from `failed_api`, which means the call definitively did not take effect.
 Treat these entries as "verify before retrying".
 
+## Remote mode isolation
+
+`FORMA_TRANSPORT=http` (the hosted service, and any self-hosted multi-tenant deployment)
+isolates customers differently than the allow-list does in local stdio mode:
+
+- **`FORMA_ALLOWED_HUBS` / `FORMA_ALLOWED_PROJECTS` stay `*` in remote mode.** Tenant
+  isolation is enforced by the tenant's own robot membership at the Autodesk API layer — each
+  tenant is a dedicated Secure Service Account, and it can only ever see the hubs/projects
+  its own hub admin has added it to. A project-scoping allow-list on top of that would not
+  add isolation between tenants (each robot already can't see another tenant's data); it
+  would only additionally break tools this server cannot bind to a Data Management id in the
+  first place.
+- **Consequence for `unmappable`-scope tools:** in local stdio mode, narrowing
+  `FORMA_ALLOWED_HUBS`/`FORMA_ALLOWED_PROJECTS` refuses every tool declared
+  `scope: {kind:'unmappable'}` (all `aecdm_*`, `md_*`, `docs_get_viewables`,
+  `issues_pin_element`, all `webhooks_*` — see "Allow-list scoping" in `CLAUDE.md`), because
+  their ids can't be checked against a narrowed list. In remote mode the allow-list is never
+  narrowed, so this refusal never triggers — those tools work normally, bounded only by what
+  the tenant's robot is actually a member of.
+- **What this does *not* change:** every other guardrail in the pipeline above (readonly
+  mode, rate governance, business rules, dry-run/approval, audit) applies identically in
+  remote mode, per tenant — see `src/tenancy/context.ts` (`buildTenantContext`) for how each
+  request gets its own `env`/`auth` scoped to one tenant before it ever reaches this
+  pipeline.
+
 ## Rate Governance Config
 
 Override default limits by setting `FORMA_RATE_CONFIG_PATH` to a JSON file:

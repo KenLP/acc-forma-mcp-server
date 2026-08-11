@@ -29,7 +29,94 @@
 
 ---
 
-## Quickstart
+## Use the hosted service
+
+The fastest way to use this server is the hosted instance the publisher operates at
+**`https://mcp.bimlynx.com/mcp`** — no APS app, no SSA setup, no local build. It's currently a
+private pilot: email **hello@bimlynx.com** to request a bearer key for your organization.
+Each customer gets a dedicated Autodesk Secure Service Account (robot-per-tenant), so your
+project access is isolated from every other tenant and controlled by your own hub admin —
+see [PRIVACY.md](PRIVACY.md) for exactly what the hosted service stores and for how long.
+Pricing: **Free** during the pilot.
+
+Once you have a bearer key, connect with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote)
+(this server speaks Streamable HTTP; `mcp-remote` bridges it to MCP clients that expect a
+local stdio process, such as Claude Desktop).
+
+**Claude Desktop / VS Code (macOS, Linux)**
+
+```json
+{
+  "mcpServers": {
+    "bimlynx": {
+      "command": "npx",
+      "args": [
+        "-y", "mcp-remote", "https://mcp.bimlynx.com/mcp",
+        "--header", "Authorization:Bearer YOUR_BEARER_KEY_HERE"
+      ]
+    }
+  }
+}
+```
+
+**Claude Desktop (Windows) — required workaround**
+
+On Windows, pointing `"command": "npx"` directly at `mcp-remote` **does not work**: recent
+Node versions wrap `.cmd` shims in `cmd.exe /C`, and `npx.cmd` lives under
+`C:\Program Files\nodejs\` — the command breaks at the space in the path
+(`'C:\Program' is not recognized`), and the server disconnects immediately. This is
+live-verified against the hosted service. Work around it with a `.cmd` wrapper file placed at
+a path **with no spaces**, saved as plain ASCII (no BOM — a BOM breaks the batch file too):
+
+`C:\Users\<you>\bimlynx-mcp.cmd`:
+
+```bat
+@echo off
+npx -y mcp-remote https://mcp.bimlynx.com/mcp --header "Authorization:Bearer %BIMLYNX_TOKEN%"
+```
+
+`claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "bimlynx": {
+      "command": "C:\\Users\\<you>\\bimlynx-mcp.cmd",
+      "env": { "BIMLYNX_TOKEN": "YOUR_BEARER_KEY_HERE" }
+    }
+  }
+}
+```
+
+The bearer key lives in `env` only — the `.cmd` file itself contains no secret, so it's safe
+to share or check in a dotfiles repo. Note there is no space after the colon in
+`Authorization:Bearer` — a plain space in that argument tends to get split apart by `cmd.exe`.
+
+**VS Code (MCP extension)** — `.vscode/mcp.json` in your workspace:
+
+```json
+{
+  "servers": {
+    "bimlynx": {
+      "command": "npx",
+      "args": [
+        "-y", "mcp-remote", "https://mcp.bimlynx.com/mcp",
+        "--header", "Authorization:Bearer YOUR_BEARER_KEY_HERE"
+      ]
+    }
+  }
+}
+```
+
+> Prefer to run your own instance instead of using the publisher's? The same code self-hosts
+> over stdio with your own Autodesk credentials — see "Self-host (advanced)" below.
+
+---
+
+## Self-host (advanced)
+
+Run the server yourself, on your own machine, with your own Autodesk credentials. In this
+mode nothing is shared with the publisher — see [PRIVACY.md §6](PRIVACY.md#6-self-host-mode).
 
 ### Step 1 — APS credentials (one-time)
 
@@ -125,11 +212,9 @@ Then point your MCP client at the built file:
 
 ---
 
-## Available Tools
-
 ## Tools (46)
 
-All tools are grouped by domain. Read tools take no approval; write/mutation tools (marked ✍️) follow the [two-call dry-run protocol](#safety) in the default mutation mode.
+All tools are grouped by domain. Read tools take no approval; write/mutation tools (marked ✍️) follow the [two-call dry-run protocol](#safety-guardrails) in the default mutation mode.
 
 ### Account Admin (4)
 
@@ -379,9 +464,19 @@ Key variables:
 
 ---
 
-## Remote / HTTP mode (opt-in)
+## Remote / HTTP mode
 
-The default is still local **stdio**, spawned by your MCP client as shown in Quickstart above. Set `FORMA_TRANSPORT=http` to instead run a stateless, multi-tenant HTTP server (one bearer key per tenant, each mapped to its own SSA robot) — for self-hosting the server for multiple people/orgs instead of running it per-machine. This is early (R1): local stdio behavior is unaffected either way. See `CLAUDE.md`'s "Remote mode (R1)" section and [docs/specs/SPEC_remote-mcp.md](docs/specs/SPEC_remote-mcp.md) for the full design, `Dockerfile`/`fly.toml` for deployment, and `scripts/tenant-seed.ts` / `scripts/tenant-admin.ts` (run them directly: `npx tsx scripts/tenant-admin.ts create --name "X"`) to provision tenants.
+This is the technology behind the hosted service at `https://mcp.bimlynx.com/mcp` (see "Use
+the hosted service" above): a stateless, multi-tenant HTTP server — one bearer key per
+tenant, each mapped to its own SSA robot. If you'd rather run this yourself instead of using
+the publisher's instance — for your own organization, or to self-host the multi-tenant setup
+for multiple people/orgs instead of one server per machine — set `FORMA_TRANSPORT=http`. The
+default for a self-hosted server remains local **stdio**, as shown in "Self-host (advanced)"
+above; setting `FORMA_TRANSPORT=http` does not change stdio behavior when you're not using it.
+See `CLAUDE.md`'s "Remote mode (R1)" section and [docs/specs/SPEC_remote-mcp.md](docs/specs/SPEC_remote-mcp.md)
+for the full design, `Dockerfile`/`fly.toml` for deployment, and `scripts/tenant-seed.ts` /
+`scripts/tenant-admin.ts` (run them directly: `npx tsx scripts/tenant-admin.ts create --name "X"`)
+to provision tenants.
 
 ---
 
@@ -428,11 +523,17 @@ pnpm run test:watch
 
 ## Privacy
 
-The publisher receives **no data** from you — no telemetry, no analytics, no phone-home. You
-run the server yourself with your own Autodesk credentials; it contacts only Autodesk's APIs,
-and the only things written to disk are a local audit log on your own machine (90-day default
+Two different pictures depending on how you use this server. **Hosted service**
+(`mcp.bimlynx.com`): project data passes through the publisher's infrastructure in transit
+to fulfil your tool calls; a per-tenant audit log, robot credentials (encrypted at rest), and
+short-TTL approval/idempotency state live there too — see
+**[PRIVACY.md](PRIVACY.md)** for exactly what's stored, the sub-processors involved
+(Autodesk, Fly.io), and how to revoke access or request deletion. **Self-host:** the
+publisher receives **no data** from you — no telemetry, no analytics, no phone-home. You run
+the server yourself with your own Autodesk credentials; it contacts only Autodesk's APIs, and
+the only things written to disk are a local audit log on your own machine (90-day default
 retention) and — only if you enable SQLite persistence — a local state.db for approval
-tokens/rate counters/idempotency records. See **[PRIVACY.md](PRIVACY.md)** for the full policy.
+tokens/rate counters/idempotency records.
 
 ## License
 

@@ -1,0 +1,10 @@
+{
+  "name": "bimlynx-mcpb-server",
+  "private": true,
+  "version": "0.1.4",
+  "description": "Bundled mcp-remote stdio-to-HTTP proxy that the BIMLynx .mcpb invokes with Claude Desktop's own Node.js runtime — no separate mcp-remote install or npx resolution at run time.",
+  "license": "MIT",
+  "dependencies": {
+    "mcp-remote": "0.1.38"
+  }
+}
