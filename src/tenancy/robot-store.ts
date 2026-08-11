@@ -127,6 +127,18 @@ export function listTenants(): TenantRecord[] {
   return rows.map(rowToRecord);
 }
 
+/**
+ * Tenants (active or already-disabled) whose robot points at the given APS service account.
+ * Used by the `delete-ssa` CLI safety check — before a service account is deleted on APS,
+ * any local tenant still referencing it must be disabled first, or its bearer key keeps
+ * authenticating (auth only checks the tenant row, never calls APS) even though the robot
+ * can no longer get a token. A plain filter over listTenants() rather than a new SQL query —
+ * the tenant table is small enough that this costs nothing extra.
+ */
+export function findTenantsByServiceAccountId(serviceAccountId: string): TenantRecord[] {
+  return listTenants().filter((t) => t.serviceAccountId === serviceAccountId);
+}
+
 export function disableTenant(id: string): void {
   const db = getDb();
   const result = db.prepare('UPDATE tenants SET disabled = 1 WHERE id = ?').run(id);

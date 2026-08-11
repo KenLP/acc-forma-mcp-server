@@ -13,6 +13,12 @@
  *   npx tsx scripts/tenant-admin.ts disable <tenantId>
  *   npx tsx scripts/tenant-admin.ts delete-ssa <serviceAccountId> --yes
  *
+ * delete-ssa first disables (locally) any tenant whose robot still references
+ * <serviceAccountId>, THEN deletes the service account on APS — same local-first,
+ * remote-second order as `disable`. Without this, a bearer key for an orphaned tenant keeps
+ * authenticating after the SA is gone: auth only checks the local tenant row, it never calls
+ * APS, so the gate stays open even though the robot can no longer get a token to read data.
+ *
  * Requires FORMA_MASTER_KEY, APS_CLIENT_ID, APS_CLIENT_SECRET in the environment — the
  * publisher's own app credentials, used to call the SSA management API as a 2-legged client
  * (NOT a tenant robot's own credential; this CLI manages the whole fleet of robots).
@@ -29,7 +35,12 @@ import {
   deleteServiceAccount,
   createServiceAccountKey,
 } from '../src/apis/ssa-admin.js';
-import { createTenant, listTenants, disableTenant } from '../src/tenancy/index.js';
+import {
+  createTenant,
+  listTenants,
+  disableTenant,
+  findTenantsByServiceAccountId,
+} from '../src/tenancy/index.js';
 
 function parseFlags(argv: string[]): Map<string, string> {
   const flags = new Map<string, string>();
@@ -185,6 +196,23 @@ async function cmdDeleteSsa(argv: string[]): Promise<void> {
   }
   if (!hasYes) {
     throw new Error('delete-ssa is destructive — pass --yes to confirm.');
+  }
+
+  // Local-first, remote-second — same order cmdDisable uses: cut off the bearer key before
+  // touching APS, so a failure mid-way leaves access already revoked rather than an SA gone
+  // with a still-live orphaned tenant.
+  const matchingTenants = findTenantsByServiceAccountId(serviceAccountId);
+  if (matchingTenants.length === 0) {
+    console.log(`No local tenant references service account ${serviceAccountId} — nothing to disable locally.`);
+  } else {
+    for (const tenant of matchingTenants) {
+      if (tenant.disabled) {
+        console.log(`Tenant ${tenant.id} (${tenant.name}) already disabled locally — skipping.`);
+        continue;
+      }
+      disableTenant(tenant.id);
+      console.log(`Tenant ${tenant.id} (${tenant.name}) disabled locally — its bearer key is rejected from now on.`);
+    }
   }
 
   const auth = buildAuth();

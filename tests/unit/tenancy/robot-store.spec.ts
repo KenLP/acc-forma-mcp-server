@@ -44,6 +44,7 @@ describe('tenancy/robot-store (SQLite)', () => {
     findTenantByBearerKey: typeof import('../../../src/tenancy/robot-store.js').findTenantByBearerKey;
     listTenants: typeof import('../../../src/tenancy/robot-store.js').listTenants;
     disableTenant: typeof import('../../../src/tenancy/robot-store.js').disableTenant;
+    findTenantsByServiceAccountId: typeof import('../../../src/tenancy/robot-store.js').findTenantsByServiceAccountId;
     getDb: typeof import('../../../src/persistence/db.js').getDb;
   }> {
     vi.doMock('../../../src/config/env.js', () => ({ env: dbEnv(dbPath) }));
@@ -121,5 +122,46 @@ describe('tenancy/robot-store (SQLite)', () => {
     const { createTenant } = await load(join(dir, 'state.db'));
     const noKeyEnv = {} as unknown as Env;
     expect(() => createTenant(input, noKeyEnv)).toThrow(/FORMA_MASTER_KEY/);
+  });
+
+  describe('findTenantsByServiceAccountId', () => {
+    it('finds the tenant whose robot references the given service account', async () => {
+      const { createTenant, findTenantsByServiceAccountId } = await load(join(dir, 'state.db'));
+      const { tenant } = createTenant(input, CALL_ENV);
+
+      const found = findTenantsByServiceAccountId(input.serviceAccountId);
+      expect(found.map((t) => t.id)).toEqual([tenant.id]);
+    });
+
+    it('returns an empty array when no tenant references the service account (orphan SA)', async () => {
+      const { createTenant, findTenantsByServiceAccountId } = await load(join(dir, 'state.db'));
+      createTenant(input, CALL_ENV);
+
+      expect(findTenantsByServiceAccountId('sa-does-not-exist')).toEqual([]);
+    });
+
+    it('still returns an already-disabled tenant (delete-ssa must not skip it silently)', async () => {
+      const { createTenant, disableTenant, findTenantsByServiceAccountId } = await load(
+        join(dir, 'state.db'),
+      );
+      const { tenant } = createTenant(input, CALL_ENV);
+      disableTenant(tenant.id);
+
+      const found = findTenantsByServiceAccountId(input.serviceAccountId);
+      expect(found).toHaveLength(1);
+      expect(found[0]?.disabled).toBe(true);
+    });
+
+    it('matches only the tenant with the exact service account id, not others', async () => {
+      const { createTenant, findTenantsByServiceAccountId } = await load(join(dir, 'state.db'));
+      createTenant(input, CALL_ENV);
+      const { tenant: other } = createTenant(
+        { ...input, robotEmail: 'other@acme.example', serviceAccountId: 'sa-other' },
+        CALL_ENV,
+      );
+
+      const found = findTenantsByServiceAccountId('sa-other');
+      expect(found.map((t) => t.id)).toEqual([other.id]);
+    });
   });
 });

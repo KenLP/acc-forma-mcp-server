@@ -26,7 +26,13 @@ export async function getContextForBearer(
 }
 
 // Re-exports for the seed CLI and tests.
-export { createTenant, findTenantByBearerKey, listTenants, disableTenant } from './robot-store.js';
+export {
+  createTenant,
+  findTenantByBearerKey,
+  listTenants,
+  disableTenant,
+  findTenantsByServiceAccountId,
+} from './robot-store.js';
 export type { CreateTenantInput } from './robot-store.js';
 export { buildTenantContext, _resetTenantContextCache } from './context.js';
 export { encryptSecret, decryptSecret } from './crypto.js';
