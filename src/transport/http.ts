@@ -145,6 +145,20 @@ export async function startHttpServer(
     res.status(200).json({ ok: true });
   });
 
+  // Humans (and marketplace reviewers) paste the bare host into a browser; Express's default
+  // 404 reads as a broken deployment. MCP clients only ever call /mcp, so this costs nothing.
+  app.get('/', (_req, res) => {
+    res
+      .status(200)
+      .type('text/plain')
+      .send(
+        'BIMLynx MCP server.\n\n' +
+          'MCP endpoint: POST /mcp (Streamable HTTP, bearer token required)\n' +
+          'Health check: GET /healthz\n' +
+          'Docs and access requests: https://bimlynx.com\n',
+      );
+  });
+
   app.post('/mcp', (req, res) => {
     void handleMcpPost(req, res, resolveContext);
   });

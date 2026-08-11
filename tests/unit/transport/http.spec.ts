@@ -114,6 +114,14 @@ describe('transport/http — startHttpServer (stateless streamable HTTP)', () =>
     expect(await res.json()).toEqual({ ok: true });
   });
 
+  it('GET / points a human at the MCP endpoint instead of a bare 404', async () => {
+    const res = await fetch(`${baseUrl}/`);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('/mcp');
+    expect(body).toContain('https://bimlynx.com');
+  });
+
   it('POST /mcp without an Authorization header returns 401', async () => {
     const res = await fetch(`${baseUrl}/mcp`, {
       method: 'POST',
