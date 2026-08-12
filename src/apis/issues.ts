@@ -321,17 +321,35 @@ export interface IssueAttrDefinition {
   metadata?: { list?: Array<{ id: string; value: string }> };
 }
 
+/** Raw item as returned by ACC, before the id field is normalized. */
+type RawAttrDefinition = Omit<IssueAttrDefinition, 'id'> & {
+  id?: string;
+  attributeDefinitionId?: string;
+};
+
+/**
+ * The endpoint is `issue-attribute-definitions`, NOT `issues/attrs` — the latter
+ * is routed by ACC to `issues/{issueId}` and rejected with
+ * `"issueId" must be a valid GUID`, which is how this tool failed for its whole
+ * life before 2026-08-12. Path verified live; the response envelope
+ * (`{pagination, results}`) was verified too, but the per-item id field could not
+ * be — the probe project has no custom attributes configured — so both spellings
+ * ACC uses elsewhere are accepted rather than guessed at.
+ */
 export async function listIssueAttrs(
   auth: AuthProvider,
   projectId: string,
 ): Promise<IssueAttrDefinition[]> {
   const pid = stripBPrefix(projectId);
-  const data = await apsRequest<{ results: IssueAttrDefinition[] }>(
+  const data = await apsRequest<{ results: RawAttrDefinition[] }>(
     auth,
-    `/construction/issues/v1/projects/${pid}/issues/attrs`,
+    `/construction/issues/v1/projects/${pid}/issue-attribute-definitions`,
     { baseUrl: APS_BASE },
   );
-  return data.results ?? [];
+  return (data.results ?? []).map((a) => ({
+    ...a,
+    id: a.id ?? a.attributeDefinitionId ?? '',
+  }));
 }
 
 // ---- Attachments ------------------------------------------------------------
