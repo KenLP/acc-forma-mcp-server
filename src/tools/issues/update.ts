@@ -73,6 +73,14 @@ const inputSchema = z.object({
     .string()
     .optional()
     .describe('Location node ID from the project location tree.'),
+  published: z
+    .boolean()
+    .optional()
+    .describe(
+      'Visibility of the issue. false = draft, visible only to its creator. ' +
+        'true = published, visible to all project members. Issues created with ' +
+        'published=false stay drafts until this field changes them.',
+    ),
 });
 
 type UpdateIssueInput = z.infer<typeof inputSchema>;
@@ -86,14 +94,15 @@ registerValidator<UpdateIssueInput>('issues_update', async (input, _ctx) => {
   // At least one field to update must be provided
   const updatableFields = [
     'status', 'issue_subtype_id', 'title', 'description', 'assigned_to',
-    'due_date', 'root_cause_id', 'location_id',
+    'due_date', 'root_cause_id', 'location_id', 'published',
   ] as const;
   const hasUpdate = updatableFields.some((f) => input[f] !== undefined);
   if (!hasUpdate) {
     throw new BusinessRuleError(
       'at_least_one_field_required',
       'issues_update requires at least one field to update ' +
-        '(status, title, description, assigned_to, due_date, root_cause_id, location_id).',
+        '(status, title, description, assigned_to, due_date, root_cause_id, ' +
+        'location_id, published).',
     );
   }
 
@@ -156,11 +165,16 @@ export const updateIssueTool: MutationToolDef<typeof inputSchema> = {
     if (input.due_date !== undefined) body['dueDate'] = input.due_date;
     if (input.root_cause_id !== undefined) body['rootCauseId'] = input.root_cause_id;
     if (input.location_id !== undefined) body['locationId'] = input.location_id;
+    if (input.published !== undefined) body['published'] = input.published;
 
     const changedFields = Object.keys(body).join(', ');
     const sideEffects = [
       `PATCH issue ${input.issue_id} in project ${pid}`,
       `Fields to update: ${changedFields}`,
+      ...(input.published === true
+        ? ['Visibility → published (visible to all project members)']
+        : []),
+      ...(input.published === false ? ['Visibility → draft (creator only)'] : []),
       ...(input.status ? [`Status → ${input.status}`] : []),
       ...(input.issue_subtype_id ? [`Subtype → ${input.issue_subtype_id}`] : []),
       ...(input.assigned_to
@@ -193,6 +207,7 @@ export const updateIssueTool: MutationToolDef<typeof inputSchema> = {
     if (input.due_date !== undefined) payload['dueDate'] = input.due_date;
     if (input.root_cause_id !== undefined) payload['rootCauseId'] = input.root_cause_id;
     if (input.location_id !== undefined) payload['locationId'] = input.location_id;
+    if (input.published !== undefined) payload['published'] = input.published;
 
     const issue = await updateIssue(
       ctx.auth,
