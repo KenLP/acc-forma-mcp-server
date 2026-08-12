@@ -108,6 +108,33 @@ to share or check in a dotfiles repo. Note there is no space after the colon in
 }
 ```
 
+### If a tool call times out
+
+A timeout means your client gave up waiting — it does **not** mean the action was
+cancelled. The server keeps going, and for a write that already reached the execute
+step, the change is made and recorded in the audit log even though no result came back.
+
+For reads, just ask again. For writes, do **not** guess and re-run blindly. Two options:
+
+- **Check first** — `meta_list_changelog` shows what actually happened, including calls
+  whose result never reached you.
+- **Retry safely** — pass an `idempotency_key` (any string you choose) on the first
+  attempt. If you repeat the call with the same key, the server recognises it and replays
+  the original result instead of performing the action twice. Reusing a key for a
+  *different* operation is rejected rather than silently accepted, so a copy-pasted key
+  can't quietly overwrite something else.
+
+Long-running tools are the usual cause. `mp_diff_versions` polls Autodesk for up to
+`wait_seconds`; if it runs out it returns a `diff_id`, and calling it again with that id
+picks the result up where it left off. Lowering `wait_seconds` keeps each call inside your
+client's timeout.
+
+One client-side quirk worth knowing: `mcp-remote` (the local bridge described above) can
+stop responding after a long call, and every later tool then times out even though the
+server is healthy. Restarting your MCP client respawns it. Restarting also refreshes the
+tool list — clients read it once when they connect, so newly added tools and fields only
+appear after a reconnect.
+
 > Prefer to run your own instance instead of using the publisher's? The same code self-hosts
 > over stdio with your own Autodesk credentials — see "Self-host (advanced)" below.
 

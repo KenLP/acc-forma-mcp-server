@@ -1,10 +1,10 @@
 {
   "manifest_version": "0.3",
   "name": "bimlynx",
-  "display_name": "BIMLynx â€” Autodesk Construction Cloud",
+  "display_name": "BIMLynx — Autodesk Construction Cloud",
   "version": "0.2.0",
   "description": "Connects Claude to Autodesk Construction Cloud (ACC/Forma) projects: issues, model data, clash detection, and document review, through the hosted BIMLynx MCP endpoint.",
-  "long_description": "BIMLynx bridges Claude to your Autodesk Construction Cloud (ACC/Forma) projects. Every write action is dry-run by default, requires explicit approval, and is recorded in a tamper-evident audit log. This connector talks to the hosted BIMLynx service (mcp.bimlynx.com) using a bearer key issued per organization â€” no local server setup or Autodesk credentials are stored on this machine.",
+  "long_description": "BIMLynx bridges Claude to your Autodesk Construction Cloud (ACC/Forma) projects. Every write action is dry-run by default, requires explicit approval, and is recorded in a tamper-evident audit log. This connector talks to the hosted BIMLynx service (mcp.bimlynx.com) using a bearer key issued per organization — no local server setup or Autodesk credentials are stored on this machine.",
   "author": {
     "name": "BIMLynx",
     "email": "hello@bimlynx.com",
@@ -53,7 +53,7 @@
     "bearer_key": {
       "type": "string",
       "title": "BIMLynx bearer key",
-      "description": "Issued per organization â€” contact hello@bimlynx.com",
+      "description": "Issued per organization — contact hello@bimlynx.com",
       "sensitive": true,
       "required": true
     }
