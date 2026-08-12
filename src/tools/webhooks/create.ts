@@ -68,10 +68,13 @@ export const webhooksCreateTool: MutationToolDef<typeof inputSchema> = {
     'URNs, issue contents) flows to the callback endpoint until the hook is deleted, with ' +
     'no further call from this server. Hooks are region-partitioned and are created under ' +
     'the server\'s configured APS_REGION. A duplicate callback URL for the same event and ' +
-    'scope is rejected by Autodesk with 409. Auth: 2-legged.',
+    'scope is rejected by Autodesk with 409. Requires 2-legged auth — a self-host ' +
+    'deployment feature, not available on the hosted multi-tenant service.',
   kind: 'mutation',
   scopes: ['data:read', 'data:write'],
   preferredAuth: '2lo',
+  requiredAuthModes: ['2lo'],
+  remoteEnabled: false,
   // A dm.* hook is scoped to a folder URN, which cannot be mapped back to a DM project id
   // — the same limitation that makes md_* and aecdm_* unmappable. Declaring the whole tool
   // unmappable (rather than 'dm', which would be true only for issue.* events) keeps the

@@ -13,8 +13,16 @@ export function buildServer(ctx: ToolContext): McpServer {
   });
 
   let registered = 0;
+  let skippedRemote = 0;
 
   for (const tool of toolRegistry) {
+    // remoteEnabled:false tools depend on an auth model (e.g. 2-legged) that the remote
+    // multi-tenant transport deliberately does not provide per-tenant — see _types.ts.
+    if (ctx.tenantId !== undefined && tool.remoteEnabled === false) {
+      skippedRemote++;
+      continue;
+    }
+
     const base = tool.inputSchema as z.ZodObject<z.ZodRawShape>;
 
     if (tool.kind === 'read') {
@@ -44,6 +52,9 @@ export function buildServer(ctx: ToolContext): McpServer {
     logger.debug({ tool: tool.name, kind: tool.kind }, 'Tool registered');
   }
 
+  if (skippedRemote > 0) {
+    logger.debug({ count: skippedRemote }, 'Tools skipped: remoteEnabled=false under remote transport');
+  }
   logger.info({ count: registered }, 'All tools registered');
   return server;
 }

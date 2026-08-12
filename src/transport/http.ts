@@ -18,6 +18,18 @@ export type ContextResolver = (bearerKey: string) => Promise<ToolContext | null>
 
 const BEARER_HEADER = /^Bearer\s+(.+)$/i;
 
+/**
+ * Cap on the POST /mcp request body, passed explicitly to express.json() instead of relying
+ * on body-parser's own default (100kb, undocumented at the call site otherwise). A JSON-RPC
+ * tool-call payload is normally a few KB — tool name, args, JSON-RPC framing; the largest
+ * single field across the whole tool surface is issues_create's `description`, capped at
+ * 10,000 chars by its own zod schema. 256kb leaves generous headroom above that while still
+ * bounding how much body-parser work an unauthenticated caller can trigger with one request.
+ * Kept as a named constant so the 413 error message below can state the limit without it
+ * drifting out of sync with the express.json() call that enforces it.
+ */
+const MCP_BODY_LIMIT = '256kb';
+
 function extractBearerKey(header: string | undefined): string | undefined {
   if (!header) return undefined;
   const match = BEARER_HEADER.exec(header);
@@ -43,6 +55,20 @@ function sendJsonRpcError(res: Response, status: number, code: number, message: 
  */
 function isBodyParseError(err: unknown): boolean {
   return err instanceof SyntaxError && (err as { type?: string }).type === 'entity.parse.failed';
+}
+
+/**
+ * express.json() rejects a body over MCP_BODY_LIMIT by throwing a PayloadTooLargeError (from
+ * the `raw-body` package body-parser delegates to) with this `type` and a real
+ * `statusCode: 413` on the error object — which the pre-existing catch-all branch in the
+ * error middleware below was discarding in favor of a generic 500. Narrowed on `type` (same
+ * approach as isBodyParseError) rather than an `instanceof`/error-name check, so this stays
+ * correct across raw-body versions without coupling to its exact class hierarchy.
+ */
+function isBodyTooLargeError(err: unknown): boolean {
+  return (
+    typeof err === 'object' && err !== null && (err as { type?: string }).type === 'entity.too.large'
+  );
 }
 
 function sendMethodNotAllowed(res: Response): void {
@@ -139,7 +165,7 @@ export async function startHttpServer(
   resolveContext: ContextResolver,
 ): Promise<Server> {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: MCP_BODY_LIMIT }));
 
   app.get('/healthz', (_req, res) => {
     res.status(200).json({ ok: true });
@@ -180,6 +206,20 @@ export async function startHttpServer(
     }
     if (isBodyParseError(err)) {
       sendJsonRpcError(res, 400, -32700, 'Parse error: request body is not valid JSON');
+      return;
+    }
+    if (isBodyTooLargeError(err)) {
+      // -32002 is in the JSON-RPC "server error" reserved band (-32000 to -32099), following
+      // this file's own precedent (-32000 for 405, -32001 for 401) rather than reusing a
+      // spec-defined code that means something else. The limit is stated in the message on
+      // purpose — it's actionable for the caller (send a smaller payload) and isn't sensitive,
+      // unlike the raw error object, which is intentionally NOT forwarded (no stack, no path).
+      sendJsonRpcError(
+        res,
+        413,
+        -32002,
+        `Request body exceeds the ${MCP_BODY_LIMIT} limit for POST /mcp`,
+      );
       return;
     }
     logger.error({ err }, 'Unhandled error in HTTP MCP transport middleware');

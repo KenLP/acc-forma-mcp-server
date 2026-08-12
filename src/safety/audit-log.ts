@@ -55,15 +55,24 @@ export interface AuditEntry {
   this_hash: string;
 }
 
-// Each audit directory is its own independent hash chain (one per tenant in remote mode —
-// env.FORMA_AUDIT_DIR is what the tenancy layer overrides per tenant, see CLAUDE.md). Keyed
-// by the resolved dir, lazily populated on first use per dir via loadLastHashFromFile below,
-// so a restart doesn't silently break any chain by resetting it to 'sha256:genesis'.
-const lastHashByDir = new Map<string, string>();
+// Each audit *file* is its own independent hash chain — entries roll into a new
+// audit-YYYY-MM-DD.jsonl per UTC day, and verifyChain (hash-chain.ts) verifies one file at a
+// time, requiring prev_hash === genesis at index 0. Caching lastHash per-*directory* (the
+// prior scheme) carried a stale hash across the UTC-midnight file rollover: a process alive
+// through midnight would write the new day's first entry with prev_hash = yesterday's last
+// hash instead of genesis, and verifyChain would flag it invalid. Keying by the resolved file
+// path (dir+date) instead makes each file start its own chain from genesis, matching what the
+// verifier actually checks. Lazily populated on first use per file via loadLastHashFromFile
+// below, so a restart doesn't silently break any chain by resetting it to 'sha256:genesis'.
+const lastHashByFile = new Map<string, string>();
+// One entry per directory currently being written to, tracking which file path is "current"
+// for it. Used only to evict the previous day's key from lastHashByFile as soon as a dir
+// rolls to a new file — without this, lastHashByFile would grow by one entry per
+// (audit dir × day) for the lifetime of the process (relevant with many tenant subdirs).
+const currentFileByDir = new Map<string, string>();
 
-function loadLastHashFromFile(dir: string): string {
+function loadLastHashFromFile(filePath: string): string {
   try {
-    const filePath = todayLogFile(dir);
     if (!existsSync(filePath)) return 'sha256:genesis';
     const content = readFileSync(filePath, 'utf-8');
     const lines = content.trimEnd().split('\n').filter(Boolean);
@@ -71,16 +80,22 @@ function loadLastHashFromFile(dir: string): string {
     const last = JSON.parse(lines[lines.length - 1]!) as { this_hash?: string };
     return typeof last.this_hash === 'string' ? last.this_hash : 'sha256:genesis';
   } catch (err) {
-    logger.warn({ err, auditDir: dir }, 'audit-log: failed to restore lastHash from file — chain will restart from genesis');
+    logger.warn({ err, auditFile: filePath }, 'audit-log: failed to restore lastHash from file — chain will restart from genesis');
     return 'sha256:genesis';
   }
 }
 
-function getLastHash(dir: string): string {
-  let hash = lastHashByDir.get(dir);
+function getLastHash(dir: string, filePath: string): string {
+  const prevFilePath = currentFileByDir.get(dir);
+  if (prevFilePath !== undefined && prevFilePath !== filePath) {
+    lastHashByFile.delete(prevFilePath);
+  }
+  currentFileByDir.set(dir, filePath);
+
+  let hash = lastHashByFile.get(filePath);
   if (hash === undefined) {
-    hash = loadLastHashFromFile(dir);
-    lastHashByDir.set(dir, hash);
+    hash = loadLastHashFromFile(filePath);
+    lastHashByFile.set(filePath, hash);
   }
   return hash;
 }
@@ -118,7 +133,8 @@ export function appendAuditEntry(
 
   try {
     ensureDir(dir);
-    const prevHash = getLastHash(dir);
+    const filePath = todayLogFile(dir);
+    const prevHash = getLastHash(dir, filePath);
 
     // Build entry without this_hash first (needed for hash computation)
     const partial: Omit<AuditEntry, 'this_hash'> = {
@@ -144,8 +160,8 @@ export function appendAuditEntry(
     const { prev_hash: _ph, ...restForHash } = partial; void _ph;
     const thisHash = computeHash(prevHash, restForHash);
     const entry: AuditEntry = { ...partial, this_hash: thisHash };
-    appendFileSync(todayLogFile(dir), JSON.stringify(entry) + '\n', { encoding: 'utf-8', mode: 0o600 });
-    lastHashByDir.set(dir, thisHash);
+    appendFileSync(filePath, JSON.stringify(entry) + '\n', { encoding: 'utf-8', mode: 0o600 });
+    lastHashByFile.set(filePath, thisHash);
   } catch (err) {
     logger.error({ err }, 'Failed to write audit log entry');
     if (env.FORMA_AUDIT_FAIL_CLOSED) {

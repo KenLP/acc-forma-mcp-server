@@ -24,11 +24,14 @@ export const webhooksListTool: ReadToolDef<typeof inputSchema> = {
     '(file/folder events) and ACC Issues. Each entry carries its hookId, event, delivery ' +
     'status, callback URL and scope. Hooks are partitioned by region: this returns only ' +
     'those created under the server\'s configured APS_REGION, so a hook created under a ' +
-    'different region will be absent rather than reported as an error. Auth: 2-legged ' +
-    '(the endpoint is defined for client-credentials tokens).',
+    'different region will be absent rather than reported as an error. Requires 2-legged ' +
+    'auth (the endpoint is defined only for client-credentials tokens) — a self-host ' +
+    'deployment feature, not available on the hosted multi-tenant service.',
   kind: 'read',
   scopes: ['data:read'],
   preferredAuth: '2lo',
+  requiredAuthModes: ['2lo'],
+  remoteEnabled: false,
   // Hooks are keyed by folder URN (Data Management) or project id (Issues), and the folder
   // URN cannot be mapped back to a DM project — the same limitation as md_* and aecdm_*.
   // Listing would also disclose which folders across the account carry hooks, so while an

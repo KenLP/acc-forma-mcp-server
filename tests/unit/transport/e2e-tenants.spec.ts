@@ -17,9 +17,9 @@ import type { Env } from '../../../src/config/env.js';
  *
  * No APS credentials are used anywhere in this file, and no call reaches a real Autodesk
  * endpoint: every tool exercised here either never touches ctx.auth (meta_list_changelog,
- * meta_verify_audit_chain — pure local JSONL readers; webhooks_delete's buildPreview, see the
- * "approval token isolation" describe below for why) or is rejected by the safety pipeline
- * BEFORE tool.execute() runs (case 5's cross-tenant token reuse).
+ * meta_verify_audit_chain — pure local JSONL readers; issues_add_comment's buildPreview, see
+ * the "approval token isolation" describe below for why) or is rejected by the safety
+ * pipeline BEFORE tool.execute() runs (case 5's cross-tenant token reuse).
  *
  * config/env.js MUST be mocked before any of transport/http.js, tenancy/index.js, or
  * persistence/db.js is imported: those modules (transitively: persistence/db.ts,
@@ -203,7 +203,7 @@ describe('transport/http e2e — bearer auth over real HTTP', () => {
 // ---- Case 2: tools/list --------------------------------------------------------
 
 describe('transport/http e2e — tools/list', () => {
-  it('a valid tenant bearer key lists all 46 registered tools', async () => {
+  it('a valid tenant bearer key lists all 43 registered tools (46 minus the 3 remoteEnabled:false webhooks tools)', async () => {
     const initRes = await rpc(bearerA, 'initialize', {
       protocolVersion: '2025-06-18',
       capabilities: {},
@@ -214,7 +214,8 @@ describe('transport/http e2e — tools/list', () => {
     const listRes = await rpc(bearerA, 'tools/list');
     expect(listRes.status).toBe(200);
     const body = (await listRes.json()) as JsonRpcSuccess<{ tools: Array<{ name: string }> }>;
-    expect(body.result.tools).toHaveLength(46);
+    expect(body.result.tools).toHaveLength(43);
+    expect(body.result.tools.map((t) => t.name)).not.toContain('webhooks_list');
   });
 });
 
@@ -334,11 +335,13 @@ describe('transport/http e2e — audit isolation across tenants', () => {
 // ---- Case 5: approval token isolation -----------------------------------------
 
 /**
- * webhooks_delete is the one mutation tool whose buildPreview (src/tools/webhooks/delete.ts)
- * is entirely APS-free: it only calls systemForEvent() (src/apis/webhooks.ts, a pure lookup
- * over the DM_EVENTS/ISSUE_EVENTS enums) to build a URL string, and never touches ctx.auth.
- * Every other mutation tool's buildPreview either calls an APS endpoint directly (issues_*,
- * reviews_*, webhooks_create resolve/validate against live data) or — like
+ * issues_add_comment is a mutation tool whose buildPreview (src/tools/issues/add-comment.ts)
+ * is entirely APS-free: it only formats a URL string and body from the input, and never
+ * touches ctx.auth. (webhooks_delete had the same property and was used here originally, but
+ * it is now remoteEnabled:false — see src/tools/_types.ts / src/server.ts — so it is not
+ * registered under this suite's remote transport at all and tools/call for it 404s before
+ * reaching buildPreview.) Every APS-scoped mutation tool's buildPreview either calls an APS
+ * endpoint directly (issues_create, issues_pin_element, reviews_*) or — like
  * md_trigger_translation — has no getProjectId to bind rate governance to, which is
  * irrelevant here since this test never reaches rate governance.
  *
@@ -350,16 +353,20 @@ describe('transport/http e2e — audit isolation across tenants', () => {
  * itself is broken, not a side effect of missing real APS access.
  */
 describe('transport/http e2e — approval token isolation across tenants', () => {
-  const payload = { event: 'dm.version.added', hook_id: 'hook-e2e-cross-tenant-test' };
+  const payload = {
+    project_id: 'b.e2e-cross-tenant-test',
+    issue_id: 'issue-e2e-cross-tenant-test',
+    body: 'e2e cross-tenant token isolation probe',
+  };
 
   it('tenant A\'s dry_run approval_token cannot be redeemed by tenant B', async () => {
-    const previewA = await callTool(bearerA, 'webhooks_delete', { ...payload, dry_run: true });
+    const previewA = await callTool(bearerA, 'issues_add_comment', { ...payload, dry_run: true });
     expect(previewA.isError).toBeFalsy();
     const { approval_token: token } = previewA.structuredContent as { approval_token: string };
     expect(typeof token).toBe('string');
     expect(token.length).toBeGreaterThan(0);
 
-    const executeAsB = await callTool(bearerB, 'webhooks_delete', {
+    const executeAsB = await callTool(bearerB, 'issues_add_comment', {
       ...payload,
       dry_run: false,
       approval_token: token,

@@ -22,10 +22,13 @@ export const webhooksDeleteTool: MutationToolDef<typeof inputSchema> = {
     'callback URL. This is the only way to end the egress a hook configures. Deletion is ' +
     'permanent: the hook cannot be restored, only recreated. Operates on the server\'s ' +
     'configured APS_REGION, so a hook created under a different region is not addressable ' +
-    'here. Auth: 2-legged.',
+    'here. Requires 2-legged auth — a self-host deployment feature, not available on the ' +
+    'hosted multi-tenant service.',
   kind: 'mutation',
   scopes: ['data:read', 'data:write'],
   preferredAuth: '2lo',
+  requiredAuthModes: ['2lo'],
+  remoteEnabled: false,
   // Addressed by hookId, which carries no hub or project id — nothing to check an
   // allow-list against. Same treatment as webhooks_create and the md_* tools.
   scope: { kind: 'unmappable', resource: 'webhook id' },

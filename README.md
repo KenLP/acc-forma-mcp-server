@@ -135,6 +135,10 @@ server is healthy. Restarting your MCP client respawns it. Restarting also refre
 tool list — clients read it once when they connect, so newly added tools and fields only
 appear after a reconnect.
 
+The hosted service also caps each request body at **256kb** — far above a normal tool call,
+which is usually a few KB of JSON. A request over that limit gets a `413` with a JSON-RPC
+error naming the limit, not a generic server error.
+
 > Prefer to run your own instance instead of using the publisher's? The same code self-hosts
 > over stdio with your own Autodesk credentials — see "Self-host (advanced)" below.
 
@@ -239,9 +243,9 @@ Then point your MCP client at the built file:
 
 ---
 
-## Tools (46)
+## Tools (46; 43 available on the hosted service)
 
-All tools are grouped by domain. Read tools take no approval; write/mutation tools (marked ✍️) follow the [two-call dry-run protocol](#safety-guardrails) in the default mutation mode.
+All tools are grouped by domain. Read tools take no approval; write/mutation tools (marked ✍️) follow the [two-call dry-run protocol](#safety-guardrails) in the default mutation mode. The 3 Webhooks tools require 2-legged auth and are self-host only — see the note in that section.
 
 ### Account Admin (4)
 
@@ -333,7 +337,9 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 |---|---|
 | `docs_get_viewables` | Resolve the ACC Docs-native **`viewableId`** (e.g. `"Layout1"`) and page/sheet name(s) for a document version URN, so you can place a 2D PDF pushpin (`issues_create` with `type=TwoDRasterPushpin`). This is the manifest `viewableID` field — **distinct from the SVF2 `guid`** returned by `md_get_manifest`, which the markups service rejects for raster PDF pins. `markupCapable: false` means the document has no Docs-native viewable yet (e.g. a raw PDF uploaded via the DM API that ACC has not processed — re-publish through ACC Docs or the Sheets API). |
 
-### Webhooks — event subscriptions (3)
+### Webhooks — event subscriptions (3, self-host only)
+
+> These 3 tools require 2-legged auth (client_credentials) — the hosted service deliberately never attaches a 2-legged provider per tenant, since 2LO would see every project in the hub and defeat tenant isolation. They register on stdio/self-host deployments (`APS_AUTH_MODE=2lo`) and are not part of the hosted `mcp.bimlynx.com` tool set.
 
 | Tool | Purpose |
 |---|---|

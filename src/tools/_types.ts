@@ -77,6 +77,14 @@ export interface ReadToolDef<TSchema extends z.ZodTypeAny> {
   preferredAuth?: '2lo';
   /** How this tool binds to the hub/project allow-list. Enforced by wrapReadTool. */
   scope: ToolScope;
+  /**
+   * Whether this tool is registered under the remote multi-tenant transport (R1,
+   * `ctx.tenantId !== undefined`). Omit (or `true`) = available on every transport. `false` =
+   * self-host/stdio only — for a tool whose auth model doesn't fit the per-tenant context,
+   * e.g. it requires 2-legged auth but `buildTenantContext` deliberately never attaches
+   * `auth2lo` (2LO sees every project in the hub, which would defeat tenant isolation).
+   */
+  remoteEnabled?: boolean;
   /** Extract the DM hub ID for the hub allow-list check. Required when scope.kind is 'dm'. */
   getHubId?: (input: z.infer<TSchema>) => string | undefined;
   /** Extract the DM project ID for the project allow-list check. Required when scope.kind is 'dm'. */
@@ -110,6 +118,14 @@ export interface MutationToolDef<TSchema extends z.ZodTypeAny> {
   preferredAuth?: '2lo';
   /** How this tool binds to the hub/project allow-list. Enforced by wrapMutationTool. */
   scope: ToolScope;
+  /**
+   * Whether this tool is registered under the remote multi-tenant transport (R1,
+   * `ctx.tenantId !== undefined`). Omit (or `true`) = available on every transport. `false` =
+   * self-host/stdio only — for a tool whose auth model doesn't fit the per-tenant context,
+   * e.g. it requires 2-legged auth but `buildTenantContext` deliberately never attaches
+   * `auth2lo` (2LO sees every project in the hub, which would defeat tenant isolation).
+   */
+  remoteEnabled?: boolean;
   inputSchema: TSchema;
   /** Extract hub ID for hub allow-list check */
   getHubId?: (input: z.infer<TSchema>) => string | undefined;

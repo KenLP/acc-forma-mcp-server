@@ -123,8 +123,13 @@ isolates customers differently than the allow-list does in local stdio mode:
   `scope: {kind:'unmappable'}` (all `aecdm_*`, `md_*`, `docs_get_viewables`,
   `issues_pin_element`, all `webhooks_*` — see "Allow-list scoping" in `CLAUDE.md`), because
   their ids can't be checked against a narrowed list. In remote mode the allow-list is never
-  narrowed, so this refusal never triggers — those tools work normally, bounded only by what
-  the tenant's robot is actually a member of.
+  narrowed, so this refusal never triggers for `aecdm_*`, `md_*`, `docs_get_viewables`, and
+  `issues_pin_element` — those tools work normally, bounded only by what the tenant's robot is
+  actually a member of. The 3 `webhooks_*` tools are a separate case: they are never
+  *registered* at all under remote transport (`remoteEnabled: false` — they require 2-legged
+  auth, which `buildTenantContext` deliberately never attaches per-tenant; see
+  "Allow-list scoping" in `CLAUDE.md` and `src/server.ts`), so the allow-list question does
+  not even arise for them in remote mode.
 - **What this does *not* change:** every other guardrail in the pipeline above (readonly
   mode, rate governance, business rules, dry-run/approval, audit) applies identically in
   remote mode, per tenant — see `src/tenancy/context.ts` (`buildTenantContext`) for how each

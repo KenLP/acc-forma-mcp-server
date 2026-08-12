@@ -145,7 +145,7 @@ describe('transport/http — startHttpServer (stateless streamable HTTP)', () =>
     expect(body.error.code).toBeTypeOf('number');
   });
 
-  it('POST /mcp with a valid Bearer key serves initialize then tools/list (46 tools)', async () => {
+  it('POST /mcp with a valid Bearer key serves initialize then tools/list (43 tools — remote transport excludes the 3 remoteEnabled:false webhooks tools)', async () => {
     const headers = { ...MCP_HEADERS, authorization: `Bearer ${VALID_BEARER_KEY}` };
 
     const initRes = await fetch(`${baseUrl}/mcp`, {
@@ -179,7 +179,7 @@ describe('transport/http — startHttpServer (stateless streamable HTTP)', () =>
     const listBody = (await listRes.json()) as JsonRpcSuccess<{
       tools: Array<{ name: string }>;
     }>;
-    expect(listBody.result.tools).toHaveLength(46);
+    expect(listBody.result.tools).toHaveLength(43);
   });
 
   it('GET /mcp returns 405 (stateless mode has no SSE resume stream)', async () => {
@@ -220,6 +220,41 @@ describe('transport/http — startHttpServer (stateless streamable HTTP)', () =>
 
     // The server must still be healthy after a malformed request — the error-handling
     // middleware must not have crashed the process or left it in a bad state.
+    const healthRes = await fetch(`${baseUrl}/healthz`);
+    expect(healthRes.status).toBe(200);
+  });
+
+  it('POST /mcp with a body over the 256kb limit returns 413 JSON-RPC error, not a leaked 500', async () => {
+    // Deliberately no Authorization header: express.json() still runs before the auth check
+    // (app-level app.use(express.json(...)), registered ahead of the /mcp route — see the
+    // "auth before parse" note in the implementation report), so an oversized body from an
+    // unauthenticated caller is rejected by body-parser at 413, not by the auth check at 401.
+    const oversizedBody = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: 'noop', arguments: { padding: 'x'.repeat(300 * 1024) } },
+    });
+
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: MCP_HEADERS,
+      body: oversizedBody,
+    });
+    expect(res.status).toBe(413);
+
+    const rawText = await res.text();
+    expect(rawText).not.toContain('node_modules');
+    expect(rawText).not.toContain('\\');
+    expect(rawText).not.toMatch(/at\s+\S+\s+\(/); // no stack-frame lines
+
+    const body = JSON.parse(rawText) as JsonRpcFailure;
+    expect(body.jsonrpc).toBe('2.0');
+    expect(body.error.code).toBeTypeOf('number');
+    expect(body.error.message).toContain('256kb');
+
+    // The server must still be healthy after an oversized request — same invariant as the
+    // malformed-JSON case above.
     const healthRes = await fetch(`${baseUrl}/healthz`);
     expect(healthRes.status).toBe(200);
   });

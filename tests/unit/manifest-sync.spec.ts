@@ -26,31 +26,48 @@ beforeAll(async () => {
 });
 
 /**
- * mcp-manifest.json is the Autodesk marketplace submission artifact. A mismatch between it
- * and the real tool set (a tool missing from the manifest, a stale entry for a removed
- * tool, or a wrong `mutating` flag) is a failure mode Autodesk explicitly flags in review.
- * This has drifted before and was only ever caught by hand — these tests catch it in CI.
+ * mcp-manifest.json is the Autodesk marketplace submission artifact for the HOSTED service
+ * (app_model C). It does not list every tool in the registry: tools declaring
+ * `remoteEnabled: false` (currently the 3 webhooks tools, which require 2-legged auth that
+ * the per-tenant remote transport deliberately never attaches — see src/tools/_types.ts and
+ * src/tenancy/context.ts) are self-host/stdio only and must be ABSENT from this manifest.
+ *
+ * A mismatch between the manifest and the hosted-eligible tool set (a hosted tool missing
+ * from the manifest, a stale entry for a removed/self-host-only tool, or a wrong `mutating`
+ * flag) is a failure mode Autodesk explicitly flags in review. This has drifted before and
+ * was only ever caught by hand — these tests catch it in CI.
  */
 describe('mcp-manifest.json stays in sync with the tool registry', () => {
   const manifest = JSON.parse(readFileSync('mcp-manifest.json', 'utf-8')) as {
     tools: ManifestTool[];
   };
 
-  it('the set of tool names in the manifest exactly equals the registry', () => {
+  it('the set of tool names in the manifest exactly equals the registry\'s hosted-eligible tools (remoteEnabled !== false)', () => {
     const manifestNames = new Set(manifest.tools.map((t) => t.name));
-    const registryNames = new Set(toolRegistry.map((t) => t.name));
+    const hostedRegistryNames = new Set(
+      toolRegistry.filter((t) => t.remoteEnabled !== false).map((t) => t.name),
+    );
 
-    const missingFromManifest = [...registryNames].filter((n) => !manifestNames.has(n)).sort();
-    const extraInManifest = [...manifestNames].filter((n) => !registryNames.has(n)).sort();
+    const missingFromManifest = [...hostedRegistryNames].filter((n) => !manifestNames.has(n)).sort();
+    const extraInManifest = [...manifestNames].filter((n) => !hostedRegistryNames.has(n)).sort();
 
     expect(
       missingFromManifest,
-      `tools in the registry but missing from mcp-manifest.json: ${JSON.stringify(missingFromManifest)}`,
+      `hosted-eligible tools in the registry but missing from mcp-manifest.json: ${JSON.stringify(missingFromManifest)}`,
     ).toEqual([]);
     expect(
       extraInManifest,
-      `tools in mcp-manifest.json but not in the registry (stale entries): ${JSON.stringify(extraInManifest)}`,
+      `tools in mcp-manifest.json but not hosted-eligible in the registry (stale or self-host-only entries): ${JSON.stringify(extraInManifest)}`,
     ).toEqual([]);
+  });
+
+  it('self-host-only tools (remoteEnabled: false) are absent from the hosted manifest', () => {
+    const manifestNames = new Set(manifest.tools.map((t) => t.name));
+    const selfHostOnly = toolRegistry.filter((t) => t.remoteEnabled === false).map((t) => t.name);
+
+    expect(selfHostOnly.length, 'expected at least one self-host-only tool (webhooks_*)').toBeGreaterThan(0);
+    const leaked = selfHostOnly.filter((n) => manifestNames.has(n));
+    expect(leaked, `self-host-only tools leaked into the hosted manifest: ${JSON.stringify(leaked)}`).toEqual([]);
   });
 
   it('every manifest tool\'s `mutating` flag matches the registry tool\'s `kind`', () => {
