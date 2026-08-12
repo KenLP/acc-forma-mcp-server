@@ -17,6 +17,19 @@ export interface TokenStore {
   set(tenantId: string, record: TokenRecord): void;
   get(tenantId: string, id: string): TokenRecord | undefined;
   delete(tenantId: string, id: string): void;
+  /**
+   * Atomically remove the record if present, reporting whether THIS call was the one that
+   * removed it (`true`) as opposed to finding it already gone (`false`). This is the
+   * single-use consumption primitive `verifyAndConsumeToken` uses for its final step — a
+   * plain get()-then-delete() pair (what this replaced) has a window between the two calls
+   * where a second caller can also observe the row via get() before either side deletes it.
+   * Within one Node process that window can't be entered (all of the calling code is
+   * synchronous, so nothing else runs between the get() and delete() of a single call), but
+   * multiple processes sharing one SQLite file are real concurrency — see
+   * SqliteTokenStore#consume. MemoryTokenStore#consume only exists so callers don't have to
+   * branch on backend; single-process semantics already made get()+delete() safe.
+   */
+  consume(tenantId: string, id: string): boolean;
 }
 
 // ---- Memory backend --------------------------------------------------------
@@ -31,6 +44,13 @@ class MemoryTokenStore implements TokenStore {
   set(tenantId: string, r: TokenRecord): void { this.map.set(this.key(tenantId, r.id), r); }
   get(tenantId: string, id: string): TokenRecord | undefined { return this.map.get(this.key(tenantId, id)); }
   delete(tenantId: string, id: string): void { this.map.delete(this.key(tenantId, id)); }
+
+  consume(tenantId: string, id: string): boolean {
+    const key = this.key(tenantId, id);
+    if (!this.map.has(key)) return false;
+    this.map.delete(key);
+    return true;
+  }
 
   gc(): void {
     const now = Date.now();
@@ -61,6 +81,19 @@ class SqliteTokenStore implements TokenStore {
 
   delete(tenantId: string, id: string): void {
     getDb().prepare('DELETE FROM approval_tokens WHERE tenant_id=? AND id=?').run(tenantId, id);
+  }
+
+  // A single DELETE is its own implicit transaction in SQLite (no explicit BEGIN needed) and
+  // the whole database is single-writer even under WAL, so two processes racing this
+  // statement are serialized by SQLite itself: the first to execute deletes the row and gets
+  // `changes: 1`; the second finds it already gone and gets `changes: 0`. No RETURNING clause
+  // needed — the caller already has the row's data from its own get() earlier and only needs
+  // a yes/no on which side won the race.
+  consume(tenantId: string, id: string): boolean {
+    const result = getDb()
+      .prepare('DELETE FROM approval_tokens WHERE tenant_id=? AND id=?')
+      .run(tenantId, id);
+    return result.changes === 1;
   }
 }
 

@@ -157,6 +157,65 @@ isolates customers differently than the allow-list does in local stdio mode:
   request gets its own `env`/`auth` scoped to one tenant before it ever reaches this
   pipeline.
 
+## Offboarding a tenant
+
+`disableTenant()` (`src/tenancy/robot-store.ts`) does exactly one thing: `UPDATE tenants SET
+disabled = 1 WHERE id = ?`. It does **not** evict anything from `tenantProviderCache`, the
+module-level `Map<string, SsaAuthProvider>` in `src/tenancy/context.ts` that holds each
+tenant's decrypted robot private key and cached access token for the lifetime of the server
+process. That is not an auth hole — `findTenantByBearerKey()` filters `WHERE disabled = 0`
+*before* a request ever reaches the cache, so a disabled tenant's bearer key is rejected at
+the lookup and the cached provider is never consulted. What it does leave open is narrower:
+(a) a request already past that lookup when `disable` runs completes normally — there is no
+mid-flight cancellation, and (b) the tenant's decrypted key material stays resident in the
+server's RAM until the process restarts.
+
+The CLI that runs `disable` (`tenant-admin.ts`) executes over `fly ssh console` — a
+**separate OS process** from the one serving `/mcp` requests. It has no way to reach into the
+live server process and clear its in-memory `Map`; only restarting that process does. This is
+why offboarding is a documented sequence rather than a single command:
+
+1. **`node dist/tenant-admin.js disable <tenantId>`** (via `fly ssh console -C "..." --app
+   bimlynx-mcp`, per the CLI note under "R2a" in `docs/HANDOFF.md`). New requests with this
+   tenant's bearer key are rejected immediately — the check happens locally, before any
+   Autodesk call.
+2. **Requests already in flight finish anyway.** There is no cancellation path once a call
+   has passed the disabled check; if that matters for a specific offboarding (e.g. a
+   compliance request with a hard cutoff time), wait out the longest tool timeout after step
+   1 before treating access as fully closed.
+3. **`fly machines restart --app bimlynx-mcp`** to flush `tenantProviderCache`. This clears
+   the decrypted private key and any cached APS access token for every tenant from RAM, not
+   just the one being offboarded — restart is process-wide, there is no per-tenant evict. The
+   CLI cannot do this step itself (see above); it must be run separately, and only matters if
+   the decrypted key sitting in RAM until next restart is a real concern for the request at
+   hand.
+4. **Permanent deletion, if the customer asks for it.** There is currently no CLI command for
+   this — `robot-store.ts` only exports `disableTenant()`, not a delete — so it is a manual
+   SQLite operation against `/data/state.db` on the volume (via `fly ssh console`, e.g. with a
+   short inline `node -e` script using `better-sqlite3`, since the image has no `sqlite3`
+   binary). Rows to remove, by table (see `src/persistence/db.ts` for the schema):
+   - `tenants` — `DELETE FROM tenants WHERE id = ?` (the tenant record itself: robot email,
+     service account id, key id, encrypted private key, bearer key hash).
+   - `approval_tokens`, `rate_counters`, `idempotency_records` — each keyed by a composite
+     `PRIMARY KEY (tenant_id, ...)`; `DELETE FROM <table> WHERE tenant_id = ?` on each. In
+     practice these usually expire on their own (TTL / hourly bucket) well before a deletion
+     request is actioned, but a request for "delete everything now" should not wait on that.
+   - Audit log — delete the tenant's whole subdirectory, `<FORMA_AUDIT_DIR>/<tenantId>/`
+     (`FORMA_AUDIT_DIR` defaults to `/data/audit` in the deployed container; see
+     `buildTenantContext` in `src/tenancy/context.ts` for how that path is derived from
+     `tenant.id`).
+
+   This path is manual and currently untested against the deployed volume — treat it as an
+   operator procedure to follow carefully on a live database, not a verified script. Do this
+   *after* step 3 (restart), not before: deleting the `tenants` row while the provider is
+   still cached does not itself invalidate anything already in memory.
+5. **Autodesk-layer removal (customer's own action, independent of all of the above).** The
+   customer's hub admin removes the robot from Hub Admin → Custom Integrations, or removes its
+   project/hub membership. This cuts access at the API layer regardless of what state this
+   server's database or process memory are in, and does not depend on the publisher having
+   completed any step above — see `PRIVACY.md` §4, which lists this as the fastest,
+   publisher-independent option.
+
 ## Rate Governance Config
 
 Override default limits by setting `FORMA_RATE_CONFIG_PATH` to a JSON file:

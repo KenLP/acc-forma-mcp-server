@@ -137,7 +137,10 @@ appear after a reconnect.
 
 The hosted service also caps each request body at **256kb** — far above a normal tool call,
 which is usually a few KB of JSON. A request over that limit gets a `413` with a JSON-RPC
-error naming the limit, not a generic server error.
+error naming the limit, not a generic server error. The bearer token is checked before the
+body is parsed at all, so this — like a malformed JSON body — only applies once you've
+presented a valid token; a request with no token or the wrong one gets a `401` regardless of
+what's in the body.
 
 > Prefer to run your own instance instead of using the publisher's? The same code self-hosts
 > over stdio with your own Autodesk credentials — see "Self-host (advanced)" below.
@@ -488,10 +491,10 @@ Key variables:
 | `FORMA_RATE_CONFIG_PATH` | — | JSON file overriding the built-in per-tool hourly limits |
 | `FORMA_AUDIT_DIR` | `~/.acc-forma-mcp/audit` | JSONL audit log directory |
 | `FORMA_AUDIT_INCLUDE_READS` | `true` | Set `false` to audit mutations only |
-| `FORMA_AUDIT_RETENTION_DAYS` | `90` | Audit files older than this are deleted at startup |
+| `FORMA_AUDIT_RETENTION_DAYS` | `90` | Audit files older than this are deleted on server start and at least once every 24 hours after that |
 | `FORMA_AUDIT_FAIL_CLOSED` | `false` | Surface audit write failures as errors. When `true` and the write fails after an APS mutation, the response indicates whether the change was applied. |
 | `FORMA_AUDIT_INDEX` | `none` | `none` or `sqlite` (`sqlite` not implemented yet) |
-| `FORMA_PERSISTENCE_MODE` | `memory` | `memory` or `sqlite`. `sqlite` keeps approval tokens, rate counters and idempotency records across restarts — see [PRIVACY.md](PRIVACY.md) for what it stores. ⚠️ `pnpm install` skips the `better-sqlite3` build script by default; run `pnpm approve-builds` first or this mode fails with "Could not locate bindings". |
+| `FORMA_PERSISTENCE_MODE` | `memory` | `memory` or `sqlite`. `sqlite` keeps approval tokens, rate counters and idempotency records across restarts — see [PRIVACY.md](PRIVACY.md) for what it stores. `better-sqlite3`'s native binding is built automatically on `pnpm install` (`pnpm.onlyBuiltDependencies` in `package.json` allows its build script); no extra step needed. |
 | `FORMA_DB_PATH` | `~/.acc-forma-mcp/state.db` | SQLite file, only used when `FORMA_PERSISTENCE_MODE=sqlite` |
 | `LOG_LEVEL` | `info` | `trace`, `debug`, `info`, `warn`, `error`, `fatal` |
 | `LOG_PRETTY` | `false` | Human-readable log output (stderr) |

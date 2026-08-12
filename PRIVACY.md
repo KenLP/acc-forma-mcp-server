@@ -143,6 +143,12 @@ There are no other sub-processors: no analytics provider, no advertising network
 third-party logging or monitoring SDK, no data broker. Your data is not sold, and it is not
 used to train any model, by the publisher or otherwise.
 
+**Why AWS is not listed here.** Model Coordination clash results are downloaded from
+pre-signed S3 URLs that Autodesk issues, pointing at Autodesk's own storage — which is why
+`*.amazonaws.com` appears in this server's declared endpoints. We hold no AWS account, store
+nothing there, and have no relationship with AWS: it is Autodesk's infrastructure, reached
+over a link Autodesk hands us. Your data's path is still the two parties named above.
+
 ### AI / LLM services
 
 The server itself does not send data to any AI or LLM service — it bundles no AI SDK, holds
@@ -160,7 +166,7 @@ your own choice of client and your consent with that provider, not by this serve
 | Tenant record (robot identity, encrypted private key, bearer key hash) | Retained until you request tenant deletion (§4) or the publisher disables/removes the tenant |
 | Autodesk project data returned by a tool call | Not retained as such — see the idempotency-cache exception in §1.2 |
 | Approval tokens, rate counters, idempotency records | Expire with the approval-token TTL (default 300s) or hourly boundary; purged at server startup |
-| Audit log | **90 days by default** (`FORMA_AUDIT_RETENTION_DAYS`, `src/config/env.ts`), then deleted automatically by `pruneOldAuditFiles()`, scoped per tenant |
+| Audit log | **90 days by default** (`FORMA_AUDIT_RETENTION_DAYS`, `src/config/env.ts`), then deleted automatically by `pruneOldAuditFiles()`, scoped per tenant. This prune runs on every server start **and at least once every 24 hours** for as long as the process keeps running — not only at startup |
 
 ---
 

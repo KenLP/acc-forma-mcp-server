@@ -78,7 +78,17 @@ export function verifyAndConsumeToken(
     );
   }
 
-  store.delete(tid, token); // single-use: consume immediately
+  // Atomic single-use consumption. A plain delete() here would leave a window (real only
+  // across processes sharing one SQLite file — see TokenStore#consume) where two callers
+  // both pass every check above off the same get() read and then both try to execute the
+  // mutation. consume() is a conditional delete that reports which caller actually removed
+  // the row; the loser must not proceed even though its own checks all passed.
+  if (!store.consume(tid, token)) {
+    throw new ApprovalError(
+      `Token "${token}" was already consumed by a concurrent request. ` +
+        `Call with dry_run=true again to get a new token.`,
+    );
+  }
 }
 
 /** Canonical payload hash — shared with the idempotency binding in _wrap.ts. */

@@ -202,10 +202,24 @@ describe('transport/http — startHttpServer (stateless streamable HTTP)', () =>
     expect(body.error.code).toBeTypeOf('number');
   });
 
-  it('POST /mcp with a malformed JSON body returns 400 JSON-RPC error, not a leaked stack trace', async () => {
+  it('POST /mcp with a malformed JSON body and NO Authorization header returns 401, not 400 (auth is checked before the body is parsed — A6)', async () => {
+    // requireBearer is mounted ahead of express.json() on the /mcp route (src/transport/
+    // http.ts), so an unauthenticated caller never reaches the parser at all — the body's
+    // validity is irrelevant until a valid bearer key has been presented.
     const res = await fetch(`${baseUrl}/mcp`, {
       method: 'POST',
       headers: MCP_HEADERS,
+      body: '{not json!!',
+    });
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as JsonRpcFailure;
+    expect(body.error.code).toBeTypeOf('number');
+  });
+
+  it('POST /mcp with a malformed JSON body and a valid Bearer key returns 400 JSON-RPC error, not a leaked stack trace', async () => {
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { ...MCP_HEADERS, authorization: `Bearer ${VALID_BEARER_KEY}` },
       body: '{not json!!',
     });
     expect(res.status).toBe(400);
@@ -224,11 +238,7 @@ describe('transport/http — startHttpServer (stateless streamable HTTP)', () =>
     expect(healthRes.status).toBe(200);
   });
 
-  it('POST /mcp with a body over the 256kb limit returns 413 JSON-RPC error, not a leaked 500', async () => {
-    // Deliberately no Authorization header: express.json() still runs before the auth check
-    // (app-level app.use(express.json(...)), registered ahead of the /mcp route — see the
-    // "auth before parse" note in the implementation report), so an oversized body from an
-    // unauthenticated caller is rejected by body-parser at 413, not by the auth check at 401.
+  it('POST /mcp with an oversized body and NO Authorization header returns 401, not 413 (auth is checked before the body is parsed — A6)', async () => {
     const oversizedBody = JSON.stringify({
       jsonrpc: '2.0',
       id: 1,
@@ -239,6 +249,24 @@ describe('transport/http — startHttpServer (stateless streamable HTTP)', () =>
     const res = await fetch(`${baseUrl}/mcp`, {
       method: 'POST',
       headers: MCP_HEADERS,
+      body: oversizedBody,
+    });
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as JsonRpcFailure;
+    expect(body.error.code).toBeTypeOf('number');
+  });
+
+  it('POST /mcp with a body over the 256kb limit AND a valid Bearer key returns 413 JSON-RPC error, not a leaked 500', async () => {
+    const oversizedBody = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: 'noop', arguments: { padding: 'x'.repeat(300 * 1024) } },
+    });
+
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { ...MCP_HEADERS, authorization: `Bearer ${VALID_BEARER_KEY}` },
       body: oversizedBody,
     });
     expect(res.status).toBe(413);

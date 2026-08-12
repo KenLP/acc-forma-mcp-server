@@ -80,35 +80,70 @@ function sendMethodNotAllowed(res: Response): void {
   );
 }
 
-async function handleMcpPost(
-  req: Request,
-  res: Response,
-  resolveContext: ContextResolver,
-): Promise<void> {
-  const bearerKey = extractBearerKey(req.headers.authorization);
-  if (!bearerKey) {
-    res.set('WWW-Authenticate', 'Bearer');
-    sendJsonRpcError(
-      res,
-      401,
-      -32001,
-      'Missing or malformed Authorization header — expected "Bearer <key>"',
-    );
-    return;
-  }
+/**
+ * `req` carries the resolved ToolContext from `requireBearer` to `handleMcpPost` across the
+ * intervening `express.json()` middleware — plain property assignment on the same req object
+ * every handler in the chain receives, not a new mechanism.
+ */
+interface RequestWithContext extends Request {
+  toolContext?: ToolContext;
+}
 
-  let ctx: ToolContext | null;
-  try {
-    ctx = await resolveContext(bearerKey);
-  } catch (err) {
-    logger.error({ err }, 'Context resolver threw while authenticating an HTTP MCP request');
-    if (!res.headersSent) sendJsonRpcError(res, 500, -32603, 'Internal server error');
-    return;
-  }
+/**
+ * Auth-before-parse gate for POST /mcp (audit remediation A6, 2026-08-12). Mounted ahead of
+ * express.json() in the route chain (see startHttpServer below) so an unauthenticated caller
+ * is rejected before the server does any work parsing whatever body it sent — a malformed or
+ * oversized body from a caller who never presented a valid bearer key now surfaces as 401,
+ * not 400/413. This is a deliberate, documented change in error semantics, not a relaxation:
+ * a caller who HAS a valid bearer key still gets the previous 400 (malformed JSON) or 413
+ * (over MCP_BODY_LIMIT) behavior — see tests/unit/transport/http.spec.ts.
+ *
+ * On success, stashes the resolved context on `req` (RequestWithContext) instead of
+ * returning it, because Express middleware signatures don't have a return channel back to
+ * the route — the next handler in the chain reads it off `req`.
+ */
+function requireBearer(resolveContext: ContextResolver) {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const bearerKey = extractBearerKey(req.headers.authorization);
+    if (!bearerKey) {
+      res.set('WWW-Authenticate', 'Bearer');
+      sendJsonRpcError(
+        res,
+        401,
+        -32001,
+        'Missing or malformed Authorization header — expected "Bearer <key>"',
+      );
+      return;
+    }
 
+    let ctx: ToolContext | null;
+    try {
+      ctx = await resolveContext(bearerKey);
+    } catch (err) {
+      logger.error({ err }, 'Context resolver threw while authenticating an HTTP MCP request');
+      if (!res.headersSent) sendJsonRpcError(res, 500, -32603, 'Internal server error');
+      return;
+    }
+
+    if (!ctx) {
+      res.set('WWW-Authenticate', 'Bearer');
+      sendJsonRpcError(res, 401, -32001, 'Invalid bearer key');
+      return;
+    }
+
+    (req as RequestWithContext).toolContext = ctx;
+    next();
+  };
+}
+
+async function handleMcpPost(req: Request, res: Response): Promise<void> {
+  // requireBearer runs ahead of this handler in the route chain (see startHttpServer) and
+  // never calls next() without setting this — a missing context here would mean the route
+  // was wired up wrong, not a caller-facing auth failure, hence the 500 rather than 401.
+  const ctx = (req as RequestWithContext).toolContext;
   if (!ctx) {
-    res.set('WWW-Authenticate', 'Bearer');
-    sendJsonRpcError(res, 401, -32001, 'Invalid bearer key');
+    logger.error('handleMcpPost reached without a resolved ToolContext — route wiring bug');
+    if (!res.headersSent) sendJsonRpcError(res, 500, -32603, 'Internal server error');
     return;
   }
 
@@ -165,7 +200,8 @@ export async function startHttpServer(
   resolveContext: ContextResolver,
 ): Promise<Server> {
   const app = express();
-  app.use(express.json({ limit: MCP_BODY_LIMIT }));
+  // No app-level express.json() — body parsing for /mcp is mounted per-route, after auth,
+  // below. /healthz and GET / never touch req.body, so they don't need a parser at all.
 
   app.get('/healthz', (_req, res) => {
     res.status(200).json({ ok: true });
@@ -185,9 +221,19 @@ export async function startHttpServer(
       );
   });
 
-  app.post('/mcp', (req, res) => {
-    void handleMcpPost(req, res, resolveContext);
-  });
+  // Order is load-bearing: requireBearer (auth) -> express.json() (parse) -> handleMcpPost.
+  // A caller without a valid bearer key never reaches the parser at all — see requireBearer's
+  // doc comment for why that's a deliberate 401-before-400/413 change, not a relaxation.
+  app.post(
+    '/mcp',
+    (req, res, next) => {
+      void requireBearer(resolveContext)(req, res, next);
+    },
+    express.json({ limit: MCP_BODY_LIMIT }),
+    (req, res) => {
+      void handleMcpPost(req, res);
+    },
+  );
 
   // Stateless mode has no session to resume (GET, for the SSE stream) or terminate
   // (DELETE) — both are unsupported, per the SDK's own stateless-mode example.
@@ -195,10 +241,11 @@ export async function startHttpServer(
   app.delete('/mcp', (_req, res) => sendMethodNotAllowed(res));
 
   // Error-handling middleware (4-arg signature — Express dispatches by arity). Must be
-  // registered after every route/app.use above, including express.json(): a malformed body
-  // makes express.json() call next(err) BEFORE any route handler runs, and without this
+  // registered after every route above, including the /mcp route's express.json() call: a
+  // malformed or oversized body makes express.json() call next(err), and without this
   // Express's own default handler would answer with an HTML page containing the stack trace
-  // and filesystem paths — before the request ever reaches the Authorization check.
+  // and filesystem paths. By the time express.json() ever runs, requireBearer has already
+  // accepted the caller's bearer key — see the ordering note on the /mcp route below.
   app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
     if (res.headersSent) {
       next(err);

@@ -1,5 +1,6 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { env } from './config/env.js';
+import type { Env } from './config/env.js';
 import { SsaAuthProvider } from './auth/ssa.js';
 import { TwoLeggedAuthProvider } from './auth/two-legged.js';
 import type { AuthProvider } from './auth/index.js';
@@ -11,6 +12,28 @@ import { pruneOldAuditFiles } from './safety/audit-log.js';
 import { cleanupExpiredRows } from './persistence/db.js';
 import { startHttpServer } from './transport/http.js';
 import type { ToolContext } from './tools/_types.js';
+
+/** Re-run interval for pruneOldAuditFiles() after the startup run — see schedulePeriodicAuditPrune(). */
+const AUDIT_PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
+
+/**
+ * Runs the audit-retention prune once immediately (startup, unchanged) and then again every
+ * 24h for the rest of the process's life. PRIVACY.md promises files older than
+ * FORMA_AUDIT_RETENTION_DAYS are "deleted automatically" — a startup-only prune only
+ * re-executes when the process restarts, which is not guaranteed: Fly's auto-stop/auto-start
+ * topology makes restarts frequent in practice, but a tenant with steady traffic can keep a
+ * machine warm (and therefore un-pruned) for months. `.unref()` so this timer never keeps a
+ * process alive on its own — stdio must still exit the moment its client disconnects, and an
+ * http machine must stay eligible for Fly's auto-stop when idle. pruneOldAuditFiles() already
+ * catches and logs its own errors internally (it never throws), so no extra try/catch is
+ * needed here — same as the existing setInterval-based cleanups in
+ * persistence/token-store.ts (MemoryTokenStore gc) and safety/rate-governance.ts
+ * (pruneStale), which follow the identical bare-setInterval(...).unref() shape.
+ */
+function schedulePeriodicAuditPrune(currentEnv: Env): void {
+  pruneOldAuditFiles(currentEnv);
+  setInterval(() => pruneOldAuditFiles(currentEnv), AUDIT_PRUNE_INTERVAL_MS).unref();
+}
 
 /**
  * Sets up the approval-token/rate-counter/idempotency-record persistence backend. Shared by
@@ -52,7 +75,7 @@ function setupPersistence(): void {
  * FORMA_TRANSPORT=http).
  */
 async function runHttp(): Promise<void> {
-  pruneOldAuditFiles(env);
+  schedulePeriodicAuditPrune(env);
   setupPersistence();
 
   // Dynamic import (not a static one) so the stdio path's module graph never pulls in
@@ -95,7 +118,7 @@ async function runStdio(): Promise<void> {
       throw new Error(`Unsupported APS_AUTH_MODE: ${String(env.APS_AUTH_MODE)}`);
   }
 
-  pruneOldAuditFiles(env);
+  schedulePeriodicAuditPrune(env);
   setupPersistence();
 
   const ctx: ToolContext = {
