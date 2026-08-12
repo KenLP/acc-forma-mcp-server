@@ -12,6 +12,7 @@ import { runBusinessRules, BusinessRuleError } from '../safety/business-rules.js
 import { buildDryRunPreview } from '../safety/dry-run.js';
 import { verifyAndConsumeToken, ApprovalError, hashPayload, fingerprintToken } from '../safety/approval.js';
 import { appendAuditEntry, AuditPersistenceError } from '../safety/audit-log.js';
+import { summarizeForAudit } from '../safety/audit-summary.js';
 import { checkIdempotency, storeIdempotencyResult, IdempotencyError } from '../safety/idempotency.js';
 import { ApsApiError, ApsIndeterminateError } from '../http/errors.js';
 import type { Env } from '../config/env.js';
@@ -173,8 +174,8 @@ type MutationInput<T extends z.ZodTypeAny> = z.infer<T> & {
   idempotency_key?: string;
 };
 
-export function wrapMutationTool<T extends z.ZodTypeAny>(
-  tool: MutationToolDef<T>,
+export function wrapMutationTool<T extends z.ZodTypeAny, TPayload = unknown>(
+  tool: MutationToolDef<T, TPayload>,
   ctx: ToolContext,
 ): (input: MutationInput<T>) => Promise<McpToolResult> {
   return async (rawInput: MutationInput<T>) => {
@@ -325,8 +326,11 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
         verifyAndConsumeToken(approval_token, tool.name, preview.executePayload, ctx.env, ctx.tenantId);
       }
 
-      // 8. Execute
-      const result = await tool.execute(input, effectiveCtx(tool, ctx));
+      // 8. Execute — pass the SAME preview computed in step 5 of this request. In
+      // preview_required mode its hash was just verified against the approval token; in
+      // every mode it's the one source of truth this request already committed to, so
+      // execute() never needs to re-derive state that could have drifted since step 5.
+      const result = await tool.execute(input, effectiveCtx(tool, ctx), preview.executePayload);
       apsExecutionCompleted = true; // set BEFORE audit so error reporting is accurate
 
       appendAuditEntry(
@@ -336,7 +340,12 @@ export function wrapMutationTool<T extends z.ZodTypeAny>(
           stage: 'executed',
           ...(projectId !== undefined ? { projectId } : {}),
           inputRedacted: input,
-          outputSummary: result.structuredContent ?? { success: true },
+          // Audit keeps a summary, not the full result — PRIVACY.md promises "a short
+          // output summary" / "not full payloads". summarizeForAudit() strips business
+          // content (title, description, comments, custom attributes, ...) and keeps only
+          // resource identifiers/status, which is what README's "check meta_list_changelog
+          // after a timeout" guidance relies on.
+          outputSummary: result.structuredContent ? summarizeForAudit(result.structuredContent) : { success: true },
           // Fingerprint only — matches the preview entry's approval_token_fp.
           ...(approval_token !== undefined ? { approvalToken: fingerprintToken(approval_token) } : {}),
         },

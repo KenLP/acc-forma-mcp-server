@@ -385,9 +385,49 @@ async function resolvePin(input: PinElementInput, ctx: ToolContext): Promise<Res
   };
 }
 
+/**
+ * The exact request `execute()` sends, computed once in `buildPreview()`. Carries the
+ * displayable pin fields alongside the issue body so `execute()` never needs to call
+ * `resolvePin()` a second time (see `PinElementExecutePayload` usage below) — `resolvePin()`
+ * makes 3 live API calls (existing-pin globalOffset lookup, AECDM position, MD objectId
+ * lookup), any of which could return different data on a second call within the same
+ * request if upstream state changed in between.
+ */
+interface PinElementExecutePayload {
+  toolName: 'issues_pin_element';
+  projectId: string;
+  body: CreateIssuePayload;
+  pin: {
+    viewableGuid: string;
+    viewableName: string;
+    viewerPosition: Vec3;
+    objectId: number | undefined;
+    globalOffset: Vec3;
+    globalOffsetSource: ResolvedPin['globalOffsetSource'];
+    aecdmElementName: string;
+  };
+}
+
+function toExecutePayload(pid: string, resolved: ResolvedPin): PinElementExecutePayload {
+  return {
+    toolName: 'issues_pin_element',
+    projectId: pid,
+    body: resolved.issueBody,
+    pin: {
+      viewableGuid: resolved.viewableGuid,
+      viewableName: resolved.viewableName,
+      viewerPosition: resolved.viewerPosition,
+      objectId: resolved.objectId,
+      globalOffset: resolved.globalOffset,
+      globalOffsetSource: resolved.globalOffsetSource,
+      aecdmElementName: resolved.aecdmElementName,
+    },
+  };
+}
+
 // ---- Tool definition --------------------------------------------------------
 
-export const pinElementTool: MutationToolDef<typeof inputSchema> = {
+export const pinElementTool: MutationToolDef<typeof inputSchema, PinElementExecutePayload> = {
   name: 'issues_pin_element',
   title: 'Create ACC Issue with 3D Element Pin',
   description:
@@ -451,25 +491,33 @@ export const pinElementTool: MutationToolDef<typeof inputSchema> = {
         ...(resolved.objectId !== undefined ? ['object_id_resolved'] : []),
         ...(input.due_date ? ['due_date_is_current_or_future'] : []),
       ],
-      executePayload: { toolName: 'issues_pin_element', projectId: pid, body: resolved.issueBody },
+      executePayload: toExecutePayload(pid, resolved),
     };
   },
 
-  execute: async (input, ctx) => {
-    const resolved = await resolvePin(input, ctx);
-    const issue = await createIssue(ctx.auth, input.project_id, resolved.issueBody);
+  execute: async (input, ctx, approved) => {
+    // `approved` is the payload buildPreview() computed earlier in this same request (and,
+    // in preview_required mode, whose hash was just verified against the approval token).
+    // Use it directly instead of calling resolvePin() again — resolvePin() makes 3 live API
+    // calls, and a second call within the same request could observe different state than
+    // the one just approved. Fallback: wrapMutationTool always passes it, so this only
+    // triggers for a caller that invokes execute() directly (e.g. a test) without going
+    // through the wrapper — resolve fresh in that case rather than throwing.
+    const payload = approved ?? toExecutePayload(stripBPrefix(input.project_id), await resolvePin(input, ctx));
 
-    const pos = resolved.viewerPosition;
+    const issue = await createIssue(ctx.auth, input.project_id, payload.body);
+
+    const pos = payload.pin.viewerPosition;
     const posStr = `(${pos.x.toFixed(4)}, ${pos.y.toFixed(4)}, ${pos.z.toFixed(4)})`;
 
     const warnings: string[] = [];
-    if (resolved.globalOffsetSource === 'fallback_zero') {
+    if (payload.pin.globalOffsetSource === 'fallback_zero') {
       warnings.push(
         `WARNING: global_offset defaulted to (0,0,0) — pin position may be inaccurate. ` +
           `Provide global_offset explicitly and re-pin for accuracy.`,
       );
     }
-    if (resolved.objectId === undefined) {
+    if (payload.pin.objectId === undefined) {
       warnings.push(
         `Note: objectId not resolved — pin will render but element will not be isolated in viewer.`,
       );
@@ -484,8 +532,8 @@ export const pinElementTool: MutationToolDef<typeof inputSchema> = {
             `ID:       ${issue.id}\n` +
             `Title:    ${issue.title}\n` +
             `Status:   ${issue.status}\n` +
-            `Element:  ${resolved.aecdmElementName} (${input.element_external_id})\n` +
-            `Viewable: ${resolved.viewableName} (${resolved.viewableGuid})\n` +
+            `Element:  ${payload.pin.aecdmElementName} (${input.element_external_id})\n` +
+            `Viewable: ${payload.pin.viewableName} (${payload.pin.viewableGuid})\n` +
             `Position: ${posStr}\n` +
             (warnings.length > 0 ? `\n${warnings.join('\n')}` : ''),
         },
@@ -493,13 +541,13 @@ export const pinElementTool: MutationToolDef<typeof inputSchema> = {
       structuredContent: {
         issue,
         pin: {
-          viewableGuid: resolved.viewableGuid,
-          viewableName: resolved.viewableName,
-          viewerPosition: resolved.viewerPosition,
-          objectId: resolved.objectId,
-          globalOffset: resolved.globalOffset,
-          globalOffsetSource: resolved.globalOffsetSource,
-          aecdmElementName: resolved.aecdmElementName,
+          viewableGuid: payload.pin.viewableGuid,
+          viewableName: payload.pin.viewableName,
+          viewerPosition: payload.pin.viewerPosition,
+          objectId: payload.pin.objectId,
+          globalOffset: payload.pin.globalOffset,
+          globalOffsetSource: payload.pin.globalOffsetSource,
+          aecdmElementName: payload.pin.aecdmElementName,
           externalId: input.element_external_id,
         },
       },

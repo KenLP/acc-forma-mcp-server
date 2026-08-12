@@ -378,12 +378,82 @@ describe('issues_pin_element — buildPreview', () => {
 
   it('executePayload includes project ID and issue body for token binding', async () => {
     const preview = await tool.buildPreview(BASE_INPUT, makeCtx());
-    const payload = preview.executePayload as Record<string, unknown>;
+    const payload = preview.executePayload; // typed PinElementExecutePayload — no cast needed
 
-    expect(payload['toolName']).toBe('issues_pin_element');
-    expect(payload['projectId']).toBe('proj-001'); // b. prefix stripped
-    const payloadBody = payload['body'] as Record<string, unknown>;
-    expect(payloadBody['title']).toBe('Door clearance issue');
-    expect(payloadBody['linkedDocuments']).toHaveLength(1);
+    expect(payload.toolName).toBe('issues_pin_element');
+    expect(payload.projectId).toBe('proj-001'); // b. prefix stripped
+    expect(payload.body.title).toBe('Door clearance issue');
+    expect(payload.body.linkedDocuments).toHaveLength(1);
+  });
+
+  describe('execute() uses the approved payload, not a fresh resolvePin() call (A2 TOCTOU fix)', () => {
+    // Distinctive drifted position — far outside the plausible range of the real transform
+    // (see the original test's `pos.x`/`pos.y` assertions, which land around 22/-22), so its
+    // presence or absence in the sent body unambiguously proves which resolution won.
+    const DRIFTED_ELEMENT = { ...ELEMENT, name: 'Drifted Door', position: { x: 999, y: 999, z: 999 } };
+
+    function extractPositionX(body: unknown): number {
+      const linkedDocuments = (body as { linkedDocuments: Array<{ details: { position: { x: number } } }> })
+        .linkedDocuments;
+      return linkedDocuments[0]!.details.position.x;
+    }
+
+    it('sends the body from buildPreview(), even when resolvePin() would resolve differently on a second call', async () => {
+      const preview = await tool.buildPreview(BASE_INPUT, makeCtx());
+      const approvedX = extractPositionX(preview.executePayload.body);
+
+      // Simulate state drift between buildPreview() and execute() within the same request:
+      // if execute() called resolvePin() again, this mock would make it resolve a position
+      // far from the one just approved.
+      queryElementPositionsMock.mockResolvedValue([DRIFTED_ELEMENT]);
+
+      createIssueMock.mockResolvedValue({
+        id: 'issue-1',
+        title: 'Door clearance issue',
+        status: 'open',
+      } as Issue);
+
+      await tool.execute(BASE_INPUT, makeCtx(), preview.executePayload);
+
+      // The body actually sent to createIssue must be the one buildPreview() approved,
+      // not one re-derived from the drifted mocks.
+      expect(createIssueMock).toHaveBeenCalledWith(
+        expect.anything(),
+        BASE_INPUT.project_id,
+        preview.executePayload.body,
+      );
+      const sentX = extractPositionX(createIssueMock.mock.calls[0]![2]);
+      expect(sentX).toBeCloseTo(approvedX, 3);
+      expect(sentX).not.toBeCloseTo(3296.627449925, 0); // the drifted position never reached the wire
+      // resolvePin's live calls were not repeated for the approved-payload path: exactly
+      // the 1 call made inside buildPreview(), none from execute().
+      expect(queryElementPositionsMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('control case: WITHOUT an approved payload, execute() re-resolves and sends drifted data', async () => {
+      // Confirms the vulnerability is real and the fallback path (used when execute() is
+      // called directly, not via wrapMutationTool) reproduces the exact old behavior: with
+      // no approved payload it falls back to resolvePin(), a second live resolution that
+      // observes the drifted mock. This is what the previous test's approved-payload path
+      // protects against — same drifted mock, different (safe) outcome.
+      const preview = await tool.buildPreview(BASE_INPUT, makeCtx());
+      const approvedX = extractPositionX(preview.executePayload.body);
+
+      queryElementPositionsMock.mockResolvedValue([DRIFTED_ELEMENT]);
+      createIssueMock.mockResolvedValue({
+        id: 'issue-1',
+        title: 'Door clearance issue',
+        status: 'open',
+      } as Issue);
+
+      // No third argument — same call shape as the pre-fix `execute(input, ctx)`.
+      await tool.execute(BASE_INPUT, makeCtx());
+
+      const sentX = extractPositionX(createIssueMock.mock.calls[0]![2]);
+      // Drifted state DID leak into the request in this fallback path.
+      expect(sentX).toBeCloseTo(3296.627449925, 3);
+      expect(sentX).not.toBeCloseTo(approvedX, 0);
+      expect(queryElementPositionsMock).toHaveBeenCalledTimes(2); // buildPreview + execute's own resolvePin
+    });
   });
 });

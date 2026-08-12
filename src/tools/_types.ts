@@ -93,17 +93,23 @@ export interface ReadToolDef<TSchema extends z.ZodTypeAny> {
   execute: (input: z.infer<TSchema>, ctx: ToolContext) => Promise<McpToolResult>;
 }
 
-export interface MutationPreviewResult {
+/**
+ * `TPayload` is the concrete shape of `executePayload` for one tool. It defaults to
+ * `unknown` so the 8 mutation tools that don't need it are unaffected; a tool whose
+ * `execute()` wants type-safe access to the approved payload (see `MutationToolDef.execute`
+ * below) can parameterize its own `MutationToolDef<Schema, ThatPayloadType>` instead.
+ */
+export interface MutationPreviewResult<TPayload = unknown> {
   method: string;
   url: string;
   body: unknown;
   sideEffects: string[];
   businessRulesPassed: string[];
   /** Exact payload that gets hashed and bound to the approval token */
-  executePayload: unknown;
+  executePayload: TPayload;
 }
 
-export interface MutationToolDef<TSchema extends z.ZodTypeAny> {
+export interface MutationToolDef<TSchema extends z.ZodTypeAny, TPayload = unknown> {
   name: string;
   title: string;
   description: string;
@@ -137,9 +143,30 @@ export interface MutationToolDef<TSchema extends z.ZodTypeAny> {
    */
   getProjectId?: (input: z.infer<TSchema>) => string | undefined;
   /** Build preview (validates business rules, resolves IDs, no APS write) */
-  buildPreview: (input: z.infer<TSchema>, ctx: ToolContext) => Promise<MutationPreviewResult>;
-  /** Execute the actual APS call */
-  execute: (input: z.infer<TSchema>, ctx: ToolContext) => Promise<McpToolResult>;
+  buildPreview: (input: z.infer<TSchema>, ctx: ToolContext) => Promise<MutationPreviewResult<TPayload>>;
+  /**
+   * Execute the actual APS call.
+   *
+   * `approvedPayload`, when present, is the *exact* `executePayload` that `buildPreview()`
+   * produced earlier in THIS SAME request (in `preview_required` mode it is also the payload
+   * whose hash was just verified against the approval token). `execute()` should build its
+   * wire request from `approvedPayload` rather than re-deriving state itself — re-deriving
+   * opens a TOCTOU window if the tool's resolution logic calls live APIs, since a second call
+   * can return different data than the one `buildPreview` already committed to. The parameter
+   * is optional so the 8 tools that build their request purely from `input` (no live
+   * re-resolution) can ignore it entirely; only `issues_pin_element` currently uses it.
+   *
+   * Kept as property syntax (`execute: (…) => …`, not method shorthand `execute(…): …`) even
+   * though a tool typed with a concrete `TPayload` (e.g. `MutationToolDef<Schema, PinPayload>`)
+   * then needs an explicit cast to widen into `AnyToolDef`'s `MutationToolDef<ZodTypeAny>`
+   * (TPayload defaulting to `unknown`) — see the cast + comment in `_registry.ts`. Method
+   * shorthand would make that widening compile for free (TS checks method parameters
+   * bivariantly), but it also makes every *other* interface method bivariant, including
+   * `buildPreview`, and silently defeats `@typescript-eslint/unbound-method` for any bare
+   * `tool.execute` reference (e.g. `expect(tool.execute).toHaveBeenCalled()` in a test) —
+   * too broad a soundness trade for one tool's benefit. One local cast is cheaper to audit.
+   */
+  execute: (input: z.infer<TSchema>, ctx: ToolContext, approvedPayload?: TPayload) => Promise<McpToolResult>;
 }
 
 export type AnyToolDef = ReadToolDef<z.ZodTypeAny> | MutationToolDef<z.ZodTypeAny>;

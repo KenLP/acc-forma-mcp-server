@@ -195,6 +195,54 @@ describe('wrapMutationTool — mutation pipeline (Task 8)', () => {
     expect(again.isError).toBe(true);
   });
 
+  it('execute() receives the SAME executePayload buildPreview() produced this request (A2)', async () => {
+    const exec = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+    const handler = await loadWrapped(makeEnv(), exec);
+
+    const preview = await handler({ ...BASE, dry_run: true });
+    const token = (preview.structuredContent as Record<string, unknown>)['approval_token'] as string;
+    await handler({ ...BASE, dry_run: false, approval_token: token });
+
+    expect(exec).toHaveBeenCalledTimes(1);
+    // Third argument is the exact executePayload buildPreview() returned for this input —
+    // see makeTool() above, where buildPreview's executePayload is `{ title: input.title }`.
+    expect(exec.mock.calls[0]?.[2]).toEqual({ title: BASE.title });
+  });
+
+  it('audit entry for the executed mutation is a summary, not the raw structuredContent (A3)', async () => {
+    // Simulates a real mutation tool's result shape: an id/status the audit is allowed to
+    // keep, alongside free-text business content it must not (see summarizeForAudit).
+    const exec = vi.fn().mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      structuredContent: {
+        issue: {
+          id: 'issue-001',
+          status: 'open',
+          title: 'Confidential tenant complaint about unit 4B',
+          description: 'Full free-text description that must not be audited verbatim.',
+        },
+      },
+    });
+    const handler = await loadWrapped(makeEnv(), exec);
+
+    const preview = await handler({ ...BASE, dry_run: true });
+    const token = (preview.structuredContent as Record<string, unknown>)['approval_token'] as string;
+    await handler({ ...BASE, dry_run: false, approval_token: token });
+
+    const executedEntry = (
+      auditEntries as Array<{ stage?: string; outputSummary?: unknown }>
+    ).find((e) => e.stage === 'executed');
+    expect(executedEntry, 'an executed audit entry must exist').toBeDefined();
+
+    const summary = executedEntry!.outputSummary as { issue: Record<string, unknown> };
+    expect(summary.issue['id']).toBe('issue-001');
+    expect(summary.issue['status']).toBe('open');
+    expect(summary.issue['title']).toBeUndefined();
+    expect(summary.issue['description']).toBeUndefined();
+    expect(JSON.stringify(executedEntry)).not.toContain('Confidential tenant complaint');
+    expect(JSON.stringify(executedEntry)).not.toContain('Full free-text description');
+  });
+
   it('reusing an idempotency_key for a different payload is rejected, audited as denied_idempotency', async () => {
     const exec = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
     const handler = await loadWrapped(makeEnv(), exec);

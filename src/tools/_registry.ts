@@ -1,4 +1,5 @@
-import type { AnyToolDef } from './_types.js';
+import type { z } from 'zod';
+import type { AnyToolDef, MutationToolDef } from './_types.js';
 
 // ---- Account Admin ----------------------------------------------------------
 import { adminListProjectsTool } from './admin/list-projects.js';
@@ -99,7 +100,13 @@ export const toolRegistry: AnyToolDef[] = [
   getIssueUserMeTool,
   listIssueAttrsTool,
   listIssueAttachmentsTool,
-  pinElementTool,
+  // pinElementTool is typed MutationToolDef<Schema, PinElementExecutePayload> (see A2 fix in
+  // pin-element.ts) so its own execute() gets a type-safe approvedPayload — but AnyToolDef
+  // widens every mutation tool to MutationToolDef<ZodTypeAny> (TPayload defaults to
+  // `unknown`), and that widening is contravariant-unsound for a concrete TPayload with
+  // property-syntax `execute`. It's genuinely safe here: wrapMutationTool only ever calls
+  // `tool.execute(input, ctx, preview.executePayload)` with the SAME tool's own preview.
+  pinElementTool as unknown as MutationToolDef<z.ZodTypeAny>,
 
   // Reviews (4)
   listReviewsTool,
