@@ -44,9 +44,14 @@ export const metaVerifyAuditChainTool: ReadToolDef<typeof inputSchema> = {
   title: 'Verify Audit Log Integrity',
   description:
     'Verifies the SHA-256 hash chain of the audit log for a given date. ' +
-    'Each entry\'s hash is computed from the previous entry\'s hash + the entry data. ' +
-    'A valid chain proves no entries have been modified, inserted, or deleted after the fact. ' +
-    'Returns the first invalid entry index if tampering is detected.',
+    'Each entry\'s hash is computed from the previous entry\'s hash plus the entry data, so a ' +
+    'valid result confirms the retained entries have not been modified or reordered and that ' +
+    'the chain of hash links between them is unbroken. ' +
+    'This covers tampering within the retained log; it does not cover entries truncated off ' +
+    'the end of the file, or the whole file being replaced by a new chain starting from a ' +
+    'fresh genesis hash — detecting either of those needs a trust anchor outside the log ' +
+    'itself. ' +
+    'Returns the first invalid entry index if an inconsistency is found.',
   kind: 'read',
   scopes: [],
   // Reads the local audit JSONL — no ACC hub or project is touched.

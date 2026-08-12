@@ -105,23 +105,138 @@ export async function getVersionDiff(
 }
 
 // ── NDJSON downloads (fields + properties) ──────────────────────────────────────
+//
+// The Fly instance this server runs on has only 256MB RAM (see fly.toml). These downloads
+// used to `await r.text()` the WHOLE response before parsing a single line, and `properties`
+// applied `maxElements` only after every row was already parsed — the cap did nothing for
+// peak memory. Both are now bounded:
+//   - a hard fetch timeout (a stalled download must not pin the connection/memory forever)
+//   - a byte cap enforced WHILE reading (Content-Length is checked up front when present,
+//     but it's optional/spoofable, so bytes are also counted per chunk as they arrive)
+//   - line-at-a-time streaming parse, so a `maxLines` cap (used for the `maxElements`
+//     property cap) stops the download itself instead of trimming an already-parsed array
 
-async function fetchNdjson(auth: AuthProvider, url: string): Promise<Record<string, unknown>[]> {
+/** Regular JSON round-trip calls use 30s (see http/client.ts); these are file downloads that
+ *  can run to several MB, so they get more headroom — but still bounded, since a stalled
+ *  connection must not hold memory/sockets open indefinitely on a 256MB instance. */
+const NDJSON_FETCH_TIMEOUT_MS = 45_000;
+
+/** Hard cap on bytes read from an NDJSON response. `maxElements` (default 2000) already stops
+ *  the `properties` download early in the common case; this is the backstop for the `fields`
+ *  download (which has no element cap) and for any pathological response. 25MiB of NDJSON text
+ *  can expand to several times that once parsed into JS objects (V8 object overhead), so this
+ *  is sized to leave headroom on the 256MB box even in the worst case. */
+const MAX_NDJSON_RESPONSE_BYTES = 25 * 1024 * 1024;
+
+/** Parse a decoded chunk into complete lines plus a leftover partial line ("carry") — a chunk
+ *  boundary can split a JSON row in half, so the tail is held back and prefixed onto the next
+ *  chunk before splitting again. Pure and unit-tested independent of any network stream. */
+function splitNdjsonLines(carry: string, chunkText: string): { lines: string[]; carry: string } {
+  const parts = (carry + chunkText).split(/\r?\n/);
+  const nextCarry = parts.pop() ?? '';
+  return { lines: parts, carry: nextCarry };
+}
+
+interface NdjsonReadResult {
+  rows: Record<string, unknown>[];
+  /** True if reading stopped early because `maxLines` was reached (stream may have more). */
+  truncated: boolean;
+}
+
+/**
+ * Stream-parse NDJSON from a Web ReadableStream: decode → split into lines → parse each line
+ * immediately, stopping as soon as `maxLines` rows have been collected (cancelling the
+ * underlying reader instead of continuing to buffer). Also enforces `maxBytes` on the raw
+ * bytes read so far, independent of any Content-Length header. Exported for unit testing with
+ * a synthetic ReadableStream — no network involved.
+ */
+export async function readNdjsonStream(
+  body: ReadableStream<Uint8Array>,
+  options: { maxLines?: number; maxBytes: number },
+): Promise<NdjsonReadResult> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  const rows: Record<string, unknown>[] = [];
+  let carry = '';
+  let bytesRead = 0;
+  let truncated = false;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytesRead += value.byteLength;
+      if (bytesRead > options.maxBytes) {
+        throw new Error(
+          `Model Properties download exceeded the ${options.maxBytes}-byte cap (aborted after ${bytesRead} bytes) — refusing to keep buffering.`,
+        );
+      }
+      const { lines, carry: nextCarry } = splitNdjsonLines(carry, decoder.decode(value, { stream: true }));
+      carry = nextCarry;
+      for (const line of lines) {
+        const t = line.trim();
+        if (t) rows.push(JSON.parse(t) as Record<string, unknown>);
+        if (options.maxLines !== undefined && rows.length >= options.maxLines) {
+          truncated = true;
+          break;
+        }
+      }
+      if (truncated) break;
+    }
+    if (!truncated) {
+      const t = carry.trim();
+      if (t) rows.push(JSON.parse(t) as Record<string, unknown>);
+    }
+  } catch (err) {
+    await reader.cancel().catch(() => {});
+    throw err;
+  }
+
+  if (truncated) {
+    // We have all the rows we need — release the connection instead of draining the rest.
+    await reader.cancel().catch(() => {});
+  } else {
+    reader.releaseLock();
+  }
+  return { rows, truncated };
+}
+
+async function fetchNdjson(
+  auth: AuthProvider,
+  url: string,
+  options: { maxLines?: number } = {},
+): Promise<Record<string, unknown>[]> {
   // Bearer goes only to the declared APS host — never to an arbitrary URL from a response.
   assertAllowedUrl(url, { exactHosts: ['developer.api.autodesk.com'] });
   const token = await auth.getAccessToken();
-  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  let r: Response;
+  try {
+    r = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(NDJSON_FETCH_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new Error(`Model Properties download timed out after ${NDJSON_FETCH_TIMEOUT_MS}ms: ${url}`);
+    }
+    throw err;
+  }
   if (!r.ok) {
     const body = await r.text().catch(() => '');
     throw new Error(`Model Properties download failed ${r.status}: ${body.slice(0, 200)}`);
   }
-  const text = await r.text();
-  const out: Record<string, unknown>[] = [];
-  for (const line of text.split(/\r?\n/)) {
-    const t = line.trim();
-    if (t) out.push(JSON.parse(t) as Record<string, unknown>);
+  const contentLength = r.headers.get('content-length');
+  if (contentLength && Number(contentLength) > MAX_NDJSON_RESPONSE_BYTES) {
+    throw new Error(
+      `Model Properties download declares ${contentLength} bytes, exceeding the ${MAX_NDJSON_RESPONSE_BYTES}-byte cap — refusing to download.`,
+    );
   }
-  return out;
+  if (!r.body) return [];
+  const { rows } = await readNdjsonStream(r.body, {
+    ...(options.maxLines !== undefined ? { maxLines: options.maxLines } : {}),
+    maxBytes: MAX_NDJSON_RESPONSE_BYTES,
+  });
+  return rows;
 }
 
 export interface DiffField {
@@ -234,7 +349,9 @@ export async function downloadDiffProperties(
   fields: Map<string, DiffField>,
   maxElements = 2000,
 ): Promise<DiffElement[]> {
-  const rows = await fetchNdjson(auth, propertiesUrl);
+  // maxLines stops the download itself at maxElements rows — it does not parse the rest of
+  // the response and then trim, which is what let peak memory scale with the full model.
+  const rows = await fetchNdjson(auth, propertiesUrl, { maxLines: maxElements });
 
   // The name/category keys are internal fields, stable across models.
   const nameKey = findKey(fields, (f) => f.category === '__name__');
@@ -242,7 +359,6 @@ export async function downloadDiffProperties(
 
   const out: DiffElement[] = [];
   for (const row of rows) {
-    if (out.length >= maxElements) break;
     const rawType = row['type'] as string | undefined;
     const kind = (rawType ? KIND_MAP[rawType] : undefined) ?? 'CHANGED';
 

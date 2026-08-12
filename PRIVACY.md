@@ -1,6 +1,6 @@
 # Privacy Policy — acc-forma-mcp-server / BIMLynx
 
-**Last updated:** 2026-08-11
+**Last updated:** 2026-08-12
 **Applies to:** the hosted service at `https://mcp.bimlynx.com/mcp` (the primary subject of
 this policy) and the open-source `acc-forma-mcp-server` codebase when self-hosted (§0)
 **Publisher contact:** hello@bimlynx.com (general) · support@bimlynx.com (data requests) ·
@@ -76,14 +76,42 @@ Each entry records: timestamp and call id; which tool ran and whether it was a r
 mutation; the actor (auth mode, your tenant's robot id); the ACC project targeted; the tool's
 inputs **after** secret redaction; a short output summary; for mutating calls, a SHA-256
 **fingerprint** of the approval token (never the live token); and the hash-chain fields
-linking entries so tampering is detectable.
+linking entries so tampering within the retained log is detectable (see "What this log does
+not promise" below for the boundary of that claim).
 
 **Redaction before writing.** Inputs and outputs pass through a redactor (`src/utils/redact.ts`)
 that strips bearer tokens, JWTs, `client_secret` values, live approval tokens, and any field
 named `access_token`, `refresh_token`, `client_secret`, `password`, `authorization`,
 `x-api-key`, `api_key`, `private_key`, `assertion`, or `approval_token`. Redaction targets
 *secrets*, not *business content* — if a tool call includes an issue title or description,
-that content is recorded in `input_redacted`.
+that content is recorded in `input_redacted`. The output summary is narrower still: for a
+mutation, only resource identifiers and lifecycle state (`id`, `displayId`, `status`,
+`published`, `urn`, and counts) are kept — free-text and business content (titles,
+descriptions, comments, custom attributes, linked documents) are dropped before the entry is
+written, not merely redacted (`src/safety/audit-summary.ts`).
+
+**What this log does not promise:**
+
+- **Audit writes are fail-open by default** (`FORMA_AUDIT_FAIL_CLOSED=false`). If the write to
+  disk itself fails (full disk, permission error), the server logs that failure and lets the
+  call proceed anyway — the mutation still executes, it is simply missing its audit entry.
+  Set `FORMA_AUDIT_FAIL_CLOSED=true` to make a write failure abort the call instead (see
+  `docs/SAFETY.md` for the retry-safety implications of each setting).
+- **Read-tool calls are logged by default** (`FORMA_AUDIT_INCLUDE_READS=true`, the hosted
+  service's setting), but this is operator-configurable: setting it to `false` stops read
+  calls from being logged at all. Mutating calls are always logged regardless of this setting.
+- **`FORMA_MUTATION_MODE=client_approval_only` skips both the preview step and this server's
+  own approval-token verification.** In that mode the server trusts the connecting MCP client
+  to have already obtained the user's approval before it calls with `dry_run=false` — it does
+  not independently re-check that a preview was shown or that the executed payload matches
+  one. The hosted service's default is `preview_required`, which does not have this gap.
+- **`meta_verify_audit_chain` proves integrity *within* the retained log, not the log's
+  completeness.** A valid result means no retained entry has been silently modified or
+  reordered, and every entry's hash correctly links to the one before it. It does not detect
+  entries truncated off the end of the file, or the entire file being replaced by a new chain
+  starting from a fresh genesis hash — catching either of those requires a trust anchor
+  outside the log itself (an external, independently signed checkpoint), which is not
+  implemented today. See `docs/SAFETY.md` for detail.
 
 ### 1.4 Approval tokens, rate counters, idempotency records
 

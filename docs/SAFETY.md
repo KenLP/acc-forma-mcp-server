@@ -83,6 +83,27 @@ meta_verify_audit_chain()
 cat ~/.acc-forma-mcp/audit/audit-$(date +%F).jsonl | jq .
 ```
 
+**What this does and does not prove.** `verifyChain` walks the entries it is given and checks
+two things: each entry's `this_hash` matches its content, and `prev_hash` matches the prior
+entry's `this_hash` (index 0 must equal genesis). A valid result means no entry *within that
+file* was silently modified, reordered, or inserted — that is real tamper detection.
+
+It is not a completeness proof. Two attacks it cannot see, both confirmed by probing a real
+audit file: (1) **truncating the file** — deleting the last N lines and leaving the rest
+intact still verifies as valid, because there is nothing after the cut to disagree with it;
+(2) **replacing the whole file** with a brand-new chain that starts its own `prev_hash` at
+`sha256:genesis` — verified independently, a self-consistent second chain looks exactly like a
+valid first one. Both require access to the audit file on disk, which is a smaller blast
+radius than "the log lies about history to a caller who never touches the filesystem," but the
+verifier alone does not rule them out.
+
+Closing that gap needs a trust anchor the log cannot forge on its own — e.g. periodically
+pushing a signed checkpoint (the current `this_hash` plus entry count, signed with a key that
+never touches the same disk as the log) to storage the operator does not also control. That is
+**not implemented** — it is backlog for a future round (tracked as R4), a deliberate scope cut
+for now rather than an oversight. Until it exists, treat `meta_verify_audit_chain` as proof the
+retained log is internally consistent, not as proof nothing was ever cut from it.
+
 ### Stage values
 
 | Stage | Meaning |

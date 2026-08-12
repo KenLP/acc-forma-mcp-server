@@ -354,7 +354,7 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 | Tool | Purpose |
 |---|---|
 | `meta_list_changelog` | Read the local audit log for one date, filterable by tool name and audit stage. |
-| `meta_verify_audit_chain` | Verify the audit log hash chain has not been tampered with. |
+| `meta_verify_audit_chain` | Verify the hash links across the retained audit entries are unbroken. |
 
 
 Phase 3 backlog: non-diff Model Properties single-version index (`POST indexes` + `queries`) for bbox/property queries on one version — same API family as `mp_diff_versions`, not yet wrapped.
@@ -398,6 +398,7 @@ Three limits worth knowing:
 - **Only invocations that reach a tool handler are audited.** A call whose input fails the MCP SDK's schema validation, or that names a tool that does not exist, is rejected by the protocol layer before any handler runs — nothing is logged, because nothing was done: no Autodesk API is touched on that path.
 - `FORMA_AUDIT_INCLUDE_READS=false` drops read-tool entries (mutations are always attempted).
 - Audit writes are **fail-open** by default: if the file cannot be written, the error is logged and the call still proceeds. Set `FORMA_AUDIT_FAIL_CLOSED=true` to abort the call instead, so no action goes unrecorded.
+- **What verification proves, and what it does not.** A valid result means the retained entries have not been modified or reordered and the hash links between them are unbroken. It does not detect entries truncated off the end of the file, or the whole file being swapped for a fresh chain starting at genesis — catching either needs an anchor kept outside the log, which this server does not yet publish.
 
 Verify integrity at any time:
 
