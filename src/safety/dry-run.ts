@@ -11,6 +11,12 @@ export interface DryRunPreview {
     business_rules_passed: string[];
   };
   approval_token: string;
+  /**
+   * Always true on a preview. A host that wants a human gate can key its UI off this
+   * rather than parsing prose — the server cannot see the user, so it can only state
+   * that confirmation is owed, never enforce that one happened.
+   */
+  awaiting_user_confirmation: true;
   next_step: string;
 }
 
@@ -39,9 +45,18 @@ export function buildDryRunPreview(params: {
       business_rules_passed: params.businessRulesPassed,
     },
     approval_token: token,
+    awaiting_user_confirmation: true,
+    // Phrased to put the human step first. The previous wording opened with "To execute
+    // this action, call ... again with dry_run=false", which reads as an instruction to
+    // proceed — observed 2026-08-12 with a real client running both calls in one turn
+    // without ever showing the preview to the user.
     next_step:
-      `To execute this action, call tool "${params.toolName}" again with ` +
-      `the same inputs plus dry_run=false and approval_token="${token}". ` +
-      `Token expires in ${params.env.FORMA_APPROVAL_TOKEN_TTL}s and is single-use.`,
+      `Nothing has been created or changed yet — this is a preview. Show it to the user ` +
+      `and get their explicit confirmation before going further. Once they confirm, call ` +
+      `"${params.toolName}" again with the same inputs plus dry_run=false and ` +
+      `approval_token="${token}". The token is single-use, expires in ` +
+      `${params.env.FORMA_APPROVAL_TOKEN_TTL}s, and is bound to this exact payload — ` +
+      `changing any input invalidates it, so the executed write can never differ from ` +
+      `what was previewed.`,
   };
 }
