@@ -170,13 +170,21 @@ export async function listIssues(
   },
 ): Promise<{ results: Issue[]; pagination: { totalResults: number; limit: number; offset: number } }> {
   const pid = stripBPrefix(projectId);
+  // `limit`/`offset` are plain query params, but ACC rejects a bare `status` with
+  // `"status" is not allowed` — filters go through `filter[...]`. Verified live
+  // 2026-08-12: `?status=open` → 400, `?filter[status]=open` → 200. A comma-separated
+  // value matches any of the listed states.
+  const query: Record<string, string | number | boolean | undefined> = {
+    limit: params?.limit,
+    offset: params?.offset,
+  };
+  if (params?.status !== undefined) query['filter[status]'] = params.status;
+  if (params?.assignedTo !== undefined) query['filter[assignedTo]'] = params.assignedTo;
+
   return apsRequest(
     auth,
     `/construction/issues/v1/projects/${pid}/issues`,
-    {
-      baseUrl: APS_BASE,
-      params: params as Record<string, string | number | boolean | undefined>,
-    },
+    { baseUrl: APS_BASE, params: query },
   );
 }
 
