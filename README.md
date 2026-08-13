@@ -11,6 +11,23 @@
 
 ---
 
+## What it looks like
+
+Quantity take-off straight from the model's full Revit parameter set — 203 floor elements
+grouped across 14 levels, totalled, with the unit system checked rather than assumed:
+
+![Total floor area by level, answered from the live ACC model](examples/mcp_3.png)
+
+Every write is previewed before it happens. The dry-run returns the exact request that would
+be sent and stops there — the issue is not created until you say so:
+
+![Dry-run preview of creating an issue, awaiting confirmation](examples/mcp_2.png)
+
+And the audit log proves what actually ran. Note the `preview` → `executed` pair: the
+approval flow is not just a UI courtesy, it is recorded:
+
+![Audit chain verified valid, showing the last five logged actions](examples/mcp_5.png)
+
 ## Why this server?
 
 Two things distinguish it: how much of ACC it covers, and how carefully it writes.

@@ -31,6 +31,20 @@
   footer { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.9rem; }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
+  figure { margin: 24px 0; }
+  figure img {
+    display: block; width: 100%; height: auto;
+    border: 1px solid var(--border); border-radius: 8px;
+    /* The screenshots are captured on a light Claude Desktop window. On the dark theme an
+       unmodified PNG glares against the page, so knock it back slightly and restore it on
+       hover, when the visitor is actually looking at it. */
+    background: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    figure img { filter: brightness(0.92); transition: filter 0.15s ease; }
+    figure img:hover { filter: none; }
+  }
+  figcaption { color: var(--muted); font-size: 0.9rem; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -47,6 +61,28 @@
     <li>Compare design versions: what was added, removed, moved, or changed</li>
     <li>Quantity take-offs by level and category from the full BIM parameter set</li>
   </ul>
+
+  <h2>See it working</h2>
+
+  <figure>
+    <img src="img/mcp_3.png" alt="Claude answering total floor area by level from a live ACC model, as a table of 14 levels totalling 6,751 m²" loading="lazy">
+    <figcaption>Quantity take-off from the model's full Revit parameter set — 203 floor elements across 14 levels, totalled, with the unit system verified rather than assumed.</figcaption>
+  </figure>
+
+  <figure>
+    <img src="img/mcp_4.png" alt="A design version diff between v3 and v4, grouped into a table by Revit category with added, removed and modified counts" loading="lazy">
+    <figcaption>Version diff, grouped by category: what was added, removed, moved or changed between two model versions — the signal for routing a change to the discipline it affects.</figcaption>
+  </figure>
+
+  <figure>
+    <img src="img/mcp_2.png" alt="A dry-run preview of creating an issue, showing the exact request body and asking for confirmation before creating it" loading="lazy">
+    <figcaption>Every write is previewed first. The dry-run shows the exact request that would be sent, then stops — nothing reaches the project until you confirm.</figcaption>
+  </figure>
+
+  <figure>
+    <img src="img/mcp_5.png" alt="Audit chain verified valid for the day, listing the last five logged actions including a preview followed by an executed create" loading="lazy">
+    <figcaption>And the log proves what ran. Note the <code>preview</code> → <code>executed</code> pair: the approval step is recorded, not just displayed.</figcaption>
+  </figure>
 
   <h2>Safety first</h2>
   <ul>
