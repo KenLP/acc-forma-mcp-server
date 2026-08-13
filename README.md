@@ -13,19 +13,31 @@
 
 ## Why this server?
 
-| Capability | Other ACC/APS MCP servers | acc-forma-mcp-server |
-|---|---|---|
-| Issues read + write (full CRUD + comments + attachments) | Partial | ✅ |
-| Reviews read + write | Partial | ✅ |
-| AEC Data Model (BIM element queries) | Separate .NET server only | ✅ |
-| **AECDM element position queries (Issue pushpin support)** | ❌ | ✅ |
-| **Dry-run preview before any write** | ❌ | ✅ |
-| **Tamper-evident audit log (JSONL + hash chain)** | ❌ | ✅ |
-| **Project/hub allow-list enforcement** | ❌ | ✅ |
-| **Read-only mode toggle** (`FORMA_READONLY=true`) | ❌ | ✅ |
-| **Per-tool hourly rate governance** | ❌ | ✅ |
-| **Business-rule validators** | ❌ | ✅ |
-| TypeScript strict mode | Partial | ✅ |
+Two things distinguish it: how much of ACC it covers, and how carefully it writes.
+
+**Coverage** — seven ACC/APS API families behind one server: Issues (full CRUD, comments,
+attachments, 3D pushpins anchored to BIM elements), Reviews (list, inspect, and start
+approval workflows), AEC Data Model element queries and positions, Model Derivative
+properties, Model Coordination clash detection, Model Properties version diff, and Data
+Management / Admin. Every tool has been exercised against the live Autodesk APIs — several
+of ACC's real contracts (Reviews payloads, pushpin coordinates, issue status enums) differ
+from their documentation, and this server encodes what the API actually accepts.
+
+**Safety** — writing to a construction project's source of truth deserves more ceremony
+than a bare API passthrough:
+
+| Guardrail | What it does |
+|---|---|
+| Dry-run by default | Every write returns a preview first; executing requires an explicit approval token bound to the exact payload |
+| Tamper-evident audit log | Every tool call appended to a hash-chained JSONL — every outcome, including denials and failures |
+| Allow-list enforcement | `FORMA_ALLOWED_HUBS`/`FORMA_ALLOWED_PROJECTS` bound every call, checked centrally, independent of Autodesk-side permissions |
+| Read-only mode | One switch (`FORMA_READONLY=true`) blocks all mutations |
+| Rate governance | Per-tool hourly limits on every project-scoped mutation |
+| Business-rule validators | Domain checks (valid status transitions, versioned URNs, normalized pin coordinates) fail fast with actionable messages, before any token is issued |
+
+The details, including what each guardrail does *not* protect against, are in
+[docs/SAFETY.md](docs/SAFETY.md) — the limits are documented with the same care as the
+features.
 
 ---
 
