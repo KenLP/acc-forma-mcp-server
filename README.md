@@ -44,12 +44,15 @@ features.
 ## Use the hosted service
 
 The fastest way to use this server is the hosted instance the publisher operates at
-**`https://mcp.bimlynx.com/mcp`** — no APS app, no SSA setup, no local build. It's currently a
-private pilot: email **hello@bimlynx.com** to request a bearer key for your organization.
-Each customer gets a dedicated Autodesk Secure Service Account (robot-per-tenant), so your
-project access is isolated from every other tenant and controlled by your own hub admin —
-see [PRIVACY.md](PRIVACY.md) for exactly what the hosted service stores and for how long.
-Pricing: **Free** during the pilot.
+**`https://mcp.bimlynx.com/mcp`** — no APS app, no SSA setup, no local build, and **free to
+use**. Email **hello@bimlynx.com** to get a bearer key for your organization.
+
+The key on its own is not what protects your data. Each customer gets a dedicated Autodesk
+Secure Service Account (robot-per-tenant), and that robot sees nothing until **your own hub
+admin** invites it into specific projects — access is granted by you, scoped by you, and
+revocable by you in ACC at any time, without contacting us. See [PRIVACY.md](PRIVACY.md) for
+exactly what the hosted service stores and for how long; if you'd rather keep everything
+in-house, the same code [self-hosts](#self-host-advanced) with your own credentials.
 
 ### Claude Desktop — one-click install
 
