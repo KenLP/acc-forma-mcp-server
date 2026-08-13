@@ -1,34 +1,24 @@
 import { apsRequest } from '../http/client.js';
 import type { AuthProvider } from '../auth/index.js';
-import { addBPrefix } from '../utils/project-id.js';
-import { getProjectContainerIds } from './data-management.js';
+import { stripBPrefix } from '../utils/project-id.js';
 
 const APS_BASE = 'https://developer.api.autodesk.com';
 
-// Cache projectId → reviews container ID to avoid redundant DM calls
-const containerIdCache = new Map<string, string>();
-
-export async function resolveReviewsContainerId(
-  auth: AuthProvider,
-  hubId: string,
-  projectId: string,
-): Promise<string> {
-  const key = addBPrefix(projectId);
-  const cached = containerIdCache.get(key);
-  if (cached) return cached;
-
-  const ids = await getProjectContainerIds(auth, addBPrefix(hubId), key);
-  const containerId = ids['reviews'];
-  if (!containerId) {
-    const available = Object.keys(ids).join(', ') || 'none';
-    throw new Error(
-      `Reviews module not found for project ${projectId}. ` +
-        `Ensure the Reviews module is activated for this ACC project. ` +
-        `(Available modules: ${available})`,
-    );
-  }
-  containerIdCache.set(key, containerId);
-  return containerId;
+/**
+ * Reviews is addressed by project id directly — `/construction/reviews/v1/projects/{pid}/…`
+ * — exactly like Issues, and unlike what this module used to assume.
+ *
+ * It previously resolved a "reviews" container from the Data Management project
+ * relationships payload and called `/containers/{id}/…`. Neither half was right: that
+ * payload has no `reviews` key (live response carries hub, rootFolder, issues, submittals,
+ * rfis, markups, cost, locations), so every call failed at resolution with "Reviews module
+ * not found" — and even given a container id, `/containers/{id}/reviews` answers 404 for
+ * every id shape. Verified 2026-08-13 against the live API: `/projects/{raw uuid}/reviews`
+ * and `/projects/{b.-prefixed}/reviews` both return 200 with real data. Raw uuid is used
+ * here for consistency with the other project-scoped clients.
+ */
+function reviewsRoot(projectId: string): string {
+  return `/construction/reviews/v1/projects/${stripBPrefix(projectId)}`;
 }
 
 // ---- Types ----------------------------------------------------------------
@@ -40,12 +30,10 @@ export type ReviewStatus =
   | 'REJECTED'
   | 'VOID';
 
-export type ReviewTransitionAction =
-  | 'SUBMIT'
-  | 'APPROVE'
-  | 'REJECT'
-  | 'VOID'
-  | 'REOPEN';
+/** One file version submitted into a review. `urn` must be a versioned file URN (`…?version=N`). */
+export interface ReviewFileVersion {
+  urn: string;
+}
 
 export interface Review {
   id: string;
@@ -59,20 +47,18 @@ export interface Review {
   updatedAt?: string;
 }
 
+/**
+ * The exact body `POST /projects/{pid}/reviews` accepts — all three fields required, and
+ * nothing else permitted (the API answers "data should NOT have additional properties").
+ * Notably there is no reviewer list: approvers come from the workflow definition's steps,
+ * which is why `workflowId` is mandatory rather than optional. Contract confirmed field by
+ * field against the live validator on 2026-08-13.
+ */
 export interface CreateReviewPayload {
   name: string;
-  reviewerIds: string[];
-  description?: string;
-  dueDate?: string;
-  /** Review workflow template ID (optional — uses project default if omitted). */
-  workflowId?: string;
-  /** Model version IDs to attach to the review. */
-  linkedDocuments?: Array<{ versionUrn: string }>;
-}
-
-export interface TransitionPayload {
-  action: ReviewTransitionAction;
-  comment?: string;
+  workflowId: string;
+  /** At least one — the API rejects an empty array. */
+  fileVersions: ReviewFileVersion[];
 }
 
 export interface ReviewPagination {
@@ -85,16 +71,14 @@ export interface ReviewPagination {
 
 export async function listReviews(
   auth: AuthProvider,
-  hubId: string,
   projectId: string,
   params?: { limit?: number; offset?: number; status?: ReviewStatus },
 ): Promise<{ results: Review[]; pagination: ReviewPagination }> {
-  const containerId = await resolveReviewsContainerId(auth, hubId, projectId);
   const raw = await apsRequest<{
     results?: Review[];
     data?: Review[];
     pagination?: ReviewPagination;
-  }>(auth, `/construction/reviews/v1/containers/${containerId}/reviews`, {
+  }>(auth, `${reviewsRoot(projectId)}/reviews`, {
     baseUrl: APS_BASE,
     params: params as Record<string, string | number | boolean | undefined>,
   });
@@ -106,43 +90,35 @@ export async function listReviews(
 
 export async function getReview(
   auth: AuthProvider,
-  hubId: string,
   projectId: string,
   reviewId: string,
 ): Promise<Review> {
-  const containerId = await resolveReviewsContainerId(auth, hubId, projectId);
-  return apsRequest<Review>(
-    auth,
-    `/construction/reviews/v1/containers/${containerId}/reviews/${reviewId}`,
-    { baseUrl: APS_BASE },
-  );
+  return apsRequest<Review>(auth, `${reviewsRoot(projectId)}/reviews/${reviewId}`, {
+    baseUrl: APS_BASE,
+  });
 }
 
 export async function createReview(
   auth: AuthProvider,
-  hubId: string,
   projectId: string,
   payload: CreateReviewPayload,
 ): Promise<Review> {
-  const containerId = await resolveReviewsContainerId(auth, hubId, projectId);
-  return apsRequest<Review>(
-    auth,
-    `/construction/reviews/v1/containers/${containerId}/reviews`,
-    { baseUrl: APS_BASE, method: 'POST', body: payload },
-  );
+  return apsRequest<Review>(auth, `${reviewsRoot(projectId)}/reviews`, {
+    baseUrl: APS_BASE,
+    method: 'POST',
+    body: payload,
+  });
 }
 
-export async function transitionReview(
+/** Approval workflow definitions for a project — the `workflowId` a review is created against. */
+export async function listWorkflows(
   auth: AuthProvider,
-  hubId: string,
   projectId: string,
-  reviewId: string,
-  payload: TransitionPayload,
-): Promise<Review> {
-  const containerId = await resolveReviewsContainerId(auth, hubId, projectId);
-  return apsRequest<Review>(
+): Promise<{ results: Array<{ id: string; name: string; status?: string }> }> {
+  const raw = await apsRequest<{ results?: Array<{ id: string; name: string; status?: string }> }>(
     auth,
-    `/construction/reviews/v1/containers/${containerId}/reviews/${reviewId}/transitions`,
-    { baseUrl: APS_BASE, method: 'POST', body: payload },
+    `${reviewsRoot(projectId)}/workflows`,
+    { baseUrl: APS_BASE },
   );
+  return { results: raw.results ?? [] };
 }

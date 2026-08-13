@@ -307,10 +307,15 @@ All tools are grouped by domain. Read tools take no approval; write/mutation too
 
 | Tool | Purpose |
 |---|---|
-| `reviews_list` | List reviews in a project's Reviews container. |
-| `reviews_get` | Get a single review including status and reviewers. |
-| `reviews_create` ✍️ | Create a new review with reviewers, due date, workflow, linked documents. |
-| `reviews_transition` ✍️ | Submit / approve / reject / void / reopen a review. |
+| `reviews_list` | List the reviews in a project, with status and due date. |
+| `reviews_get` | Get a single review including status and current step. |
+| `reviews_list_workflows` | List the project's approval workflow definitions and their IDs. |
+| `reviews_create` ✍️ | Start a review of selected file versions under an approval workflow. |
+
+Approvers come from the workflow definition, not from the create call — pick a workflow with
+`reviews_list_workflows`, then pass its id plus the file version URNs. ACC's Reviews API
+exposes no endpoint for changing a review's state from outside, so there is no transition
+tool; approvals happen in ACC itself.
 
 ### AEC Data Model — BIM GraphQL (8)
 

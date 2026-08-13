@@ -10,7 +10,6 @@ vi.mock('node:fs', () => ({
 }));
 
 vi.mock('../../../../src/apis/reviews.js', () => ({
-  resolveReviewsContainerId: vi.fn().mockResolvedValue('container-123'),
   createReview: vi.fn(),
 }));
 
@@ -48,18 +47,21 @@ function makeCtx(): ToolContext {
   };
 }
 
-const PAST_DATE = '2020-01-01';
-const FUTURE_DATE = '2099-12-31';
+const VERSIONED = 'urn:adsk.wipprod:fs.file:vf.D6rEDK6lSbW9PTWkTAmu0A?version=1';
+const LINEAGE_ONLY = 'urn:adsk.wipprod:dm.lineage:D6rEDK6lSbW9PTWkTAmu0A';
 
 const BASE_INPUT = {
-  hub_id: 'b.hub-1',
   project_id: 'b.proj-1',
   name: 'Structural Review',
-  reviewer_ids: ['user-abc'],
+  workflow_id: 'b3f5e818-dcd6-49d8-8d47-ba505988d7b7',
+  file_versions: [{ urn: VERSIONED }],
   dry_run: true as const,
 };
 
-describe('reviews_create — due_date business-rule validator (R2-9)', () => {
+// ACC answers an unversioned URN with `should match format "versionedFileUrn"`, naming an
+// internal type the caller cannot act on. The validator catches it first, before the
+// approval token is issued, so the message says which URN is wrong and why.
+describe('reviews_create — file version URN validator', () => {
   let wrapMutationTool: typeof import('../../../../src/tools/_wrap.js').wrapMutationTool;
   let createReviewTool: typeof import('../../../../src/tools/reviews/create.js').createReviewTool;
 
@@ -70,28 +72,41 @@ describe('reviews_create — due_date business-rule validator (R2-9)', () => {
     ({ createReviewTool } = await import('../../../../src/tools/reviews/create.js'));
   });
 
-  it('rejects a past due_date with isError and informative message', async () => {
+  it('rejects a lineage URN with no version suffix, naming the offender', async () => {
     const wrapped = wrapMutationTool(createReviewTool, makeCtx());
-    const result = await wrapped({ ...BASE_INPUT, due_date: PAST_DATE });
+    const result = await wrapped({ ...BASE_INPUT, file_versions: [{ urn: LINEAGE_ONLY }] });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toMatch(/due_date.*past|past.*due_date/i);
-    expect(result.content[0]?.text).toContain(PAST_DATE);
+    expect(result.content[0]?.text).toMatch(/version/i);
+    expect(result.content[0]?.text).toContain(LINEAGE_ONLY);
   });
 
-  it('accepts a future due_date and returns a preview', async () => {
+  it('rejects the batch when only one of several URNs is unversioned', async () => {
     const wrapped = wrapMutationTool(createReviewTool, makeCtx());
-    const result = await wrapped({ ...BASE_INPUT, due_date: FUTURE_DATE });
+    const result = await wrapped({
+      ...BASE_INPUT,
+      file_versions: [{ urn: VERSIONED }, { urn: LINEAGE_ONLY }],
+    });
 
-    expect(result.isError).toBeUndefined();
-    expect(result.structuredContent).toHaveProperty('preview');
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('1 of 2');
   });
 
-  it('accepts input with no due_date', async () => {
+  it('accepts versioned URNs and returns a preview', async () => {
     const wrapped = wrapMutationTool(createReviewTool, makeCtx());
     const result = await wrapped(BASE_INPUT);
 
     expect(result.isError).toBeUndefined();
     expect(result.structuredContent).toHaveProperty('preview');
+  });
+
+  it("previews the body ACC actually accepts — no reviewer or due-date fields", async () => {
+    const wrapped = wrapMutationTool(createReviewTool, makeCtx());
+    const result = await wrapped(BASE_INPUT);
+
+    const preview = (result.structuredContent as { preview: { body: Record<string, unknown> } })
+      .preview;
+    expect(Object.keys(preview.body).sort()).toEqual(['fileVersions', 'name', 'workflowId']);
+    expect(preview.body['fileVersions']).toEqual([{ urn: VERSIONED }]);
   });
 });

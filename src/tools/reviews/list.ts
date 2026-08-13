@@ -3,7 +3,6 @@ import type { ReadToolDef } from '../_types.js';
 import { listReviews } from '../../apis/reviews.js';
 
 const inputSchema = z.object({
-  hub_id: z.string().min(1).describe('Hub ID from dm_list_hubs.'),
   project_id: z.string().min(1).describe('ACC project ID.'),
   status: z
     .enum(['OPEN', 'IN_REVIEW', 'APPROVED', 'REJECTED', 'VOID'])
@@ -19,18 +18,16 @@ export const listReviewsTool: ReadToolDef<typeof inputSchema> = {
   description:
     'Lists document/design reviews in an ACC project. ' +
     'Returns review IDs, names, statuses, and due dates. This is a summary view — full ' +
-    'detail for one review comes from reviews_get. Takes both hub_id and project_id, since ' +
-    'the Reviews container ID is resolved from the hub.',
+    'detail for one review comes from reviews_get. Project IDs come from dm_list_projects.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],
   scope: { kind: 'dm' },
   inputSchema,
-  getHubId: (i) => i.hub_id,
   getProjectId: (i) => i.project_id,
 
   execute: async (input, ctx) => {
-    const { results, pagination } = await listReviews(ctx.auth, input.hub_id, input.project_id, {
+    const { results, pagination } = await listReviews(ctx.auth, input.project_id, {
       limit: input.limit,
       offset: input.offset,
       ...(input.status ? { status: input.status } : {}),

@@ -33,7 +33,7 @@ import { pinElementTool } from './issues/pin-element.js';
 import { listReviewsTool } from './reviews/list.js';
 import { getReviewTool } from './reviews/get.js';
 import { createReviewTool } from './reviews/create.js';
-import { transitionReviewTool } from './reviews/transition.js';
+import { listReviewWorkflowsTool } from './reviews/list-workflows.js';
 
 // ---- AEC Data Model (GraphQL) -----------------------------------------------
 import { aecdmListHubsTool } from './aecdm/list-hubs.js';
@@ -111,8 +111,8 @@ export const toolRegistry: AnyToolDef[] = [
   // Reviews (4)
   listReviewsTool,
   getReviewTool,
+  listReviewWorkflowsTool,
   createReviewTool,
-  transitionReviewTool,
 
   // AEC Data Model / BIM GraphQL (8)
   aecdmListHubsTool,

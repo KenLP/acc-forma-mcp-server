@@ -3,7 +3,6 @@ import type { ReadToolDef } from '../_types.js';
 import { getReview } from '../../apis/reviews.js';
 
 const inputSchema = z.object({
-  hub_id: z.string().min(1).describe('Hub ID from dm_list_hubs.'),
   project_id: z.string().min(1).describe('ACC project ID.'),
   review_id: z.string().min(1).describe('Review ID from reviews_list.'),
 });
@@ -13,18 +12,16 @@ export const getReviewTool: ReadToolDef<typeof inputSchema> = {
   title: 'Get Review Details',
   description:
     'Returns full details of a single ACC review: reviewers, description, status, and ' +
-    'timestamps. Read-only — the review status is changed by reviews_transition. Takes both ' +
-    'hub_id and project_id, since the Reviews container ID is resolved from the hub.',
+    'timestamps. Read-only. Review IDs come from reviews_list.',
   kind: 'read',
   scopes: ['data:read'],
   requiredAuthModes: ['ssa', '3lo'],
   scope: { kind: 'dm' },
   inputSchema,
-  getHubId: (i) => i.hub_id,
   getProjectId: (i) => i.project_id,
 
   execute: async (input, ctx) => {
-    const review = await getReview(ctx.auth, input.hub_id, input.project_id, input.review_id);
+    const review = await getReview(ctx.auth, input.project_id, input.review_id);
 
     const lines = [
       `Name:       ${review.name}`,

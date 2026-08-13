@@ -37,10 +37,10 @@
     { "name": "issues_list_attrs", "description": "List custom attribute definitions configured for a project's issues.", "mutating": false },
     { "name": "issues_list_attachments", "description": "List files and links attached to an issue, paginated.", "mutating": false },
 
-    { "name": "reviews_list", "description": "List reviews in a project's Reviews container.", "mutating": false },
-    { "name": "reviews_get", "description": "Get a single review, including its status and assigned reviewers.", "mutating": false },
-    { "name": "reviews_create", "description": "Create a new review with reviewers, due date, and workflow type.", "mutating": true },
-    { "name": "reviews_transition", "description": "Transition a review's state: submit, approve, reject, void, or reopen.", "mutating": true },
+    { "name": "reviews_list", "description": "List the reviews in a project, with status and due date.", "mutating": false },
+    { "name": "reviews_get", "description": "Get a single review, including its status and current step.", "mutating": false },
+    { "name": "reviews_list_workflows", "description": "List a project's approval workflow definitions and their IDs.", "mutating": false },
+    { "name": "reviews_create", "description": "Start a review of selected file versions under an approval workflow.", "mutating": true },
 
     { "name": "aecdm_list_hubs", "description": "List AEC Data Model (AECDM)-native hubs.", "mutating": false },
     { "name": "aecdm_list_projects", "description": "List projects within an AECDM hub.", "mutating": false },
