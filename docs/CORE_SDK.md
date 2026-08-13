@@ -1,6 +1,6 @@
 # Core SDK — `acc-forma-mcp-server/core`
 
-The typed APS client layer of this repo is consumable as a library, without starting the MCP server and **without any `APS_*`/`SSA_*`/`FORMA_*` env vars**. This is the shared kernel for sibling products in `D:\AIProjects\CDE Apps` (n8n connector pack, CDE Pulse, gateways).
+The typed APS client layer of this repo is consumable as a library, without starting the MCP server and **without any `APS_*`/`SSA_*`/`FORMA_*` env vars**. It is the shared kernel for the publisher's sibling products (an n8n connector pack, CDE Pulse, gateways), and is equally usable from any Node project of your own.
 
 ```ts
 import {
@@ -20,7 +20,7 @@ See [ADR 0002](adr/0002-core-subpath-export.md). Short version: the MCP server's
 ## Consuming from a sibling project
 
 ```json
-// package.json of your app (e.g. under D:\AIProjects\CDE Apps\apps\<name>)
+// package.json of your app, in a directory alongside a checkout of this repo
 {
   "type": "module",
   "dependencies": {
@@ -31,7 +31,7 @@ See [ADR 0002](adr/0002-core-subpath-export.md). Short version: the MCP server's
 
 `npm install` symlinks the repo; `import ... from 'acc-forma-mcp-server/core'` resolves through the `exports` map to `dist/core.js` + `dist/core.d.ts` (full types). **Run `npm run build` in this repo after pulling changes** — consumers see `dist/`, not `src/`.
 
-Working example: [`CDE Apps/examples/core-consumer`](../../CDE%20Apps/examples/core-consumer/main.mjs).
+The snippet under "Auth: explicit config first, env fallback second" below is a complete working consumer — there is no separate example directory in this repository.
 
 ## Auth: explicit config first, env fallback second
 
@@ -77,7 +77,7 @@ Domains are exported as namespaces so same-named types in different domains (e.g
 | `adminApi` | Account Admin | projects/users/companies (2LO) |
 | `pushpinApi` | Issue pushpins | `aecdmPositionToViewer`, `buildPushpin`, `buildRasterPushpin`, coordinate transforms |
 
-All functions take an `AuthProvider` as first argument — auth strategy stays the caller's choice. Domain-specific gotchas (globalOffset, viewableId vs guid, AECDM level trap, MC product access) are documented in [CLAUDE.md](../CLAUDE.md); those notes apply verbatim to core consumers.
+All functions take an `AuthProvider` as first argument — auth strategy stays the caller's choice. Domain-specific gotchas (pushpin `globalOffset`, `viewableId` vs SVF2 `guid`, the AECDM level trap, Model Coordination product access) are documented as comments in the API modules themselves — `src/apis/pushpin.ts`, `src/apis/model-derivative.ts`, `src/apis/model-coordination.ts` — and apply verbatim to core consumers.
 
 ## What is NOT in core (by design)
 
@@ -97,5 +97,5 @@ Enforced by [`tests/unit/core/env-free.spec.ts`](../tests/unit/core/env-free.spe
 
 ## Versioning & stability
 
-- The core surface follows this package's semver. Until `1.0.0`, breaking changes are allowed but must be listed in [CHANGELOG.md](../CHANGELOG.md) under a **Core SDK** heading.
+- The core surface follows this package's semver. Until `1.0.0`, breaking changes are allowed but must be called out in the [release notes](https://github.com/KenLP/acc-forma-mcp-server/releases) under a **Core SDK** heading.
 - The MCP tool schemas and the core exports are **independent surfaces** — renaming a core function does not touch MCP clients, and vice versa.

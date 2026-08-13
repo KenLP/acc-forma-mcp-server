@@ -39,7 +39,18 @@ project access is isolated from every other tenant and controlled by your own hu
 see [PRIVACY.md](PRIVACY.md) for exactly what the hosted service stores and for how long.
 Pricing: **Free** during the pilot.
 
-Once you have a bearer key, connect with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote)
+### Claude Desktop — one-click install
+
+Download `bimlynx-<version>.mcpb` from the
+[latest release](https://github.com/KenLP/acc-forma-mcp-server/releases/latest) and open it.
+Claude Desktop installs it as an extension and asks for your bearer key; nothing else to
+configure, and no Node or npm setup of your own. Everything below — the JSON snippets, the
+Windows `.cmd` workaround — is only needed if you are wiring the connection up by hand or
+using a different MCP client.
+
+### Any MCP client — manual configuration
+
+Connect with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote)
 (this server speaks Streamable HTTP; `mcp-remote` bridges it to MCP clients that expect a
 local stdio process, such as Claude Desktop).
 
@@ -510,10 +521,10 @@ the publisher's instance — for your own organization, or to self-host the mult
 for multiple people/orgs instead of one server per machine — set `FORMA_TRANSPORT=http`. The
 default for a self-hosted server remains local **stdio**, as shown in "Self-host (advanced)"
 above; setting `FORMA_TRANSPORT=http` does not change stdio behavior when you're not using it.
-See `CLAUDE.md`'s "Remote mode (R1)" section and [docs/specs/SPEC_remote-mcp.md](docs/specs/SPEC_remote-mcp.md)
-for the full design, `Dockerfile`/`fly.toml` for deployment, and `scripts/tenant-seed.ts` /
-`scripts/tenant-admin.ts` (run them directly: `npx tsx scripts/tenant-admin.ts create --name "X"`)
-to provision tenants.
+See ["Remote mode isolation" in docs/SAFETY.md](docs/SAFETY.md) for how a tenant is kept
+separate from every other one and how to offboard one, `Dockerfile`/`fly.toml` for deployment,
+and `scripts/tenant-seed.ts` / `scripts/tenant-admin.ts` (run them directly:
+`npx tsx scripts/tenant-admin.ts create --name "X"`) to provision tenants.
 
 ---
 
