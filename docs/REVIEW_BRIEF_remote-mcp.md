@@ -72,3 +72,87 @@ Ordered by how much a wrong answer would cost us.
 ## What a useful report looks like
 
 For each finding: the file and line, a concrete failure scenario (inputs → wrong outcome), and how you verified it — reading code, running a test, or probing. Please separate *confirmed* from *suspected*; we would rather have five confirmed findings than thirty plausible ones. If you conclude something is fine, say why you are confident, so we know which stones were turned.
+
+---
+
+## Response to your review (written 2026-08-13, after remediation)
+
+Your report is `docs/audits/AUDIT_2026-08-12_remote-mcp.md`. Before touching any code we
+re-verified all thirteen findings independently — reading the cited lines ourselves and, where
+your report described a probe, re-running our own version of it rather than trusting your output.
+Result: **13/13 confirmed.** None were dismissed. The full verdict table, with the nuance each
+finding picked up under re-verification, is `docs/audits/AUDIT_2026-08-12_remediation-plan.md`.
+Four commits closed the ones we're treating as done: `5527eed`, `057955c`, `ce8f150`, `1e8e629`.
+
+**Where we agreed and fixed as described:**
+
+- **P1-1 (UTC rollover)** — reproduced your fake-clock result exactly. Fixed by keying the cached
+  last-hash by the resolved daily file path instead of the directory (`5527eed`).
+- **P1-4 (unbounded downloads)** — agreed in full. Model Properties NDJSON is now stream-parsed
+  with the element cap enforced during the read; Model Coordination's buffered reads now count
+  bytes as they arrive and cap decompressed size too; both fetches carry timeouts (`ce8f150`).
+- **P2-1 (500 instead of 413)** — reproduced by probe. Fixed immediately (`5527eed`). The other
+  half of your finding — moving body-parsing behind auth — we deliberately split into its own
+  commit (`1e8e629`) because it changes what an unauthenticated malformed/oversized body reports
+  (401 instead of 400/413), which we considered a semantic call worth isolating from a pure
+  size-limit fix, not something to slip in quietly.
+- **P2-2 (retention not continuous)** — agreed; added a 24h unref'd prune timer (`1e8e629`).
+- **P1-2 (verifier over-claims)** and **P1-3 (audit stores full output)** — agreed the code and
+  the promises had drifted apart, and chose to fix the code toward the promise rather than soften
+  the promise toward the code. `summarizeForAudit()` now keeps identifiers/status/counts only
+  (`057955c`); `meta_verify_audit_chain`'s description, `PRIVACY.md`, `docs/SAFETY.md`, and the
+  manifest now say the chain proves internal consistency of the retained log, not non-deletion
+  (`ce8f150`).
+- **D1 (mp_diff_versions classification)**, **D3 (stale pnpm docs)** — agreed as written. D3 we
+  didn't take on faith either: ran a real `pnpm install --frozen-lockfile` in a scratch clone
+  before removing the warning (`1e8e629`).
+- **D2 (non-atomic token consume)** — your own report already scoped this correctly as a
+  multi-process risk, not a live bug (your concurrency probe showed the single-process case is
+  safe, which matches ours). We made the final consume step a single `DELETE` guarded by
+  `changes === 1` anyway, ahead of any actual horizontal scaling (`1e8e629`).
+
+**Where we narrowed your recommendation, and why:**
+
+- **P0-2 (approval-token binding).** You proposed a wrapper-wide redesign — "one canonical
+  preparation step that returns an immutable execution plan" for every mutation tool. We checked
+  all nine and found the TOCTOU is real in exactly one: `issues_pin_element`, whose preview
+  re-fetches live state (global offset, element position, object id) that can drift before
+  execute. The other eight build their request body purely from the input, so the existing
+  cross-request protection (the token hash is checked against a freshly recomputed preview) already
+  held for them. We fixed the one tool that needed it — `execute()` now receives the exact
+  `preview.executePayload` from the same request instead of re-deriving it (`057955c`) — instead
+  of restructuring the pipeline for eight tools that were never exposed. If you think that's an
+  incomplete read of the risk surface, we'd like to hear specifically which of the other eight you
+  think still has a gap; we didn't find one.
+- **P0-1 (webhooks auth/tenant model).** You gave us two options: strip webhooks from remote, or
+  build a tenant-owned hook-ownership registry with controlled 2LO. We took the first (your
+  recommended one) rather than the registry — webhooks have zero hosted users today, and a
+  per-tenant ownership model is real design work we didn't think was justified for a pilot. The
+  tools now declare `remoteEnabled: false` and `requiredAuthModes: ['2lo']` (the auth-mode gate
+  you correctly noted was entirely missing) and are skipped whenever a request carries a
+  `tenantId` (`5527eed`). Hosted tool count is 43; the 3 webhook tools remain available self-host
+  over stdio with real 2LO credentials, where the isolation concern doesn't apply.
+
+- **P2-3 (tenant deletion / cache cleanup).** We agree cached decrypted credentials outliving a
+  disable is a real gap, but we don't think it's a code fix: the CLI that disables a tenant runs
+  in a separate process (`fly ssh console`) from the server holding the cache, so there is nothing
+  in-process to evict on that path. The correct fix is an operational procedure, and it shipped as
+  one — `docs/SAFETY.md` §"Offboarding a tenant" (`1e8e629`) documents the five steps: disable,
+  let in-flight requests drain, `fly machines restart` to flush the provider cache, delete the
+  tenant row plus the three composite-keyed tables plus the tenant's audit subdirectory, and the
+  customer's own removal of the robot at the Autodesk layer. Two honest caveats we wrote into that
+  document rather than around: the restart is process-wide (there is no per-tenant evict), and the
+  permanent-deletion step is a hand-run SQLite operation we have not yet rehearsed against the
+  deployed volume.
+
+**Where we still owe you something, and haven't shipped it:**
+
+- **P2-4 (subprocessor wording).** Not ours to decide — forwarded to Ken. `PRIVACY.md` now
+  explains why AWS isn't listed as a third subprocessor (Autodesk-issued signed URLs, no AWS
+  account of our own), but the exact wording still wants a legal/privacy read before it's final.
+
+**Overall:** this was the highest-signal review we've had on this codebase — thirteen findings,
+thirteen held up, and the two blockers you flagged as blockers (P0-1, P0-2) were both real. Thank
+you for pointing at the weak spots instead of confirming what we already believed. We have not
+yet re-run you (or an equivalent independent pass) against the post-remediation code — that's
+still ahead of us, alongside the production redeploy, before this goes to Autodesk.
