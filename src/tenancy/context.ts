@@ -60,6 +60,12 @@ export function buildTenantContext(tenant: TenantRecord, baseEnv: Env): ToolCont
       // is empty/unset in remote mode) — otherwise every tenant's audit entries attribute
       // mutations to the same (wrong) actor. See CLAUDE.md.
       SSA_ID: tenant.serviceAccountId,
+      // The auth provider built above IS SSA, whatever the process-wide APS_AUTH_MODE says.
+      // Without this, FORMA_TRANSPORT=http + APS_AUTH_MODE=2lo would make the wrapper's
+      // auth-mode gate deny SSA-only tools (Issues, Reviews) and let 2lo-only checks pass
+      // against a provider that isn't 2LO — the gate must judge the credential actually
+      // attached to this context.
+      APS_AUTH_MODE: 'ssa',
     },
     tenantId: tenant.id,
   };

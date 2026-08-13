@@ -54,6 +54,19 @@ function setupPersistence(): void {
       );
     }
     cleanupExpiredRows();
+    // Same reasoning as schedulePeriodicAuditPrune: a startup-only sweep never re-runs on a
+    // machine that stays warm, so expired approval tokens / rate counters / idempotency rows
+    // would accumulate in state.db for as long as steady traffic keeps the process alive.
+    // Unlike pruneOldAuditFiles, cleanupExpiredRows does not catch its own errors — and an
+    // uncaught throw inside a setInterval callback kills the process, so a transient SQLite
+    // error (locked db, full disk) must not take the server down with it.
+    setInterval(() => {
+      try {
+        cleanupExpiredRows();
+      } catch (err) {
+        logger.warn({ err }, 'periodic persistence cleanup failed; will retry next interval');
+      }
+    }, AUDIT_PRUNE_INTERVAL_MS).unref();
     logger.info(
       { db_path: env.FORMA_DB_PATH },
       'SQLite persistence enabled — approval tokens, rate counters, and idempotency records are durable across restarts',

@@ -33,6 +33,25 @@ export interface RequestOptions {
   retryOn5xx?: boolean;
 }
 
+/**
+ * Retry-After may be delta-seconds ("120") or an HTTP-date ("Wed, 21 Oct 2026 07:28:00 GMT")
+ * — RFC 9110 allows both. Number() on the date form is NaN, and NaN milliseconds passed to
+ * setTimeout fire immediately, turning the backoff into a tight retry loop against an
+ * already rate-limiting endpoint. Clamped to [0, 300s]: a negative delta means the date is
+ * already past (retry now), and anything above five minutes is treated as the fallback
+ * rather than parking a tool call that long.
+ */
+export function parseRetryAfterSeconds(header: string | null, fallbackSeconds: number): number {
+  if (header === null || header === '') return fallbackSeconds;
+  const asNumber = Number(header);
+  if (Number.isFinite(asNumber)) return Math.min(Math.max(asNumber, 0), 300);
+  const asDateMs = Date.parse(header);
+  if (Number.isFinite(asDateMs)) {
+    return Math.min(Math.max((asDateMs - Date.now()) / 1000, 0), 300);
+  }
+  return fallbackSeconds;
+}
+
 /** A successful APS response with its status and headers kept intact. */
 export interface ApsResponse<T> {
   status: number;
@@ -106,7 +125,7 @@ export async function apsRequestDetailed<T>(
 
     // Rate limit — respect Retry-After header; add jitter to avoid thundering herd
     if (resp.status === 429) {
-      const retryAfter = Number(resp.headers.get('Retry-After') ?? backoffMs / 1000);
+      const retryAfter = parseRetryAfterSeconds(resp.headers.get('Retry-After'), backoffMs / 1000);
       const waitMs = retryAfter * 1000 * (0.5 + Math.random() * 0.5);
       logger.warn({ path, attempt, waitMs }, 'Rate limited by APS; backing off');
       if (attempt < MAX_RETRIES) {

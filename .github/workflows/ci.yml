@@ -30,6 +30,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Fails the build on known high-severity advisories in production dependencies —
+      # a finding class marketplace review also scans for. Moderate/low advisories are
+      # reported by the same command locally but do not gate CI.
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level high
+
       - name: Type check
         run: pnpm run typecheck
 

@@ -93,11 +93,13 @@
   "pnpm": {
     "overrides": {
       "form-data": "^4.0.6",
-      "hono": "^4.12.30",
+      "hono": ">=4.12.34",
       "axios": ">=1.15.1",
-      "fast-uri": ">=3.1.1",
-      "ip-address": ">=10.1.1",
-      "qs": ">=6.15.2"
+      "fast-uri": ">=4.1.2",
+      "ip-address": ">=10.3.1",
+      "qs": ">=6.15.2",
+      "@hono/node-server": ">=1.19.15",
+      "body-parser": ">=2.3.0"
     },
     "onlyBuiltDependencies": [
       "better-sqlite3",

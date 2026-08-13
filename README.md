@@ -133,7 +133,10 @@ For reads, just ask again. For writes, do **not** guess and re-run blindly. Two 
   attempt. If you repeat the call with the same key, the server recognises it and replays
   the original result instead of performing the action twice. Reusing a key for a
   *different* operation is rejected rather than silently accepted, so a copy-pasted key
-  can't quietly overwrite something else.
+  can't quietly overwrite something else. One boundary: the key is recorded when the
+  original call *finishes*, so a retry fired while the original is still executing is not
+  deduplicated — both run. Wait out your client's timeout (or check `meta_list_changelog`)
+  before retrying rather than re-sending immediately.
 
 Long-running tools are the usual cause. `mp_diff_versions` polls Autodesk for up to
 `wait_seconds`; if it runs out it returns a `diff_id`, and calling it again with that id

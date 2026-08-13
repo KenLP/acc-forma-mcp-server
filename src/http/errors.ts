@@ -47,7 +47,12 @@ export class ApsApiError extends Error {
     if (this.isNotFound()) {
       return `Resource not found (404): ${this.method} ${this.url}. Check that the IDs are correct and the resource exists.`;
     }
-    return `APS API error ${this.status} for ${this.method} ${this.url}: ${JSON.stringify(this.body)}`;
+    // Cap the echoed body: a 400 validation response can quote back the submitted payload
+    // (issue titles, descriptions), and this text is written verbatim into the audit log's
+    // failed_api entries — which summarizeForAudit never sees, since errors bypass it.
+    const bodyText = JSON.stringify(this.body);
+    const capped = bodyText.length > 600 ? `${bodyText.slice(0, 600)}… [truncated]` : bodyText;
+    return `APS API error ${this.status} for ${this.method} ${this.url}: ${capped}`;
   }
 }
 

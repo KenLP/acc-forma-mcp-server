@@ -11,7 +11,7 @@ a local stdio tool; over the last three days it became a **hosted multi-tenant
 service** and is now live in production at `https://mcp.bimlynx.com/mcp`, about to be
 submitted to Autodesk's Design & Make Marketplace.
 
-Branch: `feat/remote-mcp` (14+ commits, not yet merged to `main`).
+Branch: was `feat/remote-mcp`; merged to `main` and tagged `v0.2.0` on 2026-08-13.
 Stack: TypeScript, Node ≥20, ESM. Deployed as a container on Fly.io (Singapore).
 
 ## Read these first, in this order
