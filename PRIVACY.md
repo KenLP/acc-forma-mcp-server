@@ -143,6 +143,18 @@ There are no other sub-processors: no analytics provider, no advertising network
 third-party logging or monitoring SDK, no data broker. Your data is not sold, and it is not
 used to train any model, by the publisher or otherwise.
 
+**Our commitment about these two.** We engage a sub-processor only where it is necessary to
+operate the service, and only where that provider is bound by published privacy and security
+commitments giving your data protection at least equivalent to what this policy states. Both
+current sub-processors meet that bar: Autodesk under the
+[Autodesk Privacy Statement](https://www.autodesk.com/company/legal-notices-trademarks/privacy-statement),
+and Fly.io under the [Fly.io Privacy Policy](https://fly.io/legal/privacy-policy/) and its
+data-processing terms. Neither is permitted to use your data for its own purposes, to sell
+it, or to disclose it beyond what delivering their service requires. If we ever add or
+replace a sub-processor, this section is updated before the change takes effect, and the
+same standard applies to the replacement — we will not route your data through a provider
+offering weaker protection than this policy promises.
+
 **Why AWS is not listed here.** Model Coordination clash results are downloaded from
 pre-signed S3 URLs that Autodesk issues, pointing at Autodesk's own storage — which is why
 `*.amazonaws.com` appears in this server's declared endpoints. We hold no AWS account, store
