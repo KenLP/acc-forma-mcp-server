@@ -12,11 +12,14 @@ import { encryptSecret } from '../../../src/tenancy/crypto.js';
  * runbook (docs/runbooks/RUNBOOK_backup-and-restore.md) tells an operator to read both.
  * So these drive the real process rather than importing functions out of it.
  *
- * tsx is invoked directly from node_modules/.bin rather than through `npx` — measured at
- * ~0.1s per call, cheap enough to keep the whole file well inside the suite's budget.
+ * The child is `node <tsx cli.mjs> <script>` rather than the `node_modules/.bin/tsx` shim:
+ * on Windows that shim is `tsx.CMD`, which spawnSync refuses to run without a shell, so
+ * every test here would report `status: -1` with no hint that tsx never launched. Going
+ * through process.execPath is the same ~0.1s per call and works on every platform this
+ * repo is developed on.
  */
 const CLI = 'scripts/backup-tenants.ts';
-const TSX = join(process.cwd(), 'node_modules', '.bin', 'tsx');
+const TSX_CLI = join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
 
 const MASTER_KEY = randomBytes(32).toString('hex');
 const WRONG_KEY = randomBytes(32).toString('hex');
@@ -31,7 +34,7 @@ function run(
   stdin?: string,
   masterKeyEnv?: string,
 ): { status: number; stdout: string; stderr: string } {
-  const result = spawnSync(TSX, [CLI, ...args], {
+  const result = spawnSync(process.execPath, [TSX_CLI, CLI, ...args], {
     encoding: 'utf8',
     input: stdin ?? '',
     // Keep the ambient FORMA_MASTER_KEY (a developer's own .env export) out of the child
@@ -39,6 +42,9 @@ function run(
     // pass for the wrong reason.
     env: { ...process.env, FORMA_MASTER_KEY: masterKeyEnv ?? '' },
   });
+  // A spawn failure (binary missing, EACCES) must read as what it is, not as the CLI
+  // exiting 1 — otherwise a broken harness is indistinguishable from a passing negative test.
+  if (result.error) throw result.error;
   return {
     status: result.status ?? -1,
     stdout: result.stdout ?? '',
@@ -241,10 +247,7 @@ describe('scripts/backup-tenants', () => {
 
     it('reads the key from FORMA_MASTER_KEY when --stdin is not passed', () => {
       live = seedDb(dbPath, 2);
-      const result = spawnSync(TSX, [CLI, 'verify-key', '--db', dbPath], {
-        encoding: 'utf8',
-        env: { ...process.env, FORMA_MASTER_KEY: MASTER_KEY },
-      });
+      const result = run(['verify-key', '--db', dbPath], undefined, MASTER_KEY);
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('All tenant rows decrypt with this key');
     });
@@ -394,7 +397,11 @@ describe('scripts/backup-tenants', () => {
       expect(combined).not.toContain(MASTER_KEY);
       expect(combined).not.toContain(NEW_KEY);
       expect(combined).not.toContain(PEM_BODY);
+      // Fingerprints are of the lower-cased hex, so an upper-case env key must not leak
+      // through a differently-cased fingerprint either.
+      expect(combined).not.toContain(MASTER_KEY.toUpperCase());
     });
+
 
     it('says there is nothing to do for an empty tenant table', () => {
       live = seedDb(dbPath, 0);
@@ -419,6 +426,116 @@ describe('scripts/backup-tenants', () => {
       expect(run(['verify-key', '--db', dbPath, '--stdin'], third).status).toBe(0);
       expect(run(['verify-key', '--db', dbPath, '--stdin'], NEW_KEY).status).toBe(1);
       expect(run(['verify-key', '--db', dbPath, '--stdin'], MASTER_KEY).status).toBe(1);
+    });
+  });
+
+  describe('flag parsing', () => {
+    it('refuses a --db that lost its value instead of falling back to the production path', () => {
+      live = seedDb(dbPath, 1);
+      // The dangerous shape: `rotate-key --apply --db` with the path forgotten. The old
+      // parser read '' and silently defaulted to /data/state.db.
+      const result = run(['rotate-key', '--apply', '--db'], randomBytes(32).toString('hex'), MASTER_KEY);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('--db requires a value');
+      expect(result.stderr).not.toContain('/data/state.db');
+    });
+
+    it('rejects an unknown flag rather than ignoring it and using a default', () => {
+      live = seedDb(dbPath, 1);
+      const result = run(['snapshot', '--db', dbPath, '--output', join(dir, 'x.db')]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('unknown flag --output');
+      expect(existsSync(join(dir, 'x.db'))).toBe(false);
+    });
+
+    it('rejects --out on rotate-key, whose backup path flag is --backup-out', () => {
+      live = seedDb(dbPath, 1);
+      const result = run(
+        ['rotate-key', '--db', dbPath, '--apply', '--out', join(dir, 'pre.db')],
+        randomBytes(32).toString('hex'),
+        MASTER_KEY,
+      );
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('unknown flag --out');
+      // Nothing happened: no rotation, no stray backup under the default name.
+      expect(run(['verify-key', '--db', dbPath, '--stdin'], MASTER_KEY).status).toBe(0);
+      expect(readdirSync(dir).some((f) => f.includes('.pre-rotate-'))).toBe(false);
+    });
+  });
+
+  it('fingerprints a key identically whether its hex is upper- or lower-case', () => {
+    live = seedDb(dbPath, 1);
+    const fingerprint = (out: string): string => /Key fingerprint: ([0-9a-f]+)/.exec(out)?.[1] ?? '';
+    const lower = run(['verify-key', '--db', dbPath, '--stdin'], MASTER_KEY.toLowerCase());
+    const upper = run(['verify-key', '--db', dbPath, '--stdin'], MASTER_KEY.toUpperCase());
+    expect(lower.status).toBe(0);
+    expect(upper.status).toBe(0);
+    expect(fingerprint(upper.stdout)).toBe(fingerprint(lower.stdout));
+  });
+
+  describe('restore', () => {
+    it('dry run reports what would change and writes nothing', () => {
+      live = seedDb(dbPath, 3);
+      const backup = join(dir, 'backup.db');
+      expect(run(['snapshot', '--db', dbPath, '--out', backup]).status).toBe(0);
+      // Provision one more tenant after the backup — the row a restore would lose.
+      live
+        .prepare('INSERT INTO tenants VALUES (?,?,?,?,?,?,?,?,0)')
+        .run('tenant-late', 'Late Customer', 'late@x', 'sa-late', 'kid-late', encryptSecret(FAKE_PEM, MASTER_KEY), 'h-late', new Date().toISOString());
+      const before = ciphertexts(dbPath);
+
+      const result = run(['restore', '--db', dbPath, '--from', backup], undefined, MASTER_KEY);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('Backup contains 3 tenant row(s)');
+      expect(result.stdout).toContain('1 live tenant(s) are NOT in the backup');
+      expect(result.stdout).toContain('tenant-late');
+      expect(result.stdout).toContain('Dry run — nothing was written');
+      expect(ciphertexts(dbPath)).toEqual(before);
+    });
+
+    it('--apply restores through the backup API while the live handle stays open', () => {
+      live = seedDb(dbPath, 3);
+      const backup = join(dir, 'backup.db');
+      expect(run(['snapshot', '--db', dbPath, '--out', backup]).status).toBe(0);
+      // Simulate damage after the backup: drop a tenant on the live DB.
+      live.prepare('DELETE FROM tenants WHERE id = ?').run('tenant-1');
+      expect(ciphertexts(dbPath).size).toBe(2);
+
+      const result = run(['restore', '--db', dbPath, '--from', backup, '--apply'], undefined, MASTER_KEY);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('Restored 3 tenant row(s)');
+
+      // The `live` handle was open (WAL sidecars present) the whole time — exactly the
+      // running-server case the mv-based restore could not handle. It must now see the
+      // restored rows, and a fresh handle must agree.
+      const viaLive = live.prepare('SELECT count(*) AS c FROM tenants').get() as { c: number };
+      expect(viaLive.c).toBe(3);
+      expect(ciphertexts(dbPath).size).toBe(3);
+      expect(run(['verify-key', '--db', dbPath, '--stdin'], MASTER_KEY).status).toBe(0);
+      // And it took a pre-restore copy of the damaged state, in case that was the wrong call.
+      expect(readdirSync(dir).some((f) => f.includes('.pre-restore-'))).toBe(true);
+    });
+
+    it('refuses to restore a backup that does not decrypt under the current key', () => {
+      live = seedDb(dbPath, 2);
+      const foreign = join(dir, 'foreign.db');
+      const other = seedDb(foreign, 2, WRONG_KEY);
+      other.close();
+      const before = ciphertexts(dbPath);
+
+      const result = run(['restore', '--db', dbPath, '--from', foreign, '--apply'], undefined, MASTER_KEY);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('do not decrypt under the current FORMA_MASTER_KEY');
+      expect(ciphertexts(dbPath)).toEqual(before);
+      expect(readdirSync(dir).some((f) => f.includes('.pre-restore-'))).toBe(false);
+    });
+
+    it('requires --from and rejects restoring the live file onto itself', () => {
+      live = seedDb(dbPath, 1);
+      expect(run(['restore', '--db', dbPath], undefined, MASTER_KEY).stderr).toContain('needs --from');
+      expect(run(['restore', '--db', dbPath, '--from', dbPath], undefined, MASTER_KEY).stderr).toContain(
+        'is the live database itself',
+      );
     });
   });
 

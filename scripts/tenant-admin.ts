@@ -41,28 +41,7 @@ import {
   disableTenant,
   findTenantsByServiceAccountId,
 } from '../src/tenancy/index.js';
-
-function parseFlags(argv: string[]): Map<string, string> {
-  const flags = new Map<string, string>();
-  for (let i = 0; i < argv.length; i++) {
-    const token = argv[i];
-    if (token === undefined || !token.startsWith('--')) continue;
-    const key = token.slice(2);
-    const value = argv[i + 1];
-    if (value === undefined || value.startsWith('--')) {
-      throw new Error(`--${key} requires a value`);
-    }
-    flags.set(key, value);
-    i++;
-  }
-  return flags;
-}
-
-function requireFlag(flags: Map<string, string>, key: string): string {
-  const value = flags.get(key);
-  if (!value) throw new Error(`missing required --${key}`);
-  return value;
-}
+import { parseFlags, requireFlag } from './_cli.js';
 
 function buildAuth(): TwoLeggedAuthProvider {
   return new TwoLeggedAuthProvider([...SSA_ADMIN_SCOPES], {

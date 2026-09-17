@@ -47,9 +47,10 @@ gone.
 
 ### 1.1 If you do not have a copy
 
-You cannot recover it. You must generate a new one and re-provision every tenant — there is
-no re-encrypt path today, because the old ciphertext cannot be read without the old key. Do
-this only if step 2 below confirms the existing tenants are already unrecoverable.
+You cannot recover it. `rotate-key` (§6) cannot help either — it re-encrypts by first
+decrypting with the *current* key, which is exactly what is missing. You must generate a new
+key and re-provision every tenant. Do this only after §1.2 has confirmed, against a fresh
+snapshot, that no copy you can find decrypts the existing rows.
 
 ### 1.2 Verify the copy you have is the right one
 
@@ -61,7 +62,7 @@ fly ssh console -a bimlynx-mcp -C "node dist/backup-tenants.js verify-key"
 ```
 
 That checks the key **Fly is currently running with**. To check the copy *you* wrote down,
-pipe it in against a local restored backup (see §3) instead:
+pipe it in against a pulled snapshot (§2) instead:
 
 ```bash
 node dist/backup-tenants.js verify-key --db ./state-backup.db --stdin
@@ -184,34 +185,44 @@ record.
 
 ### 4.1 Restore the database from a pulled backup
 
-Upload the backup, stop traffic to avoid a concurrent writer, then swap it in:
+Do **not** `mv` a file into place. The live database runs in WAL mode, so `state.db-wal` and
+`state.db-shm` sit beside it; a restored main file dropped under the old sidecars lets
+SQLite replay the *old* database's WAL frames onto the *new* file on next open. The
+`restore` command goes through SQLite's backup API instead, writing the restored pages via
+the live file's own pager — the sidecars stay coherent, the running server sees the rows on
+its next statement, and nothing has to be stopped or restarted.
+
+Upload the backup:
 
 ```bash
 fly ssh sftp shell -a bimlynx-mcp
 ```
 
-`put ./state-backup-YYYYMMDD.db /data/state-restore.db`, then:
+`put ./state-backup-YYYYMMDD.db /data/state-restore.db`, then dry run. This checks the
+backup's integrity, proves every row decrypts under the key the server is running with, and
+lists any live tenant the restore would lose — and writes nothing:
 
 ```bash
-fly ssh console -a bimlynx-mcp -C "node dist/backup-tenants.js verify-key --db /data/state-restore.db"
+fly ssh console -a bimlynx-mcp -C "node dist/backup-tenants.js restore --from /data/state-restore.db"
 ```
 
-Only once that reports zero failures:
+Read the "NOT in the backup" list carefully: those are tenants provisioned after the backup
+was taken. If any are listed, see §4.3 before continuing. Then:
 
 ```bash
-fly ssh console -a bimlynx-mcp -C "mv /data/state.db /data/state.db.old && mv /data/state-restore.db /data/state.db"
+fly ssh console -a bimlynx-mcp -C "node dist/backup-tenants.js restore --from /data/state-restore.db --apply"
 ```
 
-Then restart the machine so the server reopens the new file:
+`--apply` first snapshots the current live state to `/data/state.db.pre-restore-<ts>.db` —
+the state being replaced may be the only copy of a later-provisioned tenant — then restores
+and verifies what landed from a fresh handle. No restart needed.
+
+Once a real tool call has succeeded against the restored data, remove both files from the
+volume:
 
 ```bash
-fly apps restart bimlynx-mcp
+fly ssh console -a bimlynx-mcp -C "rm /data/state-restore.db /data/state.db.pre-restore-*.db"
 ```
-
-Keep `state.db.old` until a real tool call has succeeded against the restored data.
-
-Note the WAL sidecars: if `/data/state.db-wal` exists from the old file, remove it in the
-same step — a stale WAL against a different main file is a corruption risk.
 
 ### 4.2 Restore the whole volume from a Fly snapshot
 
@@ -332,9 +343,25 @@ Zero failures means the running environment and the database agree. Then:
 
 ### 6.5 Rollback
 
-If something is wrong before you delete the pre-rotation backup: restore that file over
-`/data/state.db` (§4.1), and set `FORMA_MASTER_KEY` back to the old key. The pair is
-self-consistent.
+If something is wrong before you delete the pre-rotation backup, put it back through the
+same `restore` command, with `FORMA_MASTER_KEY` still the **old** key (i.e. before or
+after reverting §6.3 — the pair must match):
+
+```bash
+fly ssh console -a bimlynx-mcp -C "node dist/backup-tenants.js restore --from /data/state.db.pre-rotate-<ts>.db --apply"
+```
+
+If §6.3 already ran, set the secret back to the old key afterwards. `restore` refuses to
+proceed if the file does not decrypt under whatever key is in the environment, so a mismatch
+fails loudly rather than restoring unreadable rows.
+
+### 6.6 Do not provision during a rotation
+
+`rotate-key --apply` re-reads the table inside its transaction, so a tenant created between
+the dry run and `--apply` is rotated too — but a tenant created *after* `--apply` commits and
+*before* §6.3 lands is encrypted under the old key and stranded. Nothing in the tool can
+prevent that; the fix is procedural. Do not run `tenant-admin create` until §6.4 has
+reported zero failures.
 
 ---
 
