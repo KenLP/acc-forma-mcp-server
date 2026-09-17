@@ -23,7 +23,7 @@ export default defineConfig([
     // negated globs exclude those filenames from the wipe; the CLI build's own esbuild write
     // still overwrites them fresh on every `npm run build`, so this doesn't skip a rebuild —
     // it only stops this step from racing the other build's *output*.
-    clean: ['!tenant-admin.*', '!tenant-seed.*'],
+    clean: ['!tenant-admin.*', '!tenant-seed.*', '!backup-tenants.*'],
     sourcemap: true,
     dts: { entry: { core: 'src/core.ts' } },
     banner: { js: '#!/usr/bin/env node' },
@@ -33,7 +33,11 @@ export default defineConfig([
     // Tenant provisioning CLIs, built so they run on plain `node` inside the runtime
     // container (no tsx / devDependencies there — see Dockerfile prod prune). Dev usage via
     // `npm run tenant` / `npm run tenant-admin` (tsx) is unchanged; this is the container path.
-    entry: { 'tenant-admin': 'scripts/tenant-admin.ts', 'tenant-seed': 'scripts/tenant-seed.ts' },
+    entry: {
+      'tenant-admin': 'scripts/tenant-admin.ts',
+      'tenant-seed': 'scripts/tenant-seed.ts',
+      'backup-tenants': 'scripts/backup-tenants.ts',
+    },
     format: ['esm'],
     target: 'node20',
     clean: false, // must not wipe the index/core output built above

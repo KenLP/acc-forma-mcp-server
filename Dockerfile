@@ -24,8 +24,9 @@ RUN pnpm install --frozen-lockfile
 
 COPY tsconfig.json tsup.config.ts ./
 COPY src ./src
-# tsup builds dist/tenant-admin.js + dist/tenant-seed.js from here — without this the image
-# has no way to provision a tenant into the volume's state.db.
+# tsup builds dist/tenant-admin.js, dist/tenant-seed.js and dist/backup-tenants.js from here
+# — without this the image has no way to provision a tenant into the volume's state.db, nor
+# to take a consistent backup of it (see docs/runbooks/RUNBOOK_backup-and-restore.md).
 COPY scripts ./scripts
 RUN npm run build
 

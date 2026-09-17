@@ -36,6 +36,20 @@ primary_region = "sin" # Singapore — closest Fly region to APAC; change to tas
 [[mounts]]
   source = "forma_data"
   destination = "/data"
+  # Fly snapshots this volume daily and keeps 5 days by default. 30 is the retention for a
+  # volume whose `tenants` table IS the customer credential set: a tenant row carries the
+  # robot's encrypted private key and its bearer-key hash, neither of which can be
+  # regenerated, so a corruption noticed three weeks late still has something to restore to.
+  #
+  # These snapshots are block-level copies of a live WAL-mode SQLite file, so treat them as
+  # the second line of defence, not the first — a snapshot can land mid-checkpoint. The
+  # primary backup is the transactionally consistent one taken with
+  # `node dist/backup-tenants.js snapshot` and pulled off this volume; see
+  # docs/runbooks/RUNBOOK_backup-and-restore.md.
+  #
+  # Changing this value only affects snapshots taken from here on. Applying it to the
+  # existing volume also needs: fly volumes update <vol id> --snapshot-retention 30
+  snapshot_retention = 30
 
 [[vm]]
   size = "shared-cpu-1x"
