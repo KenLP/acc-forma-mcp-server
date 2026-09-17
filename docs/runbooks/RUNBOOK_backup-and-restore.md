@@ -255,11 +255,97 @@ If step 2 fails, you have found the problem while nothing is on fire.
 
 ---
 
+## 6. Rotate the master key
+
+Use when the key may have been exposed, or on a schedule you set. Rotation re-encrypts every
+tenant's robot private key; **bearer keys are unaffected**, so no customer has to be
+contacted and no ACC console step has to be redone.
+
+### 6.1 The window you are opening
+
+`buildTenantContext` decrypts a tenant's robot key only on a **cache miss**
+(`src/tenancy/context.ts`), and the machine runs with `min_machines_running = 0`, so the
+cache is usually cold. Between the moment the database is rotated and the moment the Fly
+secret is updated, a tenant lookup throws and the transport returns **500** (not 401).
+
+Treat §6.2 and §6.3 as one action. Do not stop in between to go and find where you wrote the
+new key down — have it ready first.
+
+### 6.2 Rotate the database
+
+Generate the new key and keep it in front of you:
+
+```bash
+openssl rand -hex 32
+```
+
+The new key is read from stdin, so do this from an interactive shell on the machine rather
+than through `-C` (which does not give you a reliable stdin to paste into):
+
+```bash
+fly ssh console --pty -a bimlynx-mcp
+```
+
+Inside that shell, dry run first. This reads every row, re-encrypts it in memory, verifies
+the round-trip, and writes **nothing**:
+
+```
+node dist/backup-tenants.js rotate-key
+```
+
+Paste the new key, press Enter, then Ctrl-D. Expect `N of N tenant row(s) re-encrypt
+cleanly`. If any row reports FAIL, stop — the key currently in `FORMA_MASTER_KEY` is not the
+key those rows were encrypted under, and rotating would strand them. Nothing was written.
+
+Then commit, in the same shell:
+
+```
+node dist/backup-tenants.js rotate-key --apply
+```
+
+`--apply` takes its own pre-rotation backup on the volume first (path is printed) and does
+every UPDATE in one transaction, so it cannot leave the table half-rotated. The old key is
+deliberately never accepted as an argument — it comes from the environment the container
+already has.
+
+### 6.3 Immediately update the secret
+
+```bash
+fly secrets set FORMA_MASTER_KEY=<the new key> -a bimlynx-mcp
+```
+
+This restarts the app onto the new key and closes the window.
+
+### 6.4 Confirm, then clean up
+
+```bash
+fly ssh console -a bimlynx-mcp -C "node dist/backup-tenants.js verify-key"
+```
+
+Zero failures means the running environment and the database agree. Then:
+
+1. Store the new key per §1.3, in both locations.
+2. Make a real tool call through an MCP client to confirm end to end.
+3. Delete the pre-rotation backup from the volume — it still decrypts with the **old** key,
+   so leaving it there keeps the compromised key useful to anyone who reaches the volume.
+4. Only now destroy your copies of the old key.
+
+### 6.5 Rollback
+
+If something is wrong before you delete the pre-rotation backup: restore that file over
+`/data/state.db` (§4.1), and set `FORMA_MASTER_KEY` back to the old key. The pair is
+self-consistent.
+
+---
+
 ## Known gaps (not addressed here)
 
-- **No key rotation path.** Re-encrypting existing ciphertext under a new master key would
-  need a `rotate-key` command that decrypts with the old and re-encrypts with the new. Today
-  a compromised master key means re-provisioning every tenant.
+- **Rotation has a brief failure window** (§6.1) rather than being seamless. Closing it
+  would mean the server accepting a `FORMA_MASTER_KEY_PREVIOUS` fallback so both keys
+  decrypt during a transition. That was not built: it puts a second, permanently-valid key
+  on the auth hot path, and a stale fallback nobody remembers to remove is exactly the
+  failure rotation exists to prevent. At this scale a back-to-back rotate-then-set-secret is
+  the better trade.
 - **No off-site automated copy.** Backups are operator-pulled. At ≤10 tenants (the APS
   quota) that is a deliberate trade: an automated push to S3/R2 would mean storage
   credentials inside the container, which is a larger attack surface than the problem it

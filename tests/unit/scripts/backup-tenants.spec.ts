@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, copyFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, copyFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -26,19 +26,38 @@ const WRONG_KEY = randomBytes(32).toString('hex');
 const PEM_BODY = 'super-secret-robot-key-material';
 const FAKE_PEM = `-----BEGIN PRIVATE KEY-----\n${PEM_BODY}\n-----END PRIVATE KEY-----`;
 
-function run(args: string[], stdin?: string): { status: number; stdout: string; stderr: string } {
+function run(
+  args: string[],
+  stdin?: string,
+  masterKeyEnv?: string,
+): { status: number; stdout: string; stderr: string } {
   const result = spawnSync(TSX, [CLI, ...args], {
     encoding: 'utf8',
     input: stdin ?? '',
-    // Keep the ambient FORMA_MASTER_KEY (a developer's own .env export) out of the child,
-    // or the "no key available" case would silently pass for the wrong reason.
-    env: { ...process.env, FORMA_MASTER_KEY: '' },
+    // Keep the ambient FORMA_MASTER_KEY (a developer's own .env export) out of the child
+    // unless a test sets it deliberately, or the "no key available" case would silently
+    // pass for the wrong reason.
+    env: { ...process.env, FORMA_MASTER_KEY: masterKeyEnv ?? '' },
   });
   return {
     status: result.status ?? -1,
     stdout: result.stdout ?? '',
     stderr: result.stderr ?? '',
   };
+}
+
+/** Reads every tenant's ciphertext straight out of a database file, for before/after checks. */
+function ciphertexts(path: string): Map<string, string> {
+  const db = new Database(path, { readonly: true });
+  try {
+    const rows = db.prepare('SELECT id, private_key_ciphertext AS ct FROM tenants').all() as Array<{
+      id: string;
+      ct: string;
+    }>;
+    return new Map(rows.map((r) => [r.id, r.ct]));
+  } finally {
+    db.close();
+  }
 }
 
 /**
@@ -255,6 +274,151 @@ describe('scripts/backup-tenants', () => {
       const result = run(['verify-key', '--db', out, '--stdin'], MASTER_KEY);
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('All tenant rows decrypt with this key');
+    });
+  });
+
+  describe('rotate-key', () => {
+    const NEW_KEY = randomBytes(32).toString('hex');
+
+    /** The pre-rotation backup rotate-key writes next to the database it is rotating. */
+    function preRotationBackup(): string | undefined {
+      return readdirSync(dir).find((f) => f.includes('.pre-rotate-'));
+    }
+
+    it('writes nothing in dry-run mode — the old key still decrypts everything', () => {
+      live = seedDb(dbPath, 3);
+      const before = ciphertexts(dbPath);
+
+      const result = run(['rotate-key', '--db', dbPath], NEW_KEY, MASTER_KEY);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('Nothing was written');
+      expect(result.stdout).toContain('3 of 3 tenant row(s) re-encrypt cleanly');
+
+      expect(ciphertexts(dbPath)).toEqual(before);
+      expect(preRotationBackup()).toBeUndefined();
+      expect(run(['verify-key', '--db', dbPath, '--stdin'], MASTER_KEY).status).toBe(0);
+    });
+
+    it('re-encrypts every row under --apply: new key works, old key no longer does', () => {
+      live = seedDb(dbPath, 4);
+      const before = ciphertexts(dbPath);
+
+      const result = run(['rotate-key', '--db', dbPath, '--apply'], NEW_KEY, MASTER_KEY);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('Rotated 4 tenant row(s)');
+
+      const after = ciphertexts(dbPath);
+      expect(after.size).toBe(4);
+      for (const [id, ct] of after) expect(ct).not.toBe(before.get(id));
+
+      expect(run(['verify-key', '--db', dbPath, '--stdin'], NEW_KEY).status).toBe(0);
+      expect(run(['verify-key', '--db', dbPath, '--stdin'], MASTER_KEY).status).toBe(1);
+    });
+
+    it('leaves a pre-rotation backup that still opens with the old key', () => {
+      live = seedDb(dbPath, 3);
+      expect(run(['rotate-key', '--db', dbPath, '--apply'], NEW_KEY, MASTER_KEY).status).toBe(0);
+
+      const backup = preRotationBackup();
+      expect(backup).toBeDefined();
+
+      // The rollback path in the runbook: this file is the pre-rotation state, so it must
+      // decrypt with the key that was current before the rotation, not the new one.
+      const backupPath = join(dir, backup!);
+      expect(run(['verify-key', '--db', backupPath, '--stdin'], MASTER_KEY).status).toBe(0);
+      expect(run(['verify-key', '--db', backupPath, '--stdin'], NEW_KEY).status).toBe(1);
+    });
+
+    it('aborts without writing when the current key does not decrypt every row', () => {
+      live = seedDb(dbPath, 3);
+      const before = ciphertexts(dbPath);
+
+      const result = run(['rotate-key', '--db', dbPath, '--apply'], NEW_KEY, WRONG_KEY);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('Nothing was written');
+
+      expect(ciphertexts(dbPath)).toEqual(before);
+      expect(preRotationBackup()).toBeUndefined();
+    });
+
+    it('aborts on a mixed-key table rather than rotating only the rows it can read', () => {
+      // One row encrypted under a third key — the shape a previous half-finished rotation
+      // would leave behind. Rotating the readable rows would deepen the mess.
+      live = seedDb(dbPath, 3);
+      live
+        .prepare('UPDATE tenants SET private_key_ciphertext = ? WHERE id = ?')
+        .run(encryptSecret(FAKE_PEM, WRONG_KEY), 'tenant-1');
+      const before = ciphertexts(dbPath);
+
+      const result = run(['rotate-key', '--db', dbPath, '--apply'], NEW_KEY, MASTER_KEY);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('1 of 3 row(s) could not be re-encrypted');
+      expect(result.stderr).toContain('tenant-1');
+
+      expect(ciphertexts(dbPath)).toEqual(before);
+      expect(preRotationBackup()).toBeUndefined();
+    });
+
+    it('rejects a new key that is not 64 hex characters', () => {
+      live = seedDb(dbPath, 1);
+      const result = run(['rotate-key', '--db', dbPath, '--apply'], 'too-short', MASTER_KEY);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('64 hex characters');
+    });
+
+    it('refuses to rotate a key onto itself', () => {
+      live = seedDb(dbPath, 1);
+      const result = run(['rotate-key', '--db', dbPath, '--apply'], MASTER_KEY, MASTER_KEY);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('identical to the current one');
+    });
+
+    it('requires the current key in the environment', () => {
+      live = seedDb(dbPath, 1);
+      const result = run(['rotate-key', '--db', dbPath], NEW_KEY);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('FORMA_MASTER_KEY');
+    });
+
+    it('requires the new key on stdin', () => {
+      live = seedDb(dbPath, 1);
+      const result = run(['rotate-key', '--db', dbPath], '', MASTER_KEY);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('must arrive on stdin');
+    });
+
+    it('never prints either key or the decrypted PEM', () => {
+      live = seedDb(dbPath, 2);
+      const result = run(['rotate-key', '--db', dbPath, '--apply'], NEW_KEY, MASTER_KEY);
+      const combined = result.stdout + result.stderr;
+      expect(combined).not.toContain(MASTER_KEY);
+      expect(combined).not.toContain(NEW_KEY);
+      expect(combined).not.toContain(PEM_BODY);
+    });
+
+    it('says there is nothing to do for an empty tenant table', () => {
+      live = seedDb(dbPath, 0);
+      const result = run(['rotate-key', '--db', dbPath, '--apply'], NEW_KEY, MASTER_KEY);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('No tenant rows');
+      expect(preRotationBackup()).toBeUndefined();
+    });
+
+    it('is repeatable: a rotated database rotates again onto a third key', () => {
+      live = seedDb(dbPath, 2);
+      const third = randomBytes(32).toString('hex');
+
+      expect(run(['rotate-key', '--db', dbPath, '--apply'], NEW_KEY, MASTER_KEY).status).toBe(0);
+      expect(
+        run(['rotate-key', '--db', dbPath, '--apply', '--backup-out', join(dir, 'second.db')],
+          third,
+          NEW_KEY,
+        ).status,
+      ).toBe(0);
+
+      expect(run(['verify-key', '--db', dbPath, '--stdin'], third).status).toBe(0);
+      expect(run(['verify-key', '--db', dbPath, '--stdin'], NEW_KEY).status).toBe(1);
+      expect(run(['verify-key', '--db', dbPath, '--stdin'], MASTER_KEY).status).toBe(1);
     });
   });
 
