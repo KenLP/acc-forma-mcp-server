@@ -60,3 +60,12 @@ prototypes/change-alert/.state.json
 # and bundle/server/package-lock.json are already covered by the node_modules/ and
 # package-lock.json rules above
 *.mcpb
+
+# Internal working material — cross-repo handoffs, study notes, review audits, training
+# decks — and one superseded screenshot. Kept on disk, never published (swept into the
+# public repo once by `git add -A` on 2026-09-12; removed again 2026-09-18).
+docs/handoffs/
+docs/study/
+docs/audits/
+notes/
+examples/mcp_1.png
