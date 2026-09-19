@@ -66,6 +66,6 @@ prototypes/change-alert/.state.json
 # public repo once by `git add -A` on 2026-09-12; removed again 2026-09-18).
 docs/handoffs/
 docs/study/
-docs/audits/
+docs/audits/AUDIT_2026-07-22_mcp-publisher-conformance.md   # superseded; the 2026-08-12 pair stays public (linked from REVIEW_BRIEF + runbook)
 notes/
 examples/mcp_1.png
