@@ -11,6 +11,8 @@ import { logger } from './logger.js';
 import { pruneOldAuditFiles } from './safety/audit-log.js';
 import { cleanupExpiredRows } from './persistence/db.js';
 import { startHttpServer } from './transport/http.js';
+import { resolveSsaCredentials } from './selfhost/credentials.js';
+import { SSA_ADMIN_SCOPES } from './apis/ssa-admin.js';
 import type { ToolContext } from './tools/_types.js';
 
 /** Re-run interval for pruneOldAuditFiles() after the startup run — see schedulePeriodicAuditPrune(). */
@@ -100,10 +102,41 @@ async function runHttp(): Promise<void> {
   await startHttpServer(env, (bearerKey: string) => getContextForBearer(bearerKey, env));
 }
 
+/**
+ * Self-host setup mode: no SSA robot yet (src/selfhost/credentials.ts). Serves only the
+ * setup tools, authenticated with a 2-legged token carrying the service-account management
+ * scopes of the user's own app — the one thing those tools need.
+ */
+async function runSetupMode(dataDir: string, problem: string | undefined): Promise<void> {
+  if (problem !== undefined) {
+    logger.warn({ data_dir: dataDir, problem }, 'self-host: robot files present but unusable — starting in setup mode');
+  } else {
+    logger.info({ data_dir: dataDir }, 'self-host: no robot yet — starting in setup mode');
+  }
+
+  schedulePeriodicAuditPrune(env);
+  setupPersistence();
+
+  const ctx: ToolContext = { auth: new TwoLeggedAuthProvider([...SSA_ADMIN_SCOPES]), env };
+  const server = buildServer(ctx, { mode: 'setup' });
+  await server.connect(new StdioServerTransport());
+  logger.info('MCP server connected via stdio (setup mode) — ready to accept tool calls');
+}
+
 /** Local single-tenant stdio mode — unchanged since before HTTP transport existed. */
 async function runStdio(): Promise<void> {
   let auth: AuthProvider;
   let auth2lo: AuthProvider | undefined;
+  let runEnv: Env = env;
+
+  // SSA_* env vars (the original path) always win; a robot written by setup_create_robot
+  // is only used when they are absent; with neither, the server starts in setup mode.
+  const credentials =
+    env.APS_AUTH_MODE === 'ssa' ? resolveSsaCredentials(env) : ({ source: 'env' } as const);
+  if (credentials.source === 'setup') {
+    await runSetupMode(credentials.dataDir, credentials.problem);
+    return;
+  }
 
   // Minimum privilege: no account write scope is ever requested (Admin tools only read),
   // and the data write scope is only requested when the server can actually write.
@@ -116,7 +149,18 @@ async function runStdio(): Promise<void> {
 
   switch (env.APS_AUTH_MODE) {
     case 'ssa':
-      auth = new SsaAuthProvider(scopes);
+      if (credentials.source === 'robot-file') {
+        auth = new SsaAuthProvider(scopes, {
+          ssaId: credentials.ssaId,
+          ssaKeyId: credentials.ssaKeyId,
+          ssaKeyPath: credentials.ssaKeyPath,
+        });
+        // Audit entries attribute to env.SSA_ID — make that the robot actually in use.
+        runEnv = { ...env, SSA_ID: credentials.ssaId };
+        logger.info({ robot: credentials.email }, 'self-host: using robot from data folder');
+      } else {
+        auth = new SsaAuthProvider(scopes);
+      }
       auth2lo = twoLegged; // DM/Admin tools will use this for full hub visibility
       logger.info('Dual auth: SSA (default) + 2LO (DM/Admin tools)');
       break;
@@ -131,13 +175,13 @@ async function runStdio(): Promise<void> {
       throw new Error(`Unsupported APS_AUTH_MODE: ${String(env.APS_AUTH_MODE)}`);
   }
 
-  schedulePeriodicAuditPrune(env);
+  schedulePeriodicAuditPrune(runEnv);
   setupPersistence();
 
   const ctx: ToolContext = {
     auth,
     ...(auth2lo !== undefined ? { auth2lo } : {}),
-    env,
+    env: runEnv,
   };
   const server = buildServer(ctx);
 

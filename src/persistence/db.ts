@@ -1,11 +1,25 @@
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 import { mkdirSync, existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { env } from '../config/env.js';
 import { logger } from '../logger.js';
 import { hourBucket } from '../utils/hour-bucket.js';
 
 let _db: Database.Database | null = null;
+
+/**
+ * better-sqlite3 is loaded on first use, not at import. The self-host `.mcpb` bundle
+ * (bundle-local/) runs memory-mode only and does not ship the package — a static import
+ * would make every startup fail on module resolution even though no SQLite handle is ever
+ * opened. In the CJS bundles (SEA, .mcpb) the module-scope `require` exists and is used
+ * as-is (pkg patches it to resolve from its snapshot); the ESM build has no `require`, so
+ * one is created from this module's URL.
+ */
+function loadBetterSqlite(): typeof Database {
+  const req = typeof require === 'function' ? require : createRequire(import.meta.url);
+  return req('better-sqlite3') as typeof Database;
+}
 
 export function getDb(): Database.Database {
   if (_db) return _db;
@@ -16,7 +30,8 @@ export function getDb(): Database.Database {
   // not be world-readable. POSIX only — on Windows the dir inherits the parent ACL.
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
 
-  _db = new Database(dbPath);
+  const BetterSqlite = loadBetterSqlite();
+  _db = new BetterSqlite(dbPath);
   _db.pragma('journal_mode = WAL');
   _db.pragma('foreign_keys = ON');
   migrateSchema(_db);

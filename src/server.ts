@@ -2,11 +2,20 @@ import { SERVER_VERSION } from './version.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { toolRegistry } from './tools/_registry.js';
+import { setupToolRegistry } from './tools/_setup-registry.js';
 import { wrapReadTool, wrapMutationTool, MutationBaseFields } from './tools/_wrap.js';
 import type { ToolContext, ReadToolDef, MutationToolDef } from './tools/_types.js';
 import { logger } from './logger.js';
 
-export function buildServer(ctx: ToolContext): McpServer {
+export interface BuildServerOptions {
+  /**
+   * `'setup'` = self-host setup mode (no SSA robot yet, src/selfhost/credentials.ts): only
+   * the setup tools are registered. Default `'normal'` registers the product tool set.
+   */
+  mode?: 'normal' | 'setup';
+}
+
+export function buildServer(ctx: ToolContext, options: BuildServerOptions = {}): McpServer {
   const server = new McpServer({
     name: 'acc-forma-mcp-server',
     version: SERVER_VERSION,
@@ -15,7 +24,9 @@ export function buildServer(ctx: ToolContext): McpServer {
   let registered = 0;
   let skippedRemote = 0;
 
-  for (const tool of toolRegistry) {
+  const registry = options.mode === 'setup' ? setupToolRegistry : toolRegistry;
+
+  for (const tool of registry) {
     // remoteEnabled:false tools depend on an auth model (e.g. 2-legged) that the remote
     // multi-tenant transport deliberately does not provide per-tenant — see _types.ts.
     if (ctx.tenantId !== undefined && tool.remoteEnabled === false) {
@@ -55,6 +66,6 @@ export function buildServer(ctx: ToolContext): McpServer {
   if (skippedRemote > 0) {
     logger.debug({ count: skippedRemote }, 'Tools skipped: remoteEnabled=false under remote transport');
   }
-  logger.info({ count: registered }, 'All tools registered');
+  logger.info({ count: registered, mode: options.mode ?? 'normal' }, 'All tools registered');
   return server;
 }

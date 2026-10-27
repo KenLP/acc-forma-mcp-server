@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { config as dotenvConfig } from 'dotenv';
 
 dotenvConfig();
@@ -17,6 +18,24 @@ const envSchema = z.object({
   SSA_ID: z.string().optional(),
   SSA_KEY_ID: z.string().optional(),
   SSA_KEY_PATH: z.string().optional(),
+
+  /**
+   * Self-host data folder (bundle-local/ .mcpb). Holds the robot written by
+   * setup_create_robot and, unless FORMA_AUDIT_DIR is set, the audit log. When set and no
+   * SSA_* var is, the server starts in setup mode instead of refusing to start — see
+   * src/selfhost/credentials.ts. `${HOME}` is expanded here too, in case a client passes
+   * the manifest default through unsubstituted.
+   */
+  BIMLYNX_DATA_DIR: z
+    .string()
+    .optional()
+    .transform((p) => {
+      if (p === undefined || p.trim() === '') return undefined;
+      const expanded = p
+        .replace(/^\$\{HOME\}/, homedir())
+        .replace(/^~(?=$|[\\/])/, homedir());
+      return resolve(expanded);
+    }),
 
   // Safety: allow-lists
   FORMA_ALLOWED_HUBS: z.string().default('*'),
@@ -120,8 +139,8 @@ const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
-function loadEnv(): Env {
-  const result = envSchema.safeParse(process.env);
+function loadEnv(source: Record<string, string | undefined> = process.env): Env {
+  const result = envSchema.safeParse(source);
   if (!result.success) {
     const issues = result.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`Invalid environment configuration:\n${issues}`);
@@ -135,11 +154,20 @@ function loadEnv(): Env {
     const missing = (['SSA_ID', 'SSA_KEY_ID', 'SSA_KEY_PATH'] as const).filter(
       (k) => !env[k],
     );
-    if (missing.length > 0) {
+    // None set + a data folder = self-host setup mode (src/selfhost/credentials.ts). A
+    // partial set is still a misconfiguration and fails exactly as it always did.
+    const selfHostSetup = missing.length === 3 && env.BIMLYNX_DATA_DIR !== undefined;
+    if (missing.length > 0 && !selfHostSetup) {
       throw new Error(
         `APS_AUTH_MODE=ssa requires ${missing.join(', ')} to be set. See docs/AUTH.md.`,
       );
     }
+  }
+
+  // Self-host keeps everything under one folder the user chose; an explicit
+  // FORMA_AUDIT_DIR still wins.
+  if (env.BIMLYNX_DATA_DIR !== undefined && !source['FORMA_AUDIT_DIR']) {
+    env.FORMA_AUDIT_DIR = join(env.BIMLYNX_DATA_DIR, 'audit');
   }
 
   if (env.FORMA_TRANSPORT === 'http' && !env.FORMA_MASTER_KEY) {
