@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BIMLynx — Connect AI Assistants to Autodesk Forma</title>
-<meta name="description" content="BIMLynx is a safety-first MCP server that connects AI assistants to Autodesk Forma / Construction Cloud: issues, clash detection, design-version diffs, and quantity take-offs — with every write dry-run previewed and audit-logged. Works with any MCP client, including Claude Desktop and VS Code.">
+<meta name="description" content="BIMLynx is a safety-first MCP server that connects AI assistants to Autodesk Forma (ACC): issues, clash detection, design-version diffs, and quantity take-offs — with every write dry-run previewed and audit-logged. Runs on your own computer with your own Autodesk app, as a Claude Desktop extension.">
 <style>
   :root {
     --bg: #0e1116; --panel: #161b22; --text: #e6edf3; --muted: #9198a1;
@@ -51,7 +51,7 @@
 <main>
   <span class="pill">Free</span>
   <h1>BIM<span>Lynx</span></h1>
-  <p class="tagline">Talk to your construction project. A remote MCP server that connects your AI assistant to Autodesk Forma / Construction Cloud — Claude Desktop, VS Code, or any MCP-capable client.</p>
+  <p class="tagline">Talk to your construction project. An MCP server that connects your AI assistant to Autodesk Forma (ACC) — running on your own computer, with your own Autodesk app.</p>
 
   <h2>What your team can do in plain language</h2>
   <ul>
@@ -65,7 +65,7 @@
   <h2>See it working</h2>
 
   <figure>
-    <img src="img/mcp_3.png" alt="Claude answering total floor area by level from a live ACC model, as a table of 14 levels totalling 6,751 m²" loading="lazy">
+    <img src="img/mcp_3.png" alt="Claude answering total floor area by level from a live Forma (ACC) model, as a table of 14 levels totalling 6,751 m²" loading="lazy">
     <figcaption>Quantity take-off from the model's full Revit parameter set — 203 floor elements across 14 levels, totalled, with the unit system verified rather than assumed.</figcaption>
   </figure>
 
@@ -87,20 +87,19 @@
   <h2>Safety first</h2>
   <ul>
     <li>Every write is previewed first — nothing mutates without an explicit, payload-bound approval</li>
-    <li>Hash-chained, per-tenant audit log of every action</li>
-    <li>One dedicated Autodesk service account per customer (Autodesk's official tenant-isolation pattern for ISVs) — your data is scoped by your own project membership, never a shared credential</li>
-    <li>Credentials encrypted at rest; bearer keys stored only as hashes</li>
+    <li>Hash-chained audit log of every action, kept on your own machine</li>
+    <li>Runs on your own computer with your organization's own Autodesk app — API usage counts against your own Autodesk subscription, and project data goes only between your computer and Autodesk</li>
+    <li>Works as a dedicated robot account that sees only the Forma (ACC) projects your admin invites it into; its key stays in a private folder on your machine and never appears in chat, logs or the audit trail</li>
   </ul>
 
   <h2>How it connects</h2>
   <div class="panel">
-    <p class="muted">Paste the endpoint into your MCP client (Claude Desktop, VS Code) with the bearer key we issue for your organization:</p>
-    <code class="endpoint">https://mcp.bimlynx.com/mcp</code>
+    <p class="muted">BIMLynx installs as a Claude Desktop extension — one file, no Node.js, no terminal. Enter your Autodesk app's Client ID and secret, ask Claude to <em>"set up BIMLynx"</em>, approve the preview, and it creates the robot account it works as. Your Forma (ACC) admin then adds the app and invites the robot to the projects it may use.</p>
   </div>
 
   <h2>Get access</h2>
-  <p>BIMLynx is free to use. Write to <a href="mailto:hello@bimlynx.com">hello@bimlynx.com</a> and we issue a bearer key for your organization — onboarding is two short steps in your admin console (add our Client ID, invite the robot account), no developer skills needed.</p>
-  <p class="muted">The key on its own reaches nothing: our robot account only sees the projects <em>your</em> admin invites it into, and your admin can cut that access in ACC at any time — no need to ask us. Prefer to run everything yourself? The server is <a href="https://github.com/KenLP/acc-forma-mcp-server">open source</a> and self-hosts with your own Autodesk credentials.</p>
+  <p>BIMLynx is free to use. Write to <a href="mailto:hello@bimlynx.com">hello@bimlynx.com</a> and we'll send you the self-host package with a step-by-step guide for your Autodesk team admin, your users and your Forma (ACC) admin.</p>
+  <p class="muted">Why self-host? Autodesk now charges for the AEC Data Model API. Running BIMLynx with your own Autodesk app means that usage draws on the capacity included with your subscription rather than on a shared service. Our hosted service is paused for new organizations until Autodesk lets customers cover API usage from their own subscription. The server is <a href="https://github.com/KenLP/acc-forma-mcp-server">open source</a>.</p>
 
   <footer>
     <p>© 2026 BIMLynx · <a href="mailto:support@bimlynx.com">support@bimlynx.com</a></p>

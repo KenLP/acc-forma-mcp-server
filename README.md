@@ -58,18 +58,32 @@ features.
 
 ---
 
-## Use the hosted service
+## Get BIMLynx
 
-The fastest way to use this server is the hosted instance the publisher operates at
-**`https://mcp.bimlynx.com/mcp`** — no APS app, no SSA setup, no local build, and **free to
-use**. Email **hello@bimlynx.com** to get a bearer key for your organization.
+BIMLynx is free to use. Email **hello@bimlynx.com** for the **self-host package**: a Claude
+Desktop extension that runs on your own computer with your organization's own Autodesk app —
+one file, no Node.js, no terminal — plus a step-by-step guide for your Autodesk team admin,
+your users and your Forma (ACC) admin. Prefer to build it yourself? See
+[Self-host (advanced)](#self-host-advanced).
+
+> **The hosted service is paused for new organizations.** Autodesk now charges for the AEC
+> Data Model API ([pricing](https://www.autodesk.com/products/autodesk-platform-services/product-details)).
+> On the hosted service that usage is billed to the publisher, not to your organization; with
+> your own Autodesk app it draws on the capacity included with your own subscription. We are
+> not issuing new bearer keys until Autodesk lets customers cover API usage from their own
+> subscription.
+
+## Hosted service (existing bearer keys)
+
+The publisher operates a hosted instance at **`https://mcp.bimlynx.com/mcp`**. Organizations
+that already hold a bearer key keep using it as described below; new keys are not being issued
+(see above).
 
 The key on its own is not what protects your data. Each customer gets a dedicated Autodesk
 Secure Service Account (robot-per-tenant), and that robot sees nothing until **your own hub
 admin** invites it into specific projects — access is granted by you, scoped by you, and
-revocable by you in ACC at any time, without contacting us. See [PRIVACY.md](PRIVACY.md) for
-exactly what the hosted service stores and for how long; if you'd rather keep everything
-in-house, the same code [self-hosts](#self-host-advanced) with your own credentials.
+revocable by you in Forma (ACC) at any time, without contacting us. See [PRIVACY.md](PRIVACY.md)
+for exactly what the hosted service stores and for how long.
 
 ### Claude Desktop — one-click install
 
@@ -554,8 +568,8 @@ Key variables:
 
 ## Remote / HTTP mode
 
-This is the technology behind the hosted service at `https://mcp.bimlynx.com/mcp` (see "Use
-the hosted service" above): a stateless, multi-tenant HTTP server — one bearer key per
+This is the technology behind the hosted service at `https://mcp.bimlynx.com/mcp` (see "Hosted
+service (existing bearer keys)" above): a stateless, multi-tenant HTTP server — one bearer key per
 tenant, each mapped to its own SSA robot. If you'd rather run this yourself instead of using
 the publisher's instance — for your own organization, or to self-host the multi-tenant setup
 for multiple people/orgs instead of one server per machine — set `FORMA_TRANSPORT=http`. The
