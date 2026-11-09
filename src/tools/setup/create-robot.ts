@@ -74,7 +74,9 @@ function assertNoRobotYet(dataDir: string, clientId: string): void {
 }
 
 export function robotAccountInput(label: string | undefined): CreateServiceAccountInput {
-  const raw = label !== undefined && label.trim() !== '' ? label : hostname();
+  // macOS reports the Bonjour name ("Studio-MacBook-Air.local"); the ".local" suffix is not
+  // part of the computer's name and would otherwise end up in the robot's ("…-air-local").
+  const raw = label !== undefined && label.trim() !== '' ? label : hostname().replace(/\.local$/i, '');
   const name = toServiceAccountName(`bimlynx-${raw}`);
   return { name, firstName: name, lastName: 'robot' };
 }

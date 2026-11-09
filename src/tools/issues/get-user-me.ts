@@ -33,8 +33,18 @@ export const getIssueUserMeTool: ReadToolDef<typeof inputSchema> = {
 
     const flag = (v: boolean | undefined): string => (v ? '✓ Yes' : '✗ No');
 
+    // A service account has no ACC user profile, so name and email come back empty. Say what
+    // the caller actually is instead of printing "(unknown) <?>".
+    // The body is passed through as-is, so an absent field may arrive as undefined, null or "".
+    const present = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '';
+    const identity = present(profile.name) || present(profile.email)
+      ? `${present(profile.name) ? profile.name : '(no name)'} <${present(profile.email) ? profile.email : '?'}>`
+      : ctx.robotEmail !== undefined
+        ? `service account (robot) <${ctx.robotEmail}> — no ACC user profile`
+        : 'service account — no ACC user profile';
+
     const lines: string[] = [
-      `Identity: ${profile.name ?? '(unknown)'} <${profile.email ?? '?'}>`,
+      `Identity: ${identity}`,
       `ID:       ${profile.id ?? '(unknown)'}`,
       '',
       'Permissions:',
@@ -45,7 +55,7 @@ export const getIssueUserMeTool: ReadToolDef<typeof inputSchema> = {
 
     return {
       content: [{ type: 'text', text: lines.join('\n') }],
-      structuredContent: { profile },
+      structuredContent: { profile, ...(ctx.robotEmail !== undefined ? { robotEmail: ctx.robotEmail } : {}) },
     };
   },
 };

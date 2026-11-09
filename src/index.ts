@@ -129,6 +129,19 @@ async function runStdio(): Promise<void> {
   let auth2lo: AuthProvider | undefined;
   let runEnv: Env = env;
 
+  // BIMLYNX_DATA_DIR is set only by the self-host bundle (bundle-local/manifest.json). That
+  // bundle promises the server reads only the projects the robot was invited to, so it runs
+  // on the robot's SSA token alone: no 2-legged token for project data is ever created, and
+  // the account-level Admin tools are not registered (server.ts mode 'self-host'). This keys
+  // off the bundle, not off where the credentials came from — SSA_* vars leaking in from the
+  // OS environment must not bring 2LO back.
+  const selfHost = env.BIMLYNX_DATA_DIR !== undefined;
+  if (selfHost && env.APS_AUTH_MODE !== 'ssa') {
+    throw new Error(
+      `Self-host (BIMLYNX_DATA_DIR set) runs as the robot only and requires APS_AUTH_MODE=ssa; got ${String(env.APS_AUTH_MODE)}.`,
+    );
+  }
+
   // SSA_* env vars (the original path) always win; a robot written by setup_create_robot
   // is only used when they are absent; with neither, the server starts in setup mode.
   const credentials =
@@ -139,13 +152,14 @@ async function runStdio(): Promise<void> {
   }
 
   // Minimum privilege: no account write scope is ever requested (Admin tools only read),
-  // and the data write scope is only requested when the server can actually write.
+  // and the data write scope is only requested when the server can actually write. The
+  // self-host bundle registers no Admin tool, so it does not ask for account:read either.
   const writesEnabled = !(env.FORMA_READONLY || env.FORMA_MUTATION_MODE === 'readonly');
-  const scopes = ['data:read', 'account:read', ...(writesEnabled ? ['data:write'] : [])];
-
-  // 2-legged provider is always created alongside SSA so DM/Admin tools can use
-  // hub-wide project visibility (SSA only sees projects the account is assigned to).
-  const twoLegged = new TwoLeggedAuthProvider(scopes);
+  const scopes = [
+    'data:read',
+    ...(selfHost ? [] : ['account:read']),
+    ...(writesEnabled ? ['data:write'] : []),
+  ];
 
   switch (env.APS_AUTH_MODE) {
     case 'ssa':
@@ -161,11 +175,17 @@ async function runStdio(): Promise<void> {
       } else {
         auth = new SsaAuthProvider(scopes);
       }
-      auth2lo = twoLegged; // DM/Admin tools will use this for full hub visibility
-      logger.info('Dual auth: SSA (default) + 2LO (DM/Admin tools)');
+      if (selfHost) {
+        logger.info('Self-host: SSA only — every call runs as the robot; no 2-legged token for project data');
+      } else {
+        // Local dev / orchestrator path: 2LO alongside SSA gives DM/Admin tools hub-wide
+        // project visibility (SSA only sees the projects it is assigned to).
+        auth2lo = new TwoLeggedAuthProvider(scopes);
+        logger.info('Dual auth: SSA (default) + 2LO (DM/Admin tools)');
+      }
       break;
     case '2lo':
-      auth = twoLegged;
+      auth = new TwoLeggedAuthProvider(scopes);
       logger.warn(
         '2-legged auth: Issues/Reviews/AECDM tools are disabled. ' +
           'Use APS_AUTH_MODE=ssa for full functionality.',
@@ -182,8 +202,9 @@ async function runStdio(): Promise<void> {
     auth,
     ...(auth2lo !== undefined ? { auth2lo } : {}),
     env: runEnv,
+    ...(credentials.source === 'robot-file' ? { robotEmail: credentials.email } : {}),
   };
-  const server = buildServer(ctx);
+  const server = buildServer(ctx, selfHost ? { mode: 'self-host' } : {});
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

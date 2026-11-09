@@ -10,8 +10,16 @@
 // tools. This is the check for SPEC_self-host-installer R1 — a static import of
 // better-sqlite3 (or any other module left external) makes the process die before the
 // handshake. Placeholder credentials never reach APS: tools/list makes no API call.
+//
+// It then starts the same file twice more with a robot already in the data folder (a
+// throwaway key generated here, never sent anywhere): once as Claude Desktop would, and once
+// with SSA_* vars leaking in from the OS environment. Both must serve the self-host tool set
+// — no account-level Admin tool, no 2-legged-only tool — which is what proves, on the built
+// artifact rather than in a unit test, that the bundle reads only what the robot was invited
+// to.
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { generateKeyPairSync } from 'node:crypto';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -25,21 +33,52 @@ function run(cmd, args) {
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} failed (exit ${r.status})`);
 }
 
-function listToolsInIsolation() {
+// Self-host tool set: the product registry minus the 4 account-level Admin tools and the 3
+// webhook tools (2-legged only). Change this number deliberately, together with the guide.
+const SELF_HOST_TOOL_COUNT = 39;
+const PLACEHOLDER_CLIENT_ID = 'verify-placeholder-client-id';
+
+/** Writes robot.json + a throwaway robot-key.pem, as setup_create_robot would. */
+function seedRobot(dataDir) {
+  mkdirSync(dataDir, { recursive: true });
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  });
+  const keyPath = join(dataDir, 'robot-key.pem');
+  writeFileSync(keyPath, privateKey, { mode: 0o600 });
+  writeFileSync(
+    join(dataDir, 'robot.json'),
+    JSON.stringify({
+      serviceAccountId: 'verify-robot-id',
+      email: 'bimlynx-verify@example.adskserviceaccount.com',
+      keyId: 'verify-key-id',
+      createdAt: new Date().toISOString(),
+      clientIdPrefix: PLACEHOLDER_CLIENT_ID.slice(0, 8),
+    }),
+  );
+  return keyPath;
+}
+
+function listToolsInIsolation({ prepareData, extraEnv } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'bimlynx-bundle-verify-'));
   const entry = join(dir, 'index.cjs');
   copyFileSync(ENTRY, entry);
+  const dataDir = join(dir, 'data');
+  const prepared = prepareData ? prepareData(dataDir) : undefined;
 
   const env = { PATH: process.env.PATH, SYSTEMROOT: process.env.SYSTEMROOT, HOME: process.env.HOME };
   Object.assign(env, {
     USERPROFILE: process.env.USERPROFILE,
-    APS_CLIENT_ID: 'verify-placeholder-client-id',
+    APS_CLIENT_ID: PLACEHOLDER_CLIENT_ID,
     APS_CLIENT_SECRET: 'verify-placeholder-secret',
     APS_AUTH_MODE: 'ssa',
     FORMA_TRANSPORT: 'stdio',
     FORMA_PERSISTENCE_MODE: 'memory',
-    BIMLYNX_DATA_DIR: join(dir, 'data'),
+    BIMLYNX_DATA_DIR: dataDir,
   });
+  if (extraEnv) Object.assign(env, extraEnv(prepared));
 
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [entry], { cwd: dir, env, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -89,6 +128,32 @@ if (JSON.stringify(names) !== JSON.stringify(expected)) {
   throw new Error(`verify: expected tools ${expected.join(', ')}, got ${names.join(', ')}`);
 }
 console.log(`verify: bundle starts with no node_modules, setup mode serves ${names.join(', ')}`);
+
+function assertSelfHostToolSet(label, tools) {
+  const forbidden = tools.filter((n) => n.startsWith('admin_') || n.startsWith('webhooks_') || n.startsWith('setup_'));
+  if (forbidden.length > 0) {
+    throw new Error(`verify (${label}): tools outside the self-host set were registered: ${forbidden.join(', ')}`);
+  }
+  for (const must of ['dm_list_projects', 'issues_list', 'md_get_manifest']) {
+    if (!tools.includes(must)) throw new Error(`verify (${label}): expected ${must} to be registered`);
+  }
+  if (tools.length !== SELF_HOST_TOOL_COUNT) {
+    throw new Error(`verify (${label}): expected ${SELF_HOST_TOOL_COUNT} tools, got ${tools.length}: ${tools.join(', ')}`);
+  }
+}
+
+const robotTools = await listToolsInIsolation({ prepareData: seedRobot });
+assertSelfHostToolSet('robot in data folder', robotTools);
+console.log(`verify: with a robot, the bundle serves ${robotTools.length} tools — no admin_*, no webhooks_*`);
+
+// SSA_* in the OS environment win over robot.json for *which* robot (credentials.ts), but
+// must not change *how* the server authenticates: still SSA only, same tool set.
+const leakedTools = await listToolsInIsolation({
+  prepareData: seedRobot,
+  extraEnv: (keyPath) => ({ SSA_ID: 'leaked-ssa-id', SSA_KEY_ID: 'leaked-key-id', SSA_KEY_PATH: keyPath }),
+});
+assertSelfHostToolSet('SSA_* leaked from the environment', leakedTools);
+console.log('verify: SSA_* vars leaking in from the environment do not widen the tool set');
 
 if (pack) {
   const out = `bimlynx-local-${pkg.version}.mcpb`;
