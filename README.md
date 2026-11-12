@@ -87,9 +87,11 @@ for exactly what the hosted service stores and for how long.
 
 ### Claude Desktop — one-click install
 
-Download `bimlynx-<version>.mcpb` from the
-[latest release](https://github.com/KenLP/acc-forma-mcp-server/releases/latest) and open it.
-Claude Desktop installs it as an extension and asks for your bearer key; nothing else to
+Download `bimlynx-0.2.0.mcpb` from the
+[v0.2.0 release](https://github.com/KenLP/acc-forma-mcp-server/releases/tag/v0.2.0) and open it.
+(The latest release carries the self-host connector, `bimlynx-local-*.mcpb`, which is a
+different install — see the self-host section below.)
+Claude Desktop installs it and asks for your bearer key; nothing else to
 configure, and no Node or npm setup of your own. Everything below — the JSON snippets, the
 Windows `.cmd` workaround — is only needed if you are wiring the connection up by hand or
 using a different MCP client.
