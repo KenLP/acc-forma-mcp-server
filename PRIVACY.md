@@ -1,6 +1,6 @@
 # Privacy Policy — acc-forma-mcp-server / BIMLynx
 
-**Last updated:** 2026-10-27
+**Last updated:** 2026-11-12
 **Applies to:** the hosted service at `https://mcp.bimlynx.com/mcp` (the primary subject of
 this policy) and the open-source `acc-forma-mcp-server` codebase when self-hosted (§0)
 **Publisher contact:** hello@bimlynx.com (general) · support@bimlynx.com (data requests) ·
@@ -236,6 +236,15 @@ folder for the self-host extension) and, only if you opt into
 and idempotency records (which can include cached tool results). Both files stay on your
 machine; nothing is transmitted anywhere except Autodesk (`developer.api.autodesk.com`,
 plus Autodesk-issued pre-signed S3 URLs for Model Coordination clash downloads).
+
+**What the self-host extension can reach.** The extension acts only as its robot account, so
+it reads and writes only in the projects an administrator of your Autodesk Forma account invited
+the robot to, within the robot's role in each. It never uses your app's hub-wide (2-legged) token
+for project data, and it does not include the hub-level Admin tools (the hub's project, member and
+company lists). Removing the robot from a project, or the custom integration from your account,
+takes that access away. A clone of the repository run with your own `SSA_*` credentials behaves
+differently: it also uses a 2-legged token for its Data Management, Admin and Model Derivative
+tools, and that token sees every project in the hub.
 
 You are in full control: stop the process to stop all data processing; revoke or rotate your
 Autodesk credentials to cut off access entirely; delete the audit directory and `state.db`

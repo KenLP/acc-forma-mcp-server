@@ -22,6 +22,10 @@ node scripts/build-local-bundle.mjs --no-pack   # build + verify only
   it in setup mode with placeholder credentials and requires exactly `setup_create_robot` +
   `setup_status` from `tools/list`. A stray static import of an external module fails here,
   before anything is packed.
+- It then starts the same file with a throwaway robot in the data folder — once plainly, once
+  with `SSA_*` vars leaking in from the environment — and requires the 39-tool self-host set
+  both times (no `admin_*`, no `webhooks_*`). That is the read-scope promise below, checked on
+  the built artifact.
 - Packing uses `@anthropic-ai/mcpb@2.1.2`, which validates `manifest.json` first.
 - `manifest.json` `version` must equal `package.json` (`tests/unit/version-sync.spec.ts`).
 
@@ -41,10 +45,29 @@ client passes the default through unsubstituted.
 
 ## Startup modes (src/selfhost/credentials.ts)
 
-1. `SSA_ID`/`SSA_KEY_ID`/`SSA_KEY_PATH` set → original env path (never set by this bundle).
-2. `<data dir>/robot.json` + `robot-key.pem` present → full tool set as that robot.
+1. `SSA_ID`/`SSA_KEY_ID`/`SSA_KEY_PATH` set → those credentials pick the robot (never set by this
+   bundle; can leak in from the OS environment). Read scope is still the one below.
+2. `<data dir>/robot.json` + `robot-key.pem` present → the self-host tool set (39) as that robot.
 3. Neither → **setup mode**: only `setup_status` and `setup_create_robot`. After the robot is
    created the user restarts Claude Desktop and lands in (2).
+
+## Read scope: only the projects the robot was invited to
+
+`BIMLYNX_DATA_DIR` is set only by this bundle, and `src/index.ts` keys the self-host rules off
+it — not off where the credentials came from:
+
+- **SSA only.** No 2-legged token for project data is ever created. (The run-from-source path
+  attaches one so `dm_*`/`admin_*`/`md_*` see the whole hub; a 2LO token is hub-wide no matter
+  what the ACC custom integration shows for the robot — measured: 298 projects for a robot
+  invited to a handful.) The SSA token does not request `account:read` either.
+- **Tools left out** (`buildServer` mode `'self-host'`, `selfHostExclusion()`): the 4
+  `admin_*` tools, marked `accountLevel` — the Account Admin API answers for the whole hub —
+  and the 3 `webhooks_*` tools, which run only on 2LO.
+- **Fail closed.** `buildServer` refuses to start in self-host mode if a 2-legged provider is
+  attached, and `index.ts` refuses `APS_AUTH_MODE` other than `ssa` when the data dir is set.
+
+Setup mode is the one place a 2-legged token exists: it carries only the service-account
+management scopes `setup_create_robot` needs, no `data:read`.
 
 ## Verified so far (2026-10-27, Windows)
 
@@ -55,8 +78,16 @@ client passes the default through unsubstituted.
 - Claude Desktop on this machine runs Electron 44.9.3 — its bundled Node is well above the
   `node >=20` the manifest declares.
 
-**Not yet verified:** install inside Claude Desktop itself (Windows + macOS), `setup_create_robot`
-against real APS (it creates a real service account — part of the end-to-end drill), and whether
-a Forma Build team's capacity is what gets charged (SPEC R3).
+## Verified on macOS (2026-11-09, Claude Desktop, Apple Silicon)
+
+- Install from the `.mcpb`, setup mode, `setup_create_robot` against real APS (robot created,
+  1/10 slots), restart into the full tool set, custom integration, first reads.
+- That run found the read-scope gap the section above closes: `dm_list_projects` listed all
+  298 hub projects, and `md_get_manifest` read a model in a project the robot is not a member
+  of. Re-tested on the SSA-only build (2026-11-12): the robot's 2 projects only, and the same
+  model read is refused by Model Derivative; reads in the robot's own projects unaffected.
+
+**Not yet verified:** install inside Claude Desktop on Windows, and whether a Forma Build team's
+capacity is what gets charged (SPEC R3).
 
 **Not signed** — Claude Desktop shows an unverified-publisher notice, same as `bundle/`.

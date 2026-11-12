@@ -35,6 +35,8 @@ docs/HANDOFF.md
 docs/BACKLOG-*.md
 docs/MCP-PUBLISHER-SUBMISSION.md
 docs/specs/
+# Install-run findings name real hubs, projects and robot accounts — private lab repo only.
+docs/findings/
 
 # Local review/analysis artifacts and live-test diagnostic scripts
 REVIEW_FINDINGS*.md
