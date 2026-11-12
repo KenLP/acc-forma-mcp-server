@@ -1,0 +1,88 @@
+{
+  "manifest_version": "0.3",
+  "name": "bimlynx-local",
+  "display_name": "BIMLynx (self-host) — Autodesk Forma",
+  "version": "0.3.0",
+  "description": "Connects Claude to Autodesk Forma (ACC) projects through your own Autodesk app, running entirely on this computer: issues, model data, clash detection and document review.",
+  "long_description": "The self-host edition of BIMLynx. The server runs on this computer and calls Autodesk Platform Services with an app your organization creates in its own Autodesk account, so API usage counts against your own subscription and project data goes only between this computer and Autodesk. Every call runs as that robot account, so the server reads only the projects an ACC admin has invited the robot to — no hub-wide token is ever used, and hub-level Admin tools are not included. On first start it opens in setup mode: ask Claude to \"set up BIMLynx\" and it creates the robot account the server acts as, after showing you a preview. Every write action is dry-run by default, requires explicit approval, and is recorded in a tamper-evident audit log in your data folder.",
+  "author": {
+    "name": "BIMLynx",
+    "email": "hello@bimlynx.com",
+    "url": "https://bimlynx.com"
+  },
+  "homepage": "https://bimlynx.com",
+  "documentation": "https://github.com/KenLP/acc-forma-mcp-server/blob/main/docs/SELF-HOST-GUIDE.md",
+  "support": "mailto:hello@bimlynx.com",
+  "license": "MIT",
+  "keywords": [
+    "autodesk",
+    "acc",
+    "forma",
+    "bim",
+    "construction",
+    "aps",
+    "self-host"
+  ],
+  "privacy_policies": [
+    "https://github.com/KenLP/acc-forma-mcp-server/blob/main/PRIVACY.md"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.cjs",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/index.cjs"
+      ],
+      "env": {
+        "APS_CLIENT_ID": "${user_config.aps_client_id}",
+        "APS_CLIENT_SECRET": "${user_config.aps_client_secret}",
+        "APS_AUTH_MODE": "ssa",
+        "APS_REGION": "${user_config.aps_region}",
+        "FORMA_TRANSPORT": "stdio",
+        "FORMA_PERSISTENCE_MODE": "memory",
+        "BIMLYNX_DATA_DIR": "${user_config.data_dir}"
+      }
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  },
+  "user_config": {
+    "aps_client_id": {
+      "type": "string",
+      "title": "APS Client ID",
+      "description": "From your organization's Autodesk app (APS → My Apps). Your Autodesk team admin creates the app.",
+      "required": true
+    },
+    "aps_client_secret": {
+      "type": "string",
+      "title": "APS Client Secret",
+      "description": "From the same app page. Stored by Claude Desktop, never written to the data folder.",
+      "sensitive": true,
+      "required": true
+    },
+    "data_dir": {
+      "type": "directory",
+      "title": "BIMLynx data folder",
+      "description": "Holds the robot account's key and the audit log. Keep it private; do not share or sync it.",
+      "default": "${HOME}/BIMLynx",
+      "required": true
+    },
+    "aps_region": {
+      "type": "string",
+      "title": "APS region",
+      "description": "US, EMEA or AUS — where your ACC account is hosted.",
+      "default": "US",
+      "required": false
+    }
+  }
+}

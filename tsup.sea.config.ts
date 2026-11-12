@@ -13,4 +13,7 @@ export default defineConfig({
   sourcemap: false,
   noExternal: [/.*/],    // bundle all node_modules into the CJS file
   external: ['better-sqlite3'],
+  // persistence/db.ts references import.meta.url on its ESM-only fallback path; the shim
+  // gives it a value here instead of esbuild's empty-import-meta warning.
+  shims: true,
 });

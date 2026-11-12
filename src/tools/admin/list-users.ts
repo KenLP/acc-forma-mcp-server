@@ -22,6 +22,9 @@ export const adminListUsersTool: ReadToolDef<typeof inputSchema> = {
     'accept. Requires the service account to hold the Account Admin role.',
   kind: 'read',
   preferredAuth: '2lo',
+  // Account Admin API: not bounded by the robot's project membership — kept out of the
+  // self-host bundle (see `accountLevel` in _types.ts).
+  accountLevel: true,
   scope: { kind: 'dm' },
   scopes: ['account:read'],
   inputSchema,

@@ -21,6 +21,11 @@ describe('version is consistent across every declaration', () => {
     expect(SERVER_VERSION).toBe(manifest.server.version);
   });
 
+  it('SERVER_VERSION matches the self-host bundle manifest (bundle-local/manifest.json)', () => {
+    const local = JSON.parse(readFileSync('bundle-local/manifest.json', 'utf-8')) as { version: string };
+    expect(SERVER_VERSION).toBe(local.version);
+  });
+
   it('is a plain semver triple', () => {
     expect(SERVER_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
   });

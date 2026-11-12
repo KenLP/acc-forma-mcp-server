@@ -293,16 +293,47 @@ export async function addIssueComment(
 
 // ---- Users / permissions ----------------------------------------------------
 
+/**
+ * GET /issues/v1/projects/{id}/users/me. Shape recorded live 2026-11-12 for a project-admin
+ * robot: no `name`/`email` (a service account has no ACC profile), permissions expressed as
+ * `permissionLevels` plus per-action lists under `issues.new`. There are no boolean
+ * `canCreateIssues`-style fields — an earlier version of this type assumed there were, so
+ * the tool reported "✗ No" for every permission whatever the real grant.
+ */
 export interface IssueUserProfile {
   id?: string;
-  name?: string;
-  email?: string;
-  /** Whether this identity can create issues in the project. */
-  canCreateIssues?: boolean;
-  /** Whether this identity can update issues in the project. */
-  canUpdateIssues?: boolean;
-  /** Whether this identity can add comments. */
-  canCreateComments?: boolean;
+  name?: string | null;
+  email?: string | null;
+  isProjectAdmin?: boolean;
+  /** Coarse grant, e.g. ["read","create","write"]. */
+  permissionLevels?: string[];
+  issues?: {
+    new?: {
+      /** e.g. "add_comment", "add_attachment", "assign_all", "upsert_pin". */
+      permittedActions?: string[];
+      permittedStatuses?: string[];
+      permittedAttributes?: string[];
+    };
+  };
+}
+
+export interface IssuePermissions {
+  projectAdmin: boolean;
+  createIssues: boolean;
+  updateIssues: boolean;
+  addComments: boolean;
+}
+
+/** What the calling identity may do with issues, derived from the /users/me body. */
+export function issuePermissions(profile: IssueUserProfile): IssuePermissions {
+  const levels = profile.permissionLevels ?? [];
+  const actions = profile.issues?.new?.permittedActions ?? [];
+  return {
+    projectAdmin: profile.isProjectAdmin === true,
+    createIssues: levels.includes('create'),
+    updateIssues: levels.includes('write'),
+    addComments: actions.includes('add_comment'),
+  };
 }
 
 export async function getIssueUserMe(

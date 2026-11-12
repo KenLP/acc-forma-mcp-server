@@ -119,3 +119,18 @@ describe('tool registry — allow-list scope declarations', () => {
     }
   });
 });
+
+/**
+ * `accountLevel` is what keeps a tool out of the self-host bundle (server.ts mode
+ * 'self-host'). It is opt-in per tool, so the failure to guard against is a new Account
+ * Admin tool shipped without it — it would then reach the bundle and read hub-wide data
+ * that the robot's project membership does not bound.
+ */
+describe('tool registry — account-level reads (kept out of the self-host bundle)', () => {
+  it('every Account Admin tool is marked accountLevel, and nothing else is', () => {
+    const marked = toolRegistry.filter((t) => t.accountLevel === true).map((t) => t.name).sort();
+    const admin = toolRegistry.filter((t) => t.name.startsWith('admin_')).map((t) => t.name).sort();
+    expect(admin.length).toBeGreaterThan(0);
+    expect(marked).toEqual(admin);
+  });
+});

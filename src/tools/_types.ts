@@ -54,6 +54,12 @@ export interface ToolContext {
    * support existed.
    */
   tenantId?: string;
+  /**
+   * Self-host bundle only: the robot's email from `<BIMLYNX_DATA_DIR>/robot.json`. A service
+   * account has no ACC user profile, so identity-reporting tools (issues_get_user_me) show
+   * this instead of an empty name.
+   */
+  robotEmail?: string;
 }
 
 export type McpToolResult = {
@@ -85,6 +91,13 @@ export interface ReadToolDef<TSchema extends z.ZodTypeAny> {
    * `auth2lo` (2LO sees every project in the hub, which would defeat tenant isolation).
    */
   remoteEnabled?: boolean;
+  /**
+   * `true` = the tool reads account (hub)-level data — the hub's project inventory, its users
+   * or its companies — through the Account Admin API. What it returns is not bounded by the
+   * projects the robot was invited to, so the self-host bundle never registers it
+   * (`buildServer` mode `'self-host'`). Omit for project-scoped tools.
+   */
+  accountLevel?: boolean;
   /** Extract the DM hub ID for the hub allow-list check. Required when scope.kind is 'dm'. */
   getHubId?: (input: z.infer<TSchema>) => string | undefined;
   /** Extract the DM project ID for the project allow-list check. Required when scope.kind is 'dm'. */
@@ -132,6 +145,13 @@ export interface MutationToolDef<TSchema extends z.ZodTypeAny, TPayload = unknow
    * `auth2lo` (2LO sees every project in the hub, which would defeat tenant isolation).
    */
   remoteEnabled?: boolean;
+  /**
+   * `true` = the tool reads account (hub)-level data — the hub's project inventory, its users
+   * or its companies — through the Account Admin API. What it returns is not bounded by the
+   * projects the robot was invited to, so the self-host bundle never registers it
+   * (`buildServer` mode `'self-host'`). Omit for project-scoped tools.
+   */
+  accountLevel?: boolean;
   inputSchema: TSchema;
   /** Extract hub ID for hub allow-list check */
   getHubId?: (input: z.infer<TSchema>) => string | undefined;

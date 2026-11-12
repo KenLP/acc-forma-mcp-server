@@ -35,6 +35,8 @@ docs/HANDOFF.md
 docs/BACKLOG-*.md
 docs/MCP-PUBLISHER-SUBMISSION.md
 docs/specs/
+# Install-run findings name real hubs, projects and robot accounts — private lab repo only.
+docs/findings/
 
 # Local review/analysis artifacts and live-test diagnostic scripts
 REVIEW_FINDINGS*.md
@@ -60,6 +62,8 @@ prototypes/change-alert/.state.json
 # and bundle/server/package-lock.json are already covered by the node_modules/ and
 # package-lock.json rules above
 *.mcpb
+# Self-host bundle server build output — rebuilt by `npm run bundle:local`
+bundle-local/server/
 
 # Internal working material — cross-repo handoffs, study notes, review audits, training
 # decks — and one superseded screenshot. Kept on disk, never published (swept into the

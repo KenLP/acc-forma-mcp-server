@@ -212,6 +212,17 @@ what's in the body.
 Run the server yourself, on your own machine, with your own Autodesk credentials. In this
 mode nothing is shared with the publisher — see [PRIVACY.md §6](PRIVACY.md#6-self-host-mode).
 
+> **Claude Desktop users: use the self-host extension instead of the steps below.** One
+> `.mcpb` file, no Node.js, no terminal, no PEM download — the robot account is created from
+> inside the chat. Admin + user walkthrough: [docs/SELF-HOST-GUIDE.md](docs/SELF-HOST-GUIDE.md)
+> ([tiếng Việt](docs/SELF-HOST-GUIDE.vi.md)). The steps below are for other MCP clients and for
+> running from a clone of the repository.
+>
+> The two differ in reach. The extension acts only as its robot, so it reads only the projects
+> the robot is invited to: 39 tools, no hub-level Admin tools, no webhook tools, never a
+> 2-legged token. Running from a clone adds a 2-legged token for Data Management, Admin and
+> Model Derivative tools, which sees every project in the hub.
+
 ### Step 1 — APS credentials (one-time)
 
 You need an **Autodesk Platform Services (APS)** application with an **SSA (Secure Service Account)**. SSA is a bot identity that can be scoped to specific projects without a human login.

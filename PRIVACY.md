@@ -1,6 +1,6 @@
 # Privacy Policy — acc-forma-mcp-server / BIMLynx
 
-**Last updated:** 2026-08-12
+**Last updated:** 2026-11-12
 **Applies to:** the hosted service at `https://mcp.bimlynx.com/mcp` (the primary subject of
 this policy) and the open-source `acc-forma-mcp-server` codebase when self-hosted (§0)
 **Publisher contact:** hello@bimlynx.com (general) · support@bimlynx.com (data requests) ·
@@ -14,15 +14,17 @@ ken.lephuc@gmail.com
   you. You connect your MCP client to a URL and authenticate with a bearer key issued to your
   organization. **This is the mode almost all of this policy describes**, because it is the
   mode with data flowing through infrastructure you do not control.
-- **Self-host** — you clone the repository and run the server yourself, on your own machine
-  or infrastructure, with your own Autodesk credentials. In this mode the publisher operates
+- **Self-host** — you run the server yourself, on your own machine or infrastructure, with
+  your own Autodesk credentials: either by installing the self-host Claude Desktop extension
+  (`bimlynx-local-<version>.mcpb`, see `docs/SELF-HOST-GUIDE.md`) or by cloning the repository. In this mode the publisher operates
   nothing and receives nothing: every byte — credentials, project data, the audit log —
   stays on your machine, under your control, exactly as this document described before the
   hosted service existed. If you are self-hosting, skip to §6, which is the only section
   written for that mode; everything else describes the hosted service.
 
 If you are unsure which applies to you: if you were given a bearer key and a URL by BIMLynx,
-you are using the hosted service. If you cloned the repository and supplied your own
+you are using the hosted service. If you installed the self-host extension with your own
+Autodesk app's Client ID, or cloned the repository and supplied your own
 `APS_CLIENT_ID`/`SSA_*` credentials, you are self-hosting.
 
 ---
@@ -215,24 +217,39 @@ applicable law.
 
 ## 6. Self-host mode
 
-If you clone the repository and run the server yourself with your own Autodesk credentials,
-none of §§1–4 apply — there is no publisher-operated infrastructure in the picture at all.
+If you run the server yourself with your own Autodesk credentials (self-host extension or a
+clone of the repository), none of §§1–4 apply — there is no publisher-operated infrastructure in the picture at all.
 
 **The publisher receives no data from you in this mode — none.** There is no telemetry, no
 analytics, no usage reporting, no crash reporting, and no "phone home" of any kind. The
 software contacts only Autodesk's own APIs, using credentials that you supply, to do the work
-you ask of it. Credentials are read from your process environment at startup and never
-written to disk by the software. Autodesk project data is held in memory for the duration of
+you ask of it. Credentials are read from your process environment at startup. The software
+writes a credential to disk in exactly one case: when you approve `setup_create_robot` (the
+self-host extension's setup step), it saves the new robot account's private key and
+identifiers as `robot-key.pem` and `robot.json` in the data folder you chose (owner-only file
+permissions on macOS/Linux; on Windows the files inherit that folder's permissions); the key is never shown in tool output, logs or the audit log. Your Client
+Secret is kept by Claude Desktop and is not written to the data folder. Autodesk project data is held in memory for the duration of
 a call and returned to your MCP client — not stored, other than the local audit log (a JSONL
-file on your own machine, `~/.acc-forma-mcp/audit` by default) and, only if you opt into
+file on your own machine — `~/.acc-forma-mcp/audit` by default, or `audit/` inside the data
+folder for the self-host extension) and, only if you opt into
 `FORMA_PERSISTENCE_MODE=sqlite`, a local `state.db` holding approval tokens, rate counters,
 and idempotency records (which can include cached tool results). Both files stay on your
 machine; nothing is transmitted anywhere except Autodesk (`developer.api.autodesk.com`,
 plus Autodesk-issued pre-signed S3 URLs for Model Coordination clash downloads).
 
+**What the self-host extension can reach.** The extension acts only as its robot account, so
+it reads and writes only in the projects an administrator of your Autodesk Forma account invited
+the robot to, within the robot's role in each. It never uses your app's hub-wide (2-legged) token
+for project data, and it does not include the hub-level Admin tools (the hub's project, member and
+company lists). Removing the robot from a project, or the custom integration from your account,
+takes that access away. A clone of the repository run with your own `SSA_*` credentials behaves
+differently: it also uses a 2-legged token for its Data Management, Admin and Model Derivative
+tools, and that token sees every project in the hub.
+
 You are in full control: stop the process to stop all data processing; revoke or rotate your
 Autodesk credentials to cut off access entirely; delete the audit directory and `state.db`
-to delete everything the software ever wrote. There is no publisher-side account in this
+(and, for the self-host extension, the data folder) to delete everything the software ever
+wrote. There is no publisher-side account in this
 mode, so there is no consent to withdraw from the publisher and no deletion request to file
 — the data never left your machine.
 
