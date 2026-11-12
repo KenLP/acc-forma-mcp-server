@@ -86,9 +86,8 @@ const inputSchema = z.object({
       'Viewer globalOffset for this model: viewer_pos = aecdm_metres × unit_factor − global_offset. ' +
         'If omitted, auto-detected from existing pins on this model via filter[linkedDocumentUrn]. ' +
         'Defaults to {x:0,y:0,z:0} with a WARNING when no existing pins are found. ' +
-        'Known calibrated offsets (Ken-MCP test project) — ' +
-        'Plumbing model (vf.zxhzGseAS7yHZSRRho0H1A?version=3): {x:-14.327438466,y:3.055270374,z:26.715703010}; ' +
-        'Architectural model (vf.mMOB5AnzRTO6kouVvXmlRw?version=4): {x:-19.068394820,y:-5.405197144,z:25.708333651}.',
+        'To read it by hand, open any issue already pinned to this model with issues_get: it is ' +
+        'linkedDocuments[].details.viewerState.globalOffset.',
     ),
   unit_factor: z
     .number()

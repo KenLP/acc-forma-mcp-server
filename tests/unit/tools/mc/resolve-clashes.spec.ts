@@ -15,8 +15,8 @@ const instances = [
   { cid: 99, ldid: 0, loid: 10, lvid: 11, rdid: 1, roid: 20, rvid: 21 },
 ];
 const documents = [
-  { id: 1, urn: 'urn:adsk.wipprod:fs.file:vf.mMOB5AnzRTO6kouVvXmlRw?version=4', viewableName: '{3D}' },
-  { id: 0, urn: 'urn:adsk.wipprod:fs.file:vf.zxhzGseAS7yHZSRRho0H1A?version=4', viewableName: '3D Plumbing' },
+  { id: 1, urn: 'urn:adsk.wipprod:fs.file:vf.ArchModelFixture00001?version=4', viewableName: '{3D}' },
+  { id: 0, urn: 'urn:adsk.wipprod:fs.file:vf.PlumbModelFixture0001?version=4', viewableName: '3D Plumbing' },
 ];
 
 describe('resolveClashes — join clash/instance/document', () => {
@@ -32,7 +32,7 @@ describe('resolveClashes — join clash/instance/document', () => {
     expect(out[0]!.left.lmvId).toBe(5444);
     expect(out[0]!.right.viewableName).toBe('3D Plumbing');
     expect(out[0]!.right.objectId).toBe(3346);
-    expect(out[0]!.right.documentUrn).toContain('zxhzGse');
+    expect(out[0]!.right.documentUrn).toContain('PlumbModelFixture');
     // The positive-gap clash sorts last
     expect(out[out.length - 1]!.clashId).toBe(99);
   });
