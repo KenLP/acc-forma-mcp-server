@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "bimlynx-local",
   "display_name": "BIMLynx (self-host) — Autodesk Forma",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Connects Claude to Autodesk Forma (ACC) projects through your own Autodesk app, running entirely on this computer: issues, model data, clash detection and document review.",
   "long_description": "The self-host edition of BIMLynx. The server runs on this computer and calls Autodesk Platform Services with an app your organization creates in its own Autodesk account, so API usage counts against your own subscription and project data goes only between this computer and Autodesk. Every call runs as that robot account, so the server reads only the projects an ACC admin has invited the robot to — no hub-wide token is ever used, and hub-level Admin tools are not included. On first start it opens in setup mode: ask Claude to \"set up BIMLynx\" and it creates the robot account the server acts as, after showing you a preview. Every write action is dry-run by default, requires explicit approval, and is recorded in a tamper-evident audit log in your data folder.",
   "author": {
