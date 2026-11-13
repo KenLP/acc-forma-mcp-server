@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
-import type { MutationToolDef, ToolContext } from '../_types.js';
+import type { McpToolResult, MutationToolDef, ToolContext } from '../_types.js';
 import {
   createServiceAccount,
   createServiceAccountKey,
@@ -13,8 +13,10 @@ import {
 import type { CreateServiceAccountInput } from '../../apis/ssa-admin.js';
 import { BusinessRuleError } from '../../safety/business-rules.js';
 import {
+  acquireSetupLock,
   clientIdPrefix,
   readRobotFile,
+  releaseSetupLock,
   ROBOT_FILE,
   ROBOT_KEY_FILE,
   writeRobotFiles,
@@ -40,7 +42,10 @@ interface RobotPayload {
 function requireDataDir(ctx: ToolContext): string {
   const dataDir = ctx.env.BIMLYNX_DATA_DIR;
   if (dataDir === undefined) {
-    throw new BusinessRuleError('data_folder_set', 'BIMLYNX_DATA_DIR is not set — there is nowhere to store the robot.');
+    throw new BusinessRuleError(
+      'data_folder_set',
+      'BIMLYNX_DATA_DIR is not set — there is nowhere to store the robot.',
+    );
   }
   return dataDir;
 }
@@ -76,7 +81,8 @@ function assertNoRobotYet(dataDir: string, clientId: string): void {
 export function robotAccountInput(label: string | undefined): CreateServiceAccountInput {
   // macOS reports the Bonjour name ("Studio-MacBook-Air.local"); the ".local" suffix is not
   // part of the computer's name and would otherwise end up in the robot's ("…-air-local").
-  const raw = label !== undefined && label.trim() !== '' ? label : hostname().replace(/\.local$/i, '');
+  const raw =
+    label !== undefined && label.trim() !== '' ? label : hostname().replace(/\.local$/i, '');
   const name = toServiceAccountName(`bimlynx-${raw}`);
   return { name, firstName: name, lastName: 'robot' };
 }
@@ -86,9 +92,9 @@ export const setupCreateRobotTool: MutationToolDef<typeof inputSchema, RobotPayl
   title: 'Create BIMLynx Robot Account',
   description:
     'Creates the robot (APS Secure Service Account) this BIMLynx install acts as, under the ' +
-    'user\'s own APS app, and stores its key in the data folder on this computer. The key is ' +
+    "user's own APS app, and stores its key in the data folder on this computer. The key is " +
     'written only to that folder and never appears in tool output or logs. The result names ' +
-    'the robot\'s email, which an ACC admin invites to projects. Refused when the data folder ' +
+    "the robot's email, which an ACC admin invites to projects. Refused when the data folder " +
     'already holds a robot. Available only while the server is in setup mode.',
   kind: 'mutation',
   scopes: [...SSA_ADMIN_SCOPES],
@@ -134,62 +140,76 @@ export const setupCreateRobotTool: MutationToolDef<typeof inputSchema, RobotPayl
       account: robotAccountInput(input.robot_name),
       dataDir: requireDataDir(ctx),
     };
-    // Re-checked here: another call may have created the robot since the preview.
-    assertNoRobotYet(dataDir, ctx.env.APS_CLIENT_ID);
-
-    const created = await createServiceAccount(ctx.auth, account);
-
-    let key;
+    // Held across create + key + write so two approved setups cannot both create an account.
+    acquireSetupLock(dataDir);
     try {
-      key = await createServiceAccountKey(ctx.auth, created.serviceAccountId);
-    } catch (err) {
-      // Not deleted automatically — same policy as tenant-admin create.
-      throw new Error(
-        `The service account was created (${created.serviceAccountId}, ${created.email}) but creating its key failed: ` +
-          `${err instanceof Error ? err.message : String(err)}. Delete that service account in APS, then run setup again.`,
-      );
+      return await createRobot(account, dataDir, ctx);
+    } finally {
+      releaseSetupLock(dataDir);
     }
-
-    try {
-      writeRobotFiles(
-        dataDir,
-        {
-          serviceAccountId: created.serviceAccountId,
-          email: created.email,
-          keyId: key.kid,
-          createdAt: new Date().toISOString(),
-          clientIdPrefix: clientIdPrefix(ctx.env.APS_CLIENT_ID),
-        },
-        key.privateKey,
-      );
-    } catch (err) {
-      // APS never returns the private key again, so this robot is unusable now.
-      throw new Error(
-        `The service account was created (${created.serviceAccountId}, ${created.email}) but saving its key to ${dataDir} failed: ` +
-          `${err instanceof Error ? err.message : String(err)}. Delete that service account in APS, check the folder is writable, then run setup again.`,
-      );
-    }
-
-    const text = [
-      `Robot account created: ${created.email}`,
-      '',
-      `Saved to ${dataDir}. Keep that folder private — it holds the robot's key.`,
-      '',
-      'Next steps:',
-      '1. Fully quit and reopen Claude Desktop so BIMLynx loads its full tool set.',
-      '2. An ACC account admin adds this app\'s Client ID under Account Admin → Custom Integrations.',
-      `3. A project admin invites ${created.email} as a project member (Docs; add Model Coordination for clash tools).`,
-    ].join('\n');
-
-    return {
-      content: [{ type: 'text', text }],
-      structuredContent: {
-        serviceAccountId: created.serviceAccountId,
-        robotEmail: created.email,
-        keyId: key.kid,
-        dataDir,
-        restartRequired: true,
-      },
-    };
   },
 };
+
+async function createRobot(
+  account: CreateServiceAccountInput,
+  dataDir: string,
+  ctx: ToolContext,
+): Promise<McpToolResult> {
+  // Re-checked under the lock: another call may have created the robot since the preview.
+  assertNoRobotYet(dataDir, ctx.env.APS_CLIENT_ID);
+
+  const created = await createServiceAccount(ctx.auth, account);
+
+  let key;
+  try {
+    key = await createServiceAccountKey(ctx.auth, created.serviceAccountId);
+  } catch (err) {
+    // Not deleted automatically — same policy as tenant-admin create.
+    throw new Error(
+      `The service account was created (${created.serviceAccountId}, ${created.email}) but creating its key failed: ` +
+        `${err instanceof Error ? err.message : String(err)}. Delete that service account in APS, then run setup again.`,
+    );
+  }
+
+  try {
+    writeRobotFiles(
+      dataDir,
+      {
+        serviceAccountId: created.serviceAccountId,
+        email: created.email,
+        keyId: key.kid,
+        createdAt: new Date().toISOString(),
+        clientIdPrefix: clientIdPrefix(ctx.env.APS_CLIENT_ID),
+      },
+      key.privateKey,
+    );
+  } catch (err) {
+    // APS never returns the private key again, so this robot is unusable now.
+    throw new Error(
+      `The service account was created (${created.serviceAccountId}, ${created.email}) but saving its key to ${dataDir} failed: ` +
+        `${err instanceof Error ? err.message : String(err)}. Delete that service account in APS, check the folder is writable, then run setup again.`,
+    );
+  }
+
+  const text = [
+    `Robot account created: ${created.email}`,
+    '',
+    `Saved to ${dataDir}. Keep that folder private — it holds the robot's key.`,
+    '',
+    'Next steps:',
+    '1. Fully quit and reopen Claude Desktop so BIMLynx loads its full tool set.',
+    "2. An ACC account admin adds this app's Client ID under Account Admin → Custom Integrations.",
+    `3. A project admin invites ${created.email} as a project member (Docs; add Model Coordination for clash tools).`,
+  ].join('\n');
+
+  return {
+    content: [{ type: 'text', text }],
+    structuredContent: {
+      serviceAccountId: created.serviceAccountId,
+      robotEmail: created.email,
+      keyId: key.kid,
+      dataDir,
+      restartRequired: true,
+    },
+  };
+}
