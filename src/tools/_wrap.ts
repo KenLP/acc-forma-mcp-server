@@ -13,7 +13,12 @@ import { buildDryRunPreview } from '../safety/dry-run.js';
 import { verifyAndConsumeToken, ApprovalError, hashPayload, fingerprintToken } from '../safety/approval.js';
 import { appendAuditEntry, AuditPersistenceError } from '../safety/audit-log.js';
 import { summarizeForAudit } from '../safety/audit-summary.js';
-import { checkIdempotency, storeIdempotencyResult, IdempotencyError } from '../safety/idempotency.js';
+import {
+  reserveIdempotency,
+  releaseIdempotency,
+  storeIdempotencyResult,
+  IdempotencyError,
+} from '../safety/idempotency.js';
 import { ApsApiError, ApsIndeterminateError } from '../http/errors.js';
 import type { Env } from '../config/env.js';
 import { logger } from '../logger.js';
@@ -198,6 +203,9 @@ export function wrapMutationTool<T extends z.ZodTypeAny, TPayload = unknown>(
 
     // Track whether tool.execute() completed so AuditPersistenceError can report accurately
     let apsExecutionCompleted = false;
+    // Set once this request holds a reservation on idempotency_key (step 6b).
+    let heldIdempotencyKey: string | undefined;
+    let payloadHash = '';
 
     try {
       // 0. Auth mode gate
@@ -272,12 +280,14 @@ export function wrapMutationTool<T extends z.ZodTypeAny, TPayload = unknown>(
         };
       }
 
-      // 6b. Idempotency check (only on execute path — dry-run is never cached).
-      // The key is bound to (tool, payload hash): the same key with a different
-      // operation is rejected instead of silently returning the older result.
-      const payloadHash = hashPayload(preview.executePayload);
+      // 6b. Idempotency (only on execute path — dry-run is never cached). The key is
+      // reserved atomically before execute(), so a second call with the same key while the
+      // first is still running is refused rather than executed twice. The key is bound to
+      // (tool, payload hash): the same key with a different operation is rejected instead
+      // of silently returning the older result.
+      payloadHash = hashPayload(preview.executePayload);
       if (idempotency_key) {
-        const cached = checkIdempotency(idempotency_key, tool.name, payloadHash, ctx.tenantId);
+        const cached = reserveIdempotency(idempotency_key, tool.name, payloadHash, ctx.env, ctx.tenantId);
         if (cached) {
           logger.info({ toolName: tool.name, idempotency_key }, 'idempotency: returning cached result');
           appendAuditEntry(
@@ -293,6 +303,7 @@ export function wrapMutationTool<T extends z.ZodTypeAny, TPayload = unknown>(
           );
           return cached;
         }
+        heldIdempotencyKey = idempotency_key;
       }
 
       // 7. Approval token check (only in preview_required mode)
@@ -321,6 +332,7 @@ export function wrapMutationTool<T extends z.ZodTypeAny, TPayload = unknown>(
             },
             ctx.env,
           );
+          if (heldIdempotencyKey) releaseIdempotency(heldIdempotencyKey, ctx.tenantId);
           return missingTokenResult;
         }
         verifyAndConsumeToken(approval_token, tool.name, preview.executePayload, ctx.env, ctx.tenantId);
@@ -358,6 +370,12 @@ export function wrapMutationTool<T extends z.ZodTypeAny, TPayload = unknown>(
 
       return result;
     } catch (err) {
+      // Free the key only when Autodesk certainly did not apply the change. After execute()
+      // returned, or when the call got no answer (ApsIndeterminateError), the reservation
+      // stays until its TTL so a retry with the same key cannot run the change a second time.
+      if (heldIdempotencyKey && !apsExecutionCompleted && !(err instanceof ApsIndeterminateError)) {
+        releaseIdempotency(heldIdempotencyKey, ctx.tenantId);
+      }
       return handleError(err, tool.name, 'mutation', projectId, input, ctx.env, apsExecutionCompleted);
     }
   };

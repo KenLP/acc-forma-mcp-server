@@ -19,9 +19,13 @@ Every mutation tool call passes through this pipeline in order:
    └─ violated      → audit "denied_business_rule" + stop
 5. Build preview         (resolve full APS request — may call APS for validation)
    └─ dry_run=true  → audit "preview" + return DryRunPreview + approval_token (stop here)
-6. Idempotency check     (only when idempotency_key is supplied)
+6. Idempotency reserve   (only when idempotency_key is supplied; atomic claim of the key)
    └─ cache hit     → audit "idempotent_replay" + return the prior result (no APS call)
    └─ key reused for another operation → audit "denied_idempotency" + stop
+   └─ key held by a call still running, or one with an unknown outcome
+                    → audit "denied_idempotency" + stop
+   (the claim is released if the call then stops before Autodesk applies anything;
+    it stays until its TTL after an execute, or after a call that got no answer)
 7. Approval token check  (only in preview_required mode)
    └─ no token      → audit "denied_missing_approval" + stop
    └─ bad token     → audit "denied_approval" + stop
