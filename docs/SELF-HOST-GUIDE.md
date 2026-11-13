@@ -63,11 +63,44 @@ each month. An app created anywhere else only gets the free monthly allowance.
    **AEC Data Model API**, and **Autodesk Construction Cloud API**. Labels in the portal may differ
    slightly.
 5. Click **Create**. Then copy the **Client ID** and **Client Secret** and send them to the users
-   through a secure channel: a password manager, not plain email or chat.
+   through a secure channel: a password manager, not plain email or chat. Read
+   [A3](#a3-who-gets-the-client-secret) before deciding who those users are.
 
 Use a **new app for BIMLynx** rather than one your organization already uses for something else.
 An app can hold at most 10 robot accounts, and Part C is simplest when the app has no custom
 integration yet.
+
+### A3. Who gets the Client Secret
+
+**Every computer that runs BIMLynx holds the app's Client Secret.** The robot needs it each time it
+signs in to Autodesk, so it stays in that user's Claude Desktop settings, not only during setup.
+Installing BIMLynx for someone therefore means giving them the secret, even if an admin types it
+in for them.
+
+The secret is an app-level credential, and it carries more than BIMLynx uses:
+
+- **Robot accounts.** With the Client ID and Secret, anyone can list the app's robot accounts and
+  create or revoke their keys, including the robot another user's BIMLynx runs as.
+- **App-only access to project data.** Autodesk issues an app-only (2-legged) token from the Client
+  ID and Secret alone. BIMLynx never uses one, which is why it is limited to the robot's
+  projects (see [What BIMLynx can reach](#what-bimlynx-can-reach)). Someone holding the secret
+  can still request that token outside BIMLynx and read with it whatever the app's integration
+  allows in your Forma account.
+
+So:
+
+1. **Give the secret only to people you would trust with the app itself**, such as your BIM
+   managers and Forma admins.
+2. **One app per circle of trust.** If another group should not see the first group's projects
+   or robots, create a separate app for it (A2) and repeat Part C for that app.
+3. **Ask Autodesk to switch off app-only access.** Autodesk can disable 2-legged access to the Data
+   Management API for a Client ID on request (contact Autodesk support or your Autodesk
+   representative, quoting the Client ID). BIMLynx self-host does not use it, so nothing in
+   BIMLynx stops working, and a leaked secret then no longer reads project data that way.
+4. **When someone leaves the group,** regenerate the secret on the app page in APS and update it on
+   the remaining computers (Claude Desktop → **Settings → Customize → Connectors → BIMLynx
+   (self-host)**). To cut access at once, remove the app under **Account Admin → Custom
+   Integrations** in Forma.
 
 ---
 
@@ -176,6 +209,9 @@ app's hub-wide (2-legged) token, and it does not include the hub-level Admin too
 full project list, its member list and its company list — or the webhook tools. To give BIMLynx
 another project, invite the robot to it. To take a project away, remove the robot from it. You
 can do either in Forma at any time.
+
+This limit is a property of BIMLynx and the robot's membership, not of the Client Secret. Someone
+using the secret outside BIMLynx is not bound by it; see [A3](#a3-who-gets-the-client-secret).
 
 ---
 

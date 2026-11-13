@@ -4,7 +4,7 @@
   "mcp_spec_version": "2025-11-25",
   "server": {
     "name": "acc-forma-mcp-server",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "transport": "streamable-http",
     "url": "https://mcp.bimlynx.com/mcp",
     "repository": "https://github.com/KenLP/acc-forma-mcp-server",

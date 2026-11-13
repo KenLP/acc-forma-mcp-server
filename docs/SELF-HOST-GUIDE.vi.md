@@ -59,10 +59,40 @@ nơi khác chỉ có mức free hằng tháng.
 4. Phần API access, bật tối thiểu: **Data Management API**, **Model Derivative API**,
    **AEC Data Model API**, **Autodesk Construction Cloud API**. Tên trên portal có thể hơi khác.
 5. Bấm **Create**. Sau đó copy **Client ID** và **Client Secret**, gửi cho người dùng qua kênh bảo
-   mật như password manager, không gửi qua email hay chat thường.
+   mật như password manager, không gửi qua email hay chat thường. Đọc
+   [A3](#a3-ai-được-giữ-client-secret) trước khi quyết định gửi cho những ai.
 
 Nên **tạo app mới riêng cho BIMLynx**, đừng dùng lại app tổ chức đang dùng cho việc khác. Mỗi app
 chứa tối đa 10 robot account, và Phần C đơn giản nhất khi app chưa có custom integration nào.
+
+### A3. Ai được giữ Client Secret
+
+**Mọi máy chạy BIMLynx đều giữ Client Secret của app.** Robot cần secret mỗi lần đăng nhập vào
+Autodesk, nên secret nằm lại trong cài đặt Claude Desktop của người dùng, không chỉ dùng lúc setup.
+Cài BIMLynx cho ai là giao secret cho người đó, kể cả khi admin là người gõ vào.
+
+Secret là credential cấp app, và nó làm được nhiều hơn những gì BIMLynx dùng:
+
+- **Robot account.** Có Client ID và Secret là liệt kê được các robot của app, tạo hoặc thu hồi key
+  của chúng, kể cả robot mà BIMLynx của người khác đang dùng.
+- **Truy cập dữ liệu project bằng token của app.** Autodesk cấp token chỉ-của-app (2-legged) từ riêng
+  Client ID và Secret. BIMLynx không bao giờ dùng loại token này, nên nó chỉ thấy project của robot
+  (xem [BIMLynx truy cập được những gì](#bimlynx-truy-cập-được-những-gì)). Nhưng người giữ secret
+  vẫn có thể tự lấy token đó bên ngoài BIMLynx và đọc những gì integration của app được phép trong
+  tài khoản Forma của bạn.
+
+Vì vậy:
+
+1. **Chỉ giao secret cho người bạn tin ở mức giao cả app**, như BIM manager và Forma admin.
+2. **Mỗi nhóm tin cậy một app riêng.** Nếu một nhóm khác không được thấy project hay robot của
+   nhóm đầu, tạo app riêng cho nhóm đó (A2) và làm lại Phần C cho app ấy.
+3. **Đề nghị Autodesk tắt truy cập chỉ-của-app.** Autodesk có thể tắt truy cập 2-legged vào Data
+   Management API cho một Client ID khi được yêu cầu (liên hệ Autodesk support hoặc đại diện
+   Autodesk, kèm Client ID). BIMLynx self-host không dùng nó nên không có gì ngừng hoạt động, và
+   secret có lộ ra cũng không đọc được dữ liệu project theo cách đó nữa.
+4. **Khi có người rời nhóm,** regenerate secret trên trang app ở APS và cập nhật lại các máy còn lại
+   (Claude Desktop → **Settings → Customize → Connectors → BIMLynx (self-host)**). Muốn cắt ngay,
+   gỡ app trong **Account Admin → Custom Integrations** của Forma.
 
 ---
 
@@ -168,6 +198,9 @@ token toàn hub (2-legged) của app, và không có các tool quản trị cấ
 project, thành viên và công ty của hub — cũng như các tool webhook. Muốn BIMLynx dùng thêm một
 project, hãy mời robot vào project đó. Muốn rút lại, xoá robot khỏi project. Cả hai việc đều làm
 được trong Forma bất cứ lúc nào.
+
+Giới hạn này là của BIMLynx và tư cách thành viên của robot, không phải của Client Secret. Ai dùng
+secret bên ngoài BIMLynx thì không bị giới hạn này; xem [A3](#a3-ai-được-giữ-client-secret).
 
 ---
 
