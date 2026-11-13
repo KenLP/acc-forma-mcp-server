@@ -161,6 +161,33 @@ describe('setup tools (self-host setup mode)', () => {
     expect(ssaMocks.createServiceAccount).not.toHaveBeenCalled();
   });
 
+  it('two approved setups racing for one folder create only one service account', async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    ssaMocks.createServiceAccount.mockImplementation(async () => {
+      await gate;
+      return { serviceAccountId: 'SA-NEW', email: 'bimlynx-site-pc@x.adskserviceaccount.autodesk.com' };
+    });
+    const run = await loadCreate();
+    const tokenOf = async (): Promise<string> =>
+      ((await run({ robot_name: 'Site PC', dry_run: true })).structuredContent as { approval_token: string })
+        .approval_token;
+    const [t1, t2] = [await tokenOf(), await tokenOf()];
+
+    const first = run({ robot_name: 'Site PC', dry_run: false, approval_token: t1 });
+    await vi.waitFor(() => expect(ssaMocks.createServiceAccount).toHaveBeenCalledTimes(1));
+    const second = await run({ robot_name: 'Site PC', dry_run: false, approval_token: t2 });
+    expect(second.isError).toBe(true);
+    expect(second.content[0]?.text).toMatch(/Another robot setup is running/);
+
+    release();
+    expect((await first).isError).toBeFalsy();
+    expect(ssaMocks.createServiceAccount).toHaveBeenCalledTimes(1);
+    expect(existsSync(join(env.BIMLYNX_DATA_DIR!, 'setup.lock'))).toBe(false);
+  });
+
   it('refuses when the app has no service-account slot left', async () => {
     ssaMocks.listServiceAccounts.mockResolvedValue(
       Array.from({ length: 10 }, (_, i) => ({ serviceAccountId: `SA${i}`, email: `${i}@x`, status: 'ENABLED' })),

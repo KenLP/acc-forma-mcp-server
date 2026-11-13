@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -98,4 +98,42 @@ export function writeRobotFiles(dataDir: string, record: RobotRecord, privateKey
     mode: 0o600,
     flag: 'wx',
   });
+}
+
+export const SETUP_LOCK_FILE = 'setup.lock';
+
+/** A lock older than this is left over from a process that died mid-setup. */
+const SETUP_LOCK_STALE_MS = 10 * 60 * 1000;
+
+/**
+ * Takes the per-folder setup lock, or throws when another setup holds it. Creating the
+ * service account and writing robot.json are separate steps with network calls between
+ * them; without a lock two approved setups could both pass the "no robot yet" check and
+ * each create a service account, leaving one orphaned against the app's quota. `wx` makes
+ * the claim atomic across processes.
+ */
+export function acquireSetupLock(dataDir: string): void {
+  mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+  const lockPath = join(dataDir, SETUP_LOCK_FILE);
+  try {
+    if (Date.now() - statSync(lockPath).mtimeMs > SETUP_LOCK_STALE_MS) rmSync(lockPath, { force: true });
+  } catch {
+    // no lock file — nothing to clear
+  }
+  try {
+    writeFileSync(lockPath, `${process.pid} ${new Date().toISOString()}
+`, { mode: 0o600, flag: 'wx' });
+  } catch (err) {
+    if ((err as { code?: string }).code === 'EEXIST') {
+      throw new Error(
+        `Another robot setup is running for ${dataDir}. Wait for it to finish; if none is running, ` +
+          `delete ${lockPath} (it is also ignored after 10 minutes).`,
+      );
+    }
+    throw err;
+  }
+}
+
+export function releaseSetupLock(dataDir: string): void {
+  rmSync(join(dataDir, SETUP_LOCK_FILE), { force: true });
 }
